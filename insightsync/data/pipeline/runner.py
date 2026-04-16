@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .collectors import ADBCollector, GuangdongStatsCollector, HKMACollector, KPMGCollector
+from .collectors import ADBCollector, GuangdongStatsCollector, HKMACollector, InvestHKNewsCollector, KPMGCollector
 from .storage import SQLiteRepository
 from .utils import utc_now_iso
 
-DEFAULT_SOURCES = ("hkma", "adb", "kpmg", "guangdong")
+DEFAULT_SOURCES = ("hkma", "adb", "kpmg", "guangdong", "investhk")
 
 
 @dataclass(slots=True)
@@ -34,6 +34,14 @@ class PipelineConfig:
     guangdong_max_rows_per_table: int = 500
 
     kpmg_pdf_url: str | None = None
+
+    investhk_language: str = "zh-cn"
+    investhk_json_url: str | None = None
+    investhk_include_article_text: bool = False
+    investhk_max_items: int = 500
+    investhk_request_timeout_seconds: int = 30
+    investhk_article_delay_seconds: float = 0.3
+
     runtime_meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -47,6 +55,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             key = "adb"
         if key in ("guangdong_stats", "gd", "guangdong"):
             key = "guangdong"
+        if key in ("investhk_news", "investhk-news", "investhk"):
+            key = "investhk"
         if key not in out:
             out.append(key)
     return tuple(out)
@@ -77,6 +87,19 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
             continue
         if src == "kpmg":
             collectors.append(KPMGCollector(raw_dir=config.raw_dir, url=config.kpmg_pdf_url))
+            continue
+        if src == "investhk":
+            collectors.append(
+                InvestHKNewsCollector(
+                    raw_dir=config.raw_dir,
+                    language=config.investhk_language,
+                    json_url=config.investhk_json_url,
+                    include_article_text=config.investhk_include_article_text,
+                    max_items=config.investhk_max_items,
+                    request_timeout_seconds=config.investhk_request_timeout_seconds,
+                    article_delay_seconds=config.investhk_article_delay_seconds,
+                )
+            )
             continue
         if src == "guangdong":
             collectors.append(

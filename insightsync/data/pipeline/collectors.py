@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import time
 from datetime import datetime
@@ -13,6 +14,7 @@ import requests
 from ..connectors import (
     ADBKIDBClient,
     HKMAClient,
+    InvestHKNewsClient,
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
     download_kpmg_hong_kong_banking_outlook_pdf,
     parse_kidb_sdmx_timeseries,
@@ -316,6 +318,175 @@ class KPMGCollector(BaseCollector):
         )
         batch.intelligence_records.append(record)
         batch.timeline_events.append(_timeline_from_record(record, event_type="document"))
+        return batch
+
+
+def _infer_investhk_signal_type(news_type: str | None, text: str) -> str:
+    combined = f"{news_type or ''} {text}".lower()
+    if any(token in combined for token in ("cross-border", "cross border", "overseas", "mainland", "gba")):
+        return "cross_border"
+    if any(token in combined for token in ("fund", "financing", "capital", "fundraising", "ipo")):
+        return "financing"
+    if any(token in combined for token in ("risk", "warning", "volatility", "uncertainty")):
+        return "risk"
+    if any(token in combined for token in ("expansion", "growth", "investment", "launch")):
+        return "growth"
+    return "market"
+
+
+class InvestHKNewsCollector(BaseCollector):
+    source = "investhk_news"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        language: str = "zh-cn",
+        json_url: str | None = None,
+        include_article_text: bool = False,
+        max_items: int = 500,
+        request_timeout_seconds: int = 30,
+        article_delay_seconds: float = 0.3,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.language = language
+        self.json_url = json_url
+        self.include_article_text = include_article_text
+        self.max_items = max_items
+        self.article_delay_seconds = max(0.0, float(article_delay_seconds))
+        self.client = InvestHKNewsClient(timeout_seconds=request_timeout_seconds)
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "investhk_news"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        items = self.client.fetch_news_items(language=self.language, json_url=self.json_url)
+        if self.max_items > 0:
+            items = items[: self.max_items]
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        feed_dump_path = out_dir / f"news_{self.language}_{fetched_at}.json"
+        feed_dump_path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="news_feed_json",
+            record_key=f"{self.language}|feed",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="HKG",
+            title=f"InvestHK news feed ({self.language})",
+            summary=f"InvestHK feed snapshot with {len(items)} items",
+            region="Hong Kong",
+            industry="Investment / Business Development",
+            tags=[self.source, "news_feed", self.language],
+            payload={
+                "language": self.language,
+                "json_url": self.json_url,
+                "item_count": len(items),
+                "file_path": str(feed_dump_path.resolve()),
+            },
+            evidence_url=self.json_url or self.client.build_news_json_url(language=self.language),
+            lang=self.language,
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        article_success = 0
+        article_failed = 0
+
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+
+            raw_url = normalize_text(item.get("url"))
+            full_url = self.client.build_full_url(raw_url)
+            title = normalize_text(item.get("title")) or "(untitled)"
+            description = normalize_text(item.get("description"))
+            news_type = normalize_text(item.get("newsContentType"))
+            publish_date = normalize_text(item.get("publishDate") or item.get("date"))
+            event_time = extract_time_period_from_text(publish_date)
+
+            article_text = ""
+            if self.include_article_text and full_url:
+                try:
+                    article_text = self.client.fetch_article_text(raw_url)
+                    article_success += 1
+                except Exception:
+                    article_failed += 1
+                if self.article_delay_seconds > 0:
+                    time.sleep(self.article_delay_seconds)
+
+            payload: dict[str, Any] = {
+                "title": title,
+                "description": description,
+                "publish_date": publish_date,
+                "news_content_type": news_type,
+                "url": raw_url,
+                "full_url": full_url,
+            }
+            if article_text:
+                payload["article_text"] = article_text
+
+            record_key = build_natural_key("investhk_news", item, fallback=f"idx-{idx}")
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="news_items",
+                record_key=record_key,
+                record_type="event",
+                event_time=event_time,
+                company_id=None,
+                entity="HKG",
+                title=title,
+                summary=description or title,
+                region="Hong Kong",
+                industry="Investment / Business Development",
+                tags=[self.source, "news", news_type.lower() if news_type else "general"],
+                payload=payload,
+                evidence_url=full_url or None,
+                lang=self.language,
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="event"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_type = _infer_investhk_signal_type(news_type, f"{title} {description} {article_text[:500]}")
+            signal_key = f"investhk_news|{record_key}|headline"
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="news_signals",
+                    signal_key=signal_key,
+                    signal_type=signal_type,
+                    event_time=signal_time,
+                    company_id=None,
+                    entity="HKG",
+                    indicator="headline",
+                    value_num=None,
+                    value_text=news_type or None,
+                    unit=None,
+                    signal_text=title,
+                    evidence_refs=[ref for ref in [full_url] if ref],
+                    extra={
+                        "language": self.language,
+                        "publish_date": publish_date,
+                        "news_content_type": news_type,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "language": self.language,
+            "json_url": self.json_url or self.client.build_news_json_url(language=self.language),
+            "items_fetched": len(items),
+            "include_article_text": self.include_article_text,
+            "article_fetch_success": article_success,
+            "article_fetch_failed": article_failed,
+        }
         return batch
 
 

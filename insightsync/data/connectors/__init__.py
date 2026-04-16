@@ -4,6 +4,7 @@ from .kpmg_banking_outlook import (
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
     download_kpmg_hong_kong_banking_outlook_pdf,
 )
+from .investhk_client import INVESTHK_NEWS_JSON_URL_TEMPLATE, InvestHKNewsClient, extract_news_items
 
 __all__ = [
     "ADBKIDBClient",
@@ -11,5 +12,8 @@ __all__ = [
     "KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL",
     "download_kpmg_hong_kong_banking_outlook_pdf",
     "parse_kidb_sdmx_timeseries",
+    "INVESTHK_NEWS_JSON_URL_TEMPLATE",
+    "InvestHKNewsClient",
+    "extract_news_items",
 ]
 

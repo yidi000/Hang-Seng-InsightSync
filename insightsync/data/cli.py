@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="InsightSync data pipeline")
     parser.add_argument("--db-path", default="insightsync/data/storage/insightsync.db")
     parser.add_argument("--raw-dir", default="insightsync/data/storage/raw")
-    parser.add_argument("--sources", default="hkma,adb,kpmg,guangdong")
+    parser.add_argument("--sources", default="hkma,adb,kpmg,guangdong,investhk")
 
     parser.add_argument("--hkma-pagesize", type=int, default=200)
     parser.add_argument("--hkma-max-pages", type=int, default=4)
@@ -43,6 +43,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--guangdong-max-rows-per-table", type=int, default=500)
 
     parser.add_argument("--kpmg-pdf-url", default=None)
+
+    parser.add_argument("--investhk-language", default="zh-cn")
+    parser.add_argument("--investhk-json-url", default=None)
+    parser.add_argument("--investhk-include-article-text", action="store_true")
+    parser.add_argument("--investhk-max-items", type=int, default=500)
+    parser.add_argument("--investhk-request-timeout-seconds", type=int, default=30)
+    parser.add_argument("--investhk-article-delay-seconds", type=float, default=0.3)
+
     parser.add_argument("--interval-minutes", type=float, default=0.0)
     parser.add_argument("--once", action="store_true")
     return parser
@@ -68,6 +76,12 @@ def main() -> None:
         guangdong_max_tables_per_page=args.guangdong_max_tables_per_page,
         guangdong_max_rows_per_table=args.guangdong_max_rows_per_table,
         kpmg_pdf_url=args.kpmg_pdf_url,
+        investhk_language=args.investhk_language,
+        investhk_json_url=args.investhk_json_url,
+        investhk_include_article_text=args.investhk_include_article_text,
+        investhk_max_items=args.investhk_max_items,
+        investhk_request_timeout_seconds=args.investhk_request_timeout_seconds,
+        investhk_article_delay_seconds=args.investhk_article_delay_seconds,
     )
 
     if args.interval_minutes > 0:
