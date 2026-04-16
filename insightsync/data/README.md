@@ -9,6 +9,7 @@ This folder is an independent data ingestion module for Project InsightSync.
   - ADB KIDB API
   - KPMG Hong Kong Banking Outlook PDF
   - Guangdong Statistics Bureau webpages
+  - InvestHK news feed (JSON + optional article text)
 - Normalize records into a common schema.
 - Persist cleaned data into SQLite for backend/agent consumption.
 - Support one-off and interval scheduling modes.
@@ -56,6 +57,26 @@ Run only selected sources:
 ```bash
 python -m insightsync.data --sources hkma,adb --once
 ```
+
+Run InvestHK only:
+
+```bash
+python -m insightsync.data --sources investhk --once
+```
+
+Run InvestHK with article text crawling enabled:
+
+```bash
+python -m insightsync.data --sources investhk --investhk-include-article-text --once
+```
+
+Useful InvestHK flags:
+
+- `--investhk-language` (default: `zh-cn`)
+- `--investhk-max-items` (default: `500`)
+- `--investhk-request-timeout-seconds` (default: `30`)
+- `--investhk-article-delay-seconds` (default: `0.3`)
+- `--investhk-json-url` (override feed URL if needed)
 
 ## Output
 
