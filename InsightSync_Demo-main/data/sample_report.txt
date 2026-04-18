@@ -1,0 +1,17 @@
+Company: Lenovo Group
+Period: FY2025 Interim Results
+
+Lenovo reported total revenue of USD 56.9 billion for the fiscal year, representing a year-on-year decline of approximately 8%, primarily driven by weaker demand in the global PC market. The Intelligent Devices Group (IDG), which includes personal computers and tablets, experienced slower sales due to inventory adjustments and reduced consumer spending.
+
+Despite the decline in traditional PC segments, Lenovo’s Infrastructure Solutions Group (ISG), particularly in AI servers and enterprise computing, recorded strong double-digit growth. This reflects the company’s strategic shift toward higher-margin enterprise solutions and AI-driven infrastructure.
+
+Gross margin remained relatively stable at 17.2%, supported by cost optimization initiatives and improved product mix. However, operating cash flow showed signs of pressure due to slower receivables turnover and increased inventory levels.
+
+From a geographic perspective, Lenovo continued to expand its presence in Asia-Pacific and Europe, while facing headwinds in North America due to macroeconomic uncertainty and weaker enterprise IT spending.
+
+The company also highlighted increasing exposure to geopolitical risks, particularly related to US-China trade tensions and global supply chain disruptions. Management noted that such uncertainties could impact sourcing costs and operational efficiency in the coming quarters.
+
+Looking ahead, Lenovo plans to increase capital expenditure in AI infrastructure and cloud-related businesses, while maintaining a cautious outlook on consumer device demand.
+
+Sources: Company earnings report, investor presentation, and industry analysis reports.
+
