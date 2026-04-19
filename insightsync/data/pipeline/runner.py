@@ -9,6 +9,7 @@ from typing import Any
 from .collectors import (
     ADBCollector,
     GuangdongStatsCollector,
+    HKGovNewsCollector,
     HKEXDisclosureCollector,
     HKMACollector,
     InvestHKNewsCollector,
@@ -50,6 +51,16 @@ class PipelineConfig:
     investhk_request_timeout_seconds: int = 30
     investhk_article_delay_seconds: float = 0.3
 
+    hkgov_language: str = "en"
+    hkgov_since_months: int = 3
+    hkgov_since_days: int | None = None
+    hkgov_start_date: str | None = None
+    hkgov_end_date: str | None = None
+    hkgov_max_items: int = 1000
+    hkgov_filter_limit: int = 50
+    hkgov_require_geo_and_business: bool = True
+    hkgov_request_timeout_seconds: int = 60
+
     hkex_list_url: str | None = None
     hkex_target_year: str | None = None
     hkex_target_month: str | None = None
@@ -86,6 +97,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             key = "guangdong"
         if key in ("investhk_news", "investhk-news", "investhk"):
             key = "investhk"
+        if key in ("hkgov", "hk-gov", "hk_gov", "hkgov_news", "hk_gov_news", "newsgov"):
+            key = "hkgov"
         if key in ("hkex_disclosure", "hkex-disclosure", "hkex"):
             key = "hkex"
         if key in ("szse", "szse-announcement", "szse_announcement", "cninfo", "cninfo_szse", "szse_cninfo"):
@@ -131,6 +144,22 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
                     max_items=config.investhk_max_items,
                     request_timeout_seconds=config.investhk_request_timeout_seconds,
                     article_delay_seconds=config.investhk_article_delay_seconds,
+                )
+            )
+            continue
+        if src == "hkgov":
+            collectors.append(
+                HKGovNewsCollector(
+                    raw_dir=config.raw_dir,
+                    language=config.hkgov_language,
+                    since_months=config.hkgov_since_months,
+                    since_days=config.hkgov_since_days,
+                    start_date=config.hkgov_start_date,
+                    end_date=config.hkgov_end_date,
+                    max_items=config.hkgov_max_items,
+                    filter_limit=config.hkgov_filter_limit,
+                    require_geo_and_business=config.hkgov_require_geo_and_business,
+                    request_timeout_seconds=config.hkgov_request_timeout_seconds,
                 )
             )
             continue

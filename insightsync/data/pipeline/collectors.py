@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import random
 import time
@@ -13,6 +14,7 @@ import requests
 
 from ..connectors import (
     ADBKIDBClient,
+    HKGovNewsClient,
     HKEX_PREDEFINED_DOCS_URL,
     HKEXDisclosureClient,
     HKMAClient,
@@ -21,6 +23,7 @@ from ..connectors import (
     SZSECninfoClient,
     build_cninfo_pdf_url,
     download_kpmg_hong_kong_banking_outlook_pdf,
+    extract_hk_gov_news_id,
     parse_kidb_sdmx_timeseries,
     timestamp_ms_to_date,
     timestamp_ms_to_datetime,
@@ -368,6 +371,34 @@ def _infer_szse_announcement_signal_type(announcement_type: str | None, title: s
     return "market"
 
 
+def _infer_hkgov_news_signal_type(title: str, description: str, *, matched_gba_enterprise: bool) -> str:
+    combined = f"{title} {description}".lower()
+    if matched_gba_enterprise and any(
+        token in combined
+        for token in (
+            "greater bay area",
+            "cross-boundary",
+            "cross border",
+            "guangdong",
+            "shenzhen",
+            "guangzhou",
+            "粤港澳大湾区",
+            "跨境",
+            "广东",
+            "深圳",
+            "广州",
+        )
+    ):
+        return "cross_border"
+    if any(token in combined for token in ("fund", "financing", "capital", "investment", "finance", "贷款", "融资", "投资", "金融")):
+        return "financing"
+    if any(token in combined for token in ("risk", "warning", "fraud", "penalty", "uncertainty", "风险", "警告", "处罚")):
+        return "risk"
+    if any(token in combined for token in ("innovation", "technology", "manufacturing", "startup", "growth", "创新", "科技", "制造", "增长")):
+        return "growth"
+    return "market"
+
+
 class InvestHKNewsCollector(BaseCollector):
     source = "investhk_news"
 
@@ -520,6 +551,276 @@ class InvestHKNewsCollector(BaseCollector):
             "include_article_text": self.include_article_text,
             "article_fetch_success": article_success,
             "article_fetch_failed": article_failed,
+        }
+        return batch
+
+
+class HKGovNewsCollector(BaseCollector):
+    source = "hk_gov_news"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        language: str = "en",
+        since_months: int = 3,
+        since_days: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_items: int = 1000,
+        filter_limit: int = 50,
+        require_geo_and_business: bool = True,
+        request_timeout_seconds: int = 60,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.language = normalize_text(language).lower() or "en"
+        if self.language not in {"en", "tc"}:
+            raise ValueError("hkgov language must be 'en' or 'tc'")
+
+        self.since_months = int(since_months)
+        self.since_days = None if since_days is None else int(since_days)
+        self.start_date = normalize_text(start_date) or None
+        self.end_date = normalize_text(end_date) or None
+        self.max_items = int(max_items)
+        self.filter_limit = int(filter_limit)
+        self.require_geo_and_business = require_geo_and_business
+        self.request_timeout_seconds = int(request_timeout_seconds)
+        self.client = HKGovNewsClient()
+
+    @staticmethod
+    def _normalize_csv_date_time(row: dict[str, Any]) -> tuple[str, str]:
+        published_at = normalize_text(row.get("published_at"))
+        if published_at:
+            text = published_at.replace("T", " ")
+            if "+" in text:
+                text = text.split("+", 1)[0]
+            if text.endswith("Z"):
+                text = text[:-1]
+            parts = text.split(" ")
+            if len(parts) >= 2:
+                return parts[0], f"{parts[0]} {parts[1]}"
+            return text, text
+
+        pub_date = normalize_text(row.get("pubDate"))
+        return pub_date, pub_date
+
+    def _write_csv(
+        self,
+        *,
+        raw_articles: list[dict[str, Any]],
+        filtered_links: set[str],
+        output_path: Path,
+        window_label: str,
+    ) -> None:
+        headers = [
+            "news_date",
+            "news_time",
+            "language",
+            "window",
+            "title",
+            "description",
+            "link",
+            "news_id",
+            "is_gba_enterprise_match",
+        ]
+        with output_path.open("w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            for row in raw_articles:
+                link = normalize_text(row.get("link"))
+                date_text, time_text = self._normalize_csv_date_time(row)
+                writer.writerow(
+                    [
+                        date_text,
+                        time_text,
+                        self.language,
+                        window_label,
+                        normalize_text(row.get("title")),
+                        normalize_text(row.get("description")),
+                        link,
+                        extract_hk_gov_news_id(link),
+                        "yes" if link in filtered_links else "no",
+                    ]
+                )
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "hk_gov_news"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        raw_articles = self.client.fetch_articles(
+            language=self.language,
+            since_months=self.since_months,
+            since_days=self.since_days,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            timeout=self.request_timeout_seconds,
+            max_items=self.max_items,
+        )
+        filtered_articles = self.client.filter_gba_enterprise_news(
+            articles=raw_articles,
+            language=self.language,
+            require_geo_and_business=self.require_geo_and_business,
+            limit=self.filter_limit,
+        )
+        filtered_links = {
+            normalize_text(item.get("link")) for item in filtered_articles if normalize_text(item.get("link"))
+        }
+
+        if self.start_date and self.end_date:
+            window_label = f"{self.start_date}_{self.end_date}"
+        elif self.since_days is not None:
+            window_label = f"last_{self.since_days}_days"
+        elif self.since_months > 0:
+            window_label = f"last_{self.since_months}_months"
+        else:
+            window_label = "latest_rss"
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        json_path = out_dir / f"news_{self.language}_{window_label}_{fetched_at}.json"
+        csv_path = out_dir / f"news_{self.language}_{window_label}_{fetched_at}.csv"
+
+        snapshot = {
+            "meta": {
+                "fetched_at": fetched_at,
+                "language": self.language,
+                "window": window_label,
+                "since_months": self.since_months,
+                "since_days": self.since_days,
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+                "max_items": self.max_items,
+                "filter_limit": self.filter_limit,
+                "require_geo_and_business": self.require_geo_and_business,
+                "raw_count": len(raw_articles),
+                "filtered_count": len(filtered_articles),
+            },
+            "raw_articles": raw_articles,
+            "filtered_articles": filtered_articles,
+        }
+        json_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._write_csv(raw_articles=raw_articles, filtered_links=filtered_links, output_path=csv_path, window_label=window_label)
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="finance_news_feed_json",
+            record_key=f"feed|{self.language}|{window_label}",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="HKG",
+            title=f"HK Gov Business & Finance news feed ({self.language})",
+            summary=f"HK Gov finance feed snapshot with {len(raw_articles)} items",
+            region="Hong Kong",
+            industry="Public Policy / Finance",
+            tags=[self.source, "feed_snapshot", self.language],
+            payload={
+                "language": self.language,
+                "window": window_label,
+                "raw_count": len(raw_articles),
+                "filtered_count": len(filtered_articles),
+                "json_path": str(json_path.resolve()),
+                "csv_path": str(csv_path.resolve()),
+            },
+            evidence_url="https://www.news.gov.hk/",
+            lang=self.language,
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        for idx, item in enumerate(raw_articles):
+            if not isinstance(item, dict):
+                continue
+
+            title = normalize_text(item.get("title")) or "(untitled news item)"
+            description = normalize_text(item.get("description"))
+            link = normalize_text(item.get("link"))
+            pub_date = normalize_text(item.get("pubDate"))
+            published_at = normalize_text(item.get("published_at"))
+            event_time = extract_time_period_from_text(published_at or pub_date)
+            news_id = extract_hk_gov_news_id(link)
+            is_match = link in filtered_links if link else False
+
+            payload: dict[str, Any] = {
+                "title": title,
+                "description": description,
+                "link": link,
+                "news_id": news_id,
+                "pub_date": pub_date,
+                "published_at": published_at,
+                "is_gba_enterprise_match": is_match,
+            }
+
+            record_key = build_natural_key("hk_gov_news", item, fallback=f"idx-{idx}")
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="finance_news_items",
+                record_key=record_key,
+                record_type="event",
+                event_time=event_time,
+                company_id=None,
+                entity="HKG",
+                title=title,
+                summary=description or title,
+                region="Hong Kong",
+                industry="Public Policy / Finance",
+                tags=[
+                    self.source,
+                    self.language,
+                    "finance_news",
+                    "gba_match" if is_match else "general",
+                ],
+                payload=payload,
+                evidence_url=link or None,
+                lang=self.language,
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="event"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_key = f"{self.source}|{record_key}|headline"
+            signal_type = _infer_hkgov_news_signal_type(title, description, matched_gba_enterprise=is_match)
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="finance_news_signals",
+                    signal_key=signal_key,
+                    signal_type=signal_type,
+                    event_time=signal_time,
+                    company_id=None,
+                    entity="HKG",
+                    indicator="headline",
+                    value_num=None,
+                    value_text="gba_enterprise_match" if is_match else None,
+                    unit=None,
+                    signal_text=title,
+                    evidence_refs=[ref for ref in [link] if ref],
+                    extra={
+                        "language": self.language,
+                        "pub_date": pub_date,
+                        "published_at": published_at,
+                        "news_id": news_id,
+                        "is_gba_enterprise_match": is_match,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "language": self.language,
+            "window": window_label,
+            "since_months": self.since_months,
+            "since_days": self.since_days,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "max_items": self.max_items,
+            "filter_limit": self.filter_limit,
+            "require_geo_and_business": self.require_geo_and_business,
+            "items_fetched": len(raw_articles),
+            "items_filtered": len(filtered_articles),
+            "json_path": str(json_path.resolve()),
+            "csv_path": str(csv_path.resolve()),
         }
         return batch
 

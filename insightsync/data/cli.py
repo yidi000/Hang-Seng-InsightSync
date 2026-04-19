@@ -51,6 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--investhk-request-timeout-seconds", type=int, default=30)
     parser.add_argument("--investhk-article-delay-seconds", type=float, default=0.3)
 
+    parser.add_argument("--hkgov-language", default="en")
+    parser.add_argument("--hkgov-since-months", type=int, default=3)
+    parser.add_argument("--hkgov-since-days", type=int, default=None)
+    parser.add_argument("--hkgov-start-date", default=None)
+    parser.add_argument("--hkgov-end-date", default=None)
+    parser.add_argument("--hkgov-max-items", type=int, default=1000)
+    parser.add_argument("--hkgov-filter-limit", type=int, default=50)
+    parser.add_argument("--hkgov-no-require-geo-and-business", action="store_true")
+    parser.add_argument("--hkgov-request-timeout-seconds", type=int, default=60)
+
     parser.add_argument("--hkex-list-url", default=None)
     parser.add_argument("--hkex-target-year", default=None)
     parser.add_argument("--hkex-target-month", default=None)
@@ -103,6 +113,15 @@ def main() -> None:
         investhk_max_items=args.investhk_max_items,
         investhk_request_timeout_seconds=args.investhk_request_timeout_seconds,
         investhk_article_delay_seconds=args.investhk_article_delay_seconds,
+        hkgov_language=args.hkgov_language,
+        hkgov_since_months=args.hkgov_since_months,
+        hkgov_since_days=args.hkgov_since_days,
+        hkgov_start_date=args.hkgov_start_date,
+        hkgov_end_date=args.hkgov_end_date,
+        hkgov_max_items=args.hkgov_max_items,
+        hkgov_filter_limit=args.hkgov_filter_limit,
+        hkgov_require_geo_and_business=not args.hkgov_no_require_geo_and_business,
+        hkgov_request_timeout_seconds=args.hkgov_request_timeout_seconds,
         hkex_list_url=args.hkex_list_url,
         hkex_target_year=args.hkex_target_year,
         hkex_target_month=args.hkex_target_month,

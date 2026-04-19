@@ -10,6 +10,7 @@ This folder is an independent data ingestion module for Project InsightSync.
   - KPMG Hong Kong Banking Outlook PDF
   - Guangdong Statistics Bureau webpages
   - InvestHK news feed (JSON + optional article text)
+  - Hong Kong Government News (Business & Finance RSS/archive, with JSON/CSV snapshots)
   - HKEX predefined disclosure annual-report feed (PDF with optional Selenium fallback)
   - SZSE/CNINFO announcements (regular reports, temporary announcements, IPO-related disclosures)
 - Normalize records into a common schema.
@@ -72,6 +73,18 @@ Run InvestHK with article text crawling enabled:
 python -m insightsync.data --sources investhk --investhk-include-article-text --once
 ```
 
+Run Hong Kong Government Business & Finance news (default last 3 months):
+
+```bash
+python -m insightsync.data --sources hkgov --once
+```
+
+Run Hong Kong Government news with explicit date range:
+
+```bash
+python -m insightsync.data --sources hkgov --hkgov-start-date 2026-01-01 --hkgov-end-date 2026-03-31 --once
+```
+
 Run HKEX annual reports only:
 
 ```bash
@@ -103,6 +116,17 @@ Useful InvestHK flags:
 - `--investhk-request-timeout-seconds` (default: `30`)
 - `--investhk-article-delay-seconds` (default: `0.3`)
 - `--investhk-json-url` (override feed URL if needed)
+
+Useful Hong Kong Government news flags:
+
+- `--hkgov-language` (`en` or `tc`, default: `en`)
+- `--hkgov-since-months` (default: `3`; `0` means latest RSS window)
+- `--hkgov-since-days` (optional day-based window)
+- `--hkgov-start-date` and `--hkgov-end-date` (explicit range, format: `YYYY-MM-DD`)
+- `--hkgov-max-items` (default: `1000`)
+- `--hkgov-filter-limit` (default: `50`)
+- `--hkgov-no-require-geo-and-business` (relax GBA enterprise filter)
+- `--hkgov-request-timeout-seconds` (default: `60`)
 
 Useful HKEX flags:
 
