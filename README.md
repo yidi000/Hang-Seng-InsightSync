@@ -5,6 +5,68 @@ It combines company-related signals and external market intelligence to support 
 
 PRD framework UI demo: https://v0-hang-seng.vercel.app/
 
+## Quick Start (Docker)
+
+Docker Compose is the recommended way to run the backend locally because it provides PostgreSQL with pgvector.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+In another terminal, initialize the backend database and load the bundled demo SQLite snapshot:
+
+```bash
+docker compose exec api alembic upgrade head
+docker compose exec api python -m insightsync.backend.workflows.sync_from_sqlite --full
+docker compose exec api python -m insightsync.backend.workflows.build_rag_index --full
+```
+
+Verify the service:
+
+```bash
+curl "http://127.0.0.1:8000/healthz"
+curl "http://127.0.0.1:8000/api/signals?limit=20"
+curl "http://127.0.0.1:8000/api/timeline?limit=20"
+curl "http://127.0.0.1:8000/api/dashboard/overview"
+curl "http://127.0.0.1:8000/api/rag/index/status"
+```
+
+RAG insight generation is evidence-gated. Without `OPENAI_API_KEY`, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
+
+## Local Development Without Docker
+
+Install dependencies:
+
+```bash
+python -m pip install -r insightsync/data/requirements.txt -r insightsync/backend/requirements.txt
+```
+
+Run PostgreSQL locally with pgvector enabled, then configure `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Run migrations, sync data, build the RAG index, and start the API:
+
+```bash
+alembic upgrade head
+python -m insightsync.backend.workflows.sync_from_sqlite --full
+python -m insightsync.backend.workflows.build_rag_index --full
+uvicorn insightsync.backend.main:app --reload --port 8000
+```
+
+Useful backend endpoints:
+
+- `GET /healthz`
+- `GET /api/signals`
+- `GET /api/timeline`
+- `GET /api/dashboard/overview`
+- `GET /api/rag/index/status`
+- `POST /api/rag/query`
+- `POST /api/insights/generate`
+
 
 ## Business Objective
 
@@ -19,8 +81,9 @@ The platform is designed to answer three core business questions:
 Current implementation focus is the data foundation.
 
 - Implemented: multi-source ingestion, normalization, signal extraction, SQLite persistence, scheduler loop
-- Partially implemented: data model for prospect scores and generated insights (structure ready)
-- Placeholder modules: backend API, frontend dashboard, infrastructure deployment, handover docs
+- Implemented: FastAPI backend skeleton, PostgreSQL sync, read-only APIs, RAG indexing, OpenAI-compatible AI provider
+- Partially implemented: generated insights workflow with evidence validation and fallback generation
+- Placeholder modules: frontend dashboard, infrastructure deployment, handover docs
 
 ## Data Sources Integrated
 
@@ -71,7 +134,7 @@ Hang-Seng-InsightSync/
 			storage/
 ```
 
-## Quick Start (Data Module)
+## Quick Start (Data Module Only)
 
 From the repository root:
 
