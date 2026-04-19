@@ -6,7 +6,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .collectors import ADBCollector, GuangdongStatsCollector, HKMACollector, InvestHKNewsCollector, KPMGCollector
+from .collectors import (
+    ADBCollector,
+    GuangdongStatsCollector,
+    HKEXDisclosureCollector,
+    HKMACollector,
+    InvestHKNewsCollector,
+    KPMGCollector,
+)
 from .storage import SQLiteRepository
 from .utils import utc_now_iso
 
@@ -42,6 +49,16 @@ class PipelineConfig:
     investhk_request_timeout_seconds: int = 30
     investhk_article_delay_seconds: float = 0.3
 
+    hkex_list_url: str | None = None
+    hkex_target_year: str | None = None
+    hkex_target_month: str | None = None
+    hkex_max_items: int = 200
+    hkex_request_timeout_seconds: int = 30
+    hkex_use_selenium_fallback: bool = True
+    hkex_headless: bool = True
+    hkex_download_wait_seconds: int = 30
+    hkex_page_wait_seconds: float = 1.0
+
     runtime_meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -57,6 +74,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             key = "guangdong"
         if key in ("investhk_news", "investhk-news", "investhk"):
             key = "investhk"
+        if key in ("hkex_disclosure", "hkex-disclosure", "hkex"):
+            key = "hkex"
         if key not in out:
             out.append(key)
     return tuple(out)
@@ -98,6 +117,22 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
                     max_items=config.investhk_max_items,
                     request_timeout_seconds=config.investhk_request_timeout_seconds,
                     article_delay_seconds=config.investhk_article_delay_seconds,
+                )
+            )
+            continue
+        if src == "hkex":
+            collectors.append(
+                HKEXDisclosureCollector(
+                    raw_dir=config.raw_dir,
+                    list_url=config.hkex_list_url,
+                    target_year=config.hkex_target_year,
+                    target_month=config.hkex_target_month,
+                    max_items=config.hkex_max_items,
+                    request_timeout_seconds=config.hkex_request_timeout_seconds,
+                    use_selenium_fallback=config.hkex_use_selenium_fallback,
+                    headless=config.hkex_headless,
+                    download_wait_seconds=config.hkex_download_wait_seconds,
+                    page_wait_seconds=config.hkex_page_wait_seconds,
                 )
             )
             continue

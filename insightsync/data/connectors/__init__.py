@@ -5,6 +5,7 @@ from .kpmg_banking_outlook import (
     download_kpmg_hong_kong_banking_outlook_pdf,
 )
 from .investhk_client import INVESTHK_NEWS_JSON_URL_TEMPLATE, InvestHKNewsClient, extract_news_items
+from .hkex_disclosure_client import HKEX_PREDEFINED_DOCS_URL, HKEXDisclosureClient, parse_hkex_predefined_rows
 
 __all__ = [
     "ADBKIDBClient",
@@ -15,5 +16,8 @@ __all__ = [
     "INVESTHK_NEWS_JSON_URL_TEMPLATE",
     "InvestHKNewsClient",
     "extract_news_items",
+    "HKEX_PREDEFINED_DOCS_URL",
+    "HKEXDisclosureClient",
+    "parse_hkex_predefined_rows",
 ]
 

@@ -13,6 +13,8 @@ import requests
 
 from ..connectors import (
     ADBKIDBClient,
+    HKEX_PREDEFINED_DOCS_URL,
+    HKEXDisclosureClient,
     HKMAClient,
     InvestHKNewsClient,
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
@@ -334,6 +336,23 @@ def _infer_investhk_signal_type(news_type: str | None, text: str) -> str:
     return "market"
 
 
+def _matches_year_month(event_time: str | None, *, target_year: str | None, target_month: str | None) -> bool:
+    if not target_year and not target_month:
+        return True
+    if not event_time:
+        return False
+
+    parts = event_time.split("-")
+    year = parts[0] if parts else ""
+    month = parts[1] if len(parts) > 1 else ""
+
+    if target_year and year != target_year:
+        return False
+    if target_month and month != target_month:
+        return False
+    return True
+
+
 class InvestHKNewsCollector(BaseCollector):
     source = "investhk_news"
 
@@ -486,6 +505,227 @@ class InvestHKNewsCollector(BaseCollector):
             "include_article_text": self.include_article_text,
             "article_fetch_success": article_success,
             "article_fetch_failed": article_failed,
+        }
+        return batch
+
+
+class HKEXDisclosureCollector(BaseCollector):
+    source = "hkex_disclosure"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        list_url: str | None = None,
+        target_year: str | None = None,
+        target_month: str | None = None,
+        max_items: int = 200,
+        request_timeout_seconds: int = 30,
+        use_selenium_fallback: bool = True,
+        headless: bool = True,
+        download_wait_seconds: int = 30,
+        page_wait_seconds: float = 1.0,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.list_url = normalize_text(list_url) or HKEX_PREDEFINED_DOCS_URL
+        self.target_year = normalize_text(target_year) or None
+
+        month_raw = normalize_text(target_month)
+        if month_raw and month_raw.isdigit():
+            month_raw = f"{int(month_raw):02d}"
+        self.target_month = month_raw or None
+
+        self.max_items = max_items
+        self.use_selenium_fallback = use_selenium_fallback
+        self.headless = headless
+        self.download_wait_seconds = max(5, int(download_wait_seconds))
+        self.page_wait_seconds = max(0.1, float(page_wait_seconds))
+        self.client = HKEXDisclosureClient(timeout_seconds=request_timeout_seconds)
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "hkex_disclosure"
+        pdf_dir = out_dir / "pdfs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+
+        items = self.client.fetch_predefined_items(list_url=self.list_url)
+        fetched_count = len(items)
+
+        filtered_items: list[dict[str, str]] = []
+        for item in items:
+            publish_date = normalize_text(item.get("publish_date"))
+            event_time = extract_time_period_from_text(publish_date)
+            if _matches_year_month(event_time, target_year=self.target_year, target_month=self.target_month):
+                filtered_items.append(item)
+
+        if self.max_items > 0:
+            filtered_items = filtered_items[: self.max_items]
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        snapshot_path = out_dir / f"hkex_predefined_docs_{fetched_at}.json"
+        snapshot_path.write_text(json.dumps(filtered_items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="predefined_documents_feed",
+            record_key=f"feed|{self.target_year or 'all'}|{self.target_month or 'all'}",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="HKG",
+            title="HKEX predefined disclosure feed",
+            summary=f"HKEX feed snapshot with {len(filtered_items)} filtered rows",
+            region="Hong Kong",
+            industry="Listed Companies",
+            tags=[self.source, "feed_snapshot"],
+            payload={
+                "list_url": self.list_url,
+                "items_fetched": fetched_count,
+                "items_after_filter": len(filtered_items),
+                "target_year": self.target_year,
+                "target_month": self.target_month,
+                "file_path": str(snapshot_path.resolve()),
+            },
+            evidence_url=self.list_url,
+            lang="zh",
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        download_success = 0
+        download_failed = 0
+
+        for idx, item in enumerate(filtered_items):
+            publish_date = normalize_text(item.get("publish_date"))
+            stock_code = normalize_text(item.get("stock_code"))
+            company_name = normalize_text(item.get("company_name")) or "listed company"
+            detail_url = normalize_text(item.get("detail_url"))
+            row_title = normalize_text(item.get("title")) or f"{company_name} annual report"
+            event_time = extract_time_period_from_text(publish_date)
+
+            base_name = safe_filename(f"{publish_date}_{stock_code}_{company_name}")
+            target_pdf_path = pdf_dir / f"{base_name}.pdf"
+
+            pdf_url: str | None = None
+            file_path: str | None = None
+            file_sha256: str | None = None
+            download_method: str | None = None
+            download_error: str | None = None
+
+            try:
+                pdf_url = self.client.resolve_pdf_url(detail_url)
+                if pdf_url:
+                    saved = self.client.download_pdf(pdf_url, target_pdf_path)
+                    file_path = str(saved.resolve())
+                    file_sha256 = sha256_file(saved)
+                    download_method = "requests"
+                    download_success += 1
+                elif self.use_selenium_fallback and detail_url:
+                    saved = self.client.download_with_selenium(
+                        detail_url,
+                        download_dir=pdf_dir,
+                        headless=self.headless,
+                        wait_seconds=self.download_wait_seconds,
+                        page_wait_seconds=self.page_wait_seconds,
+                    )
+                    if saved is not None:
+                        renamed = pdf_dir / f"{base_name}.pdf"
+                        if saved.resolve() != renamed.resolve():
+                            if renamed.exists():
+                                renamed.unlink()
+                            saved.replace(renamed)
+                            saved = renamed
+                        file_path = str(saved.resolve())
+                        file_sha256 = sha256_file(saved)
+                        download_method = "selenium"
+                        download_success += 1
+                    else:
+                        download_failed += 1
+                else:
+                    download_failed += 1
+            except Exception as exc:  # noqa: BLE001
+                download_error = str(exc)
+                download_failed += 1
+
+            record_key = build_natural_key("hkex_annual_reports", item, fallback=f"idx-{idx}")
+            company_id = stock_code or None
+
+            code_suffix = f" ({stock_code})" if stock_code else ""
+            summary_text = f"HKEX annual report disclosure for {company_name}{code_suffix}"
+            signal_text = f"{company_name}{code_suffix} annual report published"
+
+            payload: dict[str, Any] = {
+                "publish_date": publish_date,
+                "stock_code": stock_code,
+                "company_name": company_name,
+                "title": row_title,
+                "detail_url": detail_url,
+                "pdf_url": pdf_url,
+                "file_path": file_path,
+                "file_sha256": file_sha256,
+                "download_method": download_method,
+                "download_error": download_error,
+            }
+
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="annual_reports_pdf",
+                record_key=record_key,
+                record_type="document",
+                event_time=event_time,
+                company_id=company_id,
+                entity="HKG",
+                title=row_title,
+                summary=summary_text,
+                region="Hong Kong",
+                industry="Listed Companies",
+                tags=[self.source, "annual_report", stock_code or "unknown_code"],
+                payload=payload,
+                evidence_url=pdf_url or detail_url or None,
+                lang="zh",
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="document"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_key = f"{self.source}|{record_key}|publication"
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="annual_report_publication",
+                    signal_key=signal_key,
+                    signal_type="market",
+                    event_time=signal_time,
+                    company_id=company_id,
+                    entity="HKG",
+                    indicator="annual_report_published",
+                    value_num=None,
+                    value_text=publish_date or None,
+                    unit=None,
+                    signal_text=signal_text,
+                    evidence_refs=[ref for ref in [pdf_url, detail_url] if ref],
+                    extra={
+                        "stock_code": stock_code,
+                        "company_name": company_name,
+                        "download_method": download_method,
+                        "download_error": download_error,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "list_url": self.list_url,
+            "items_fetched": fetched_count,
+            "items_after_filter": len(filtered_items),
+            "target_year": self.target_year,
+            "target_month": self.target_month,
+            "use_selenium_fallback": self.use_selenium_fallback,
+            "headless": self.headless,
+            "download_success": download_success,
+            "download_failed": download_failed,
         }
         return batch
 

@@ -10,6 +10,7 @@ This folder is an independent data ingestion module for Project InsightSync.
   - KPMG Hong Kong Banking Outlook PDF
   - Guangdong Statistics Bureau webpages
   - InvestHK news feed (JSON + optional article text)
+  - HKEX predefined disclosure annual-report feed (PDF with optional Selenium fallback)
 - Normalize records into a common schema.
 - Persist cleaned data into SQLite for backend/agent consumption.
 - Support one-off and interval scheduling modes.
@@ -70,6 +71,18 @@ Run InvestHK with article text crawling enabled:
 python -m insightsync.data --sources investhk --investhk-include-article-text --once
 ```
 
+Run HKEX annual reports only:
+
+```bash
+python -m insightsync.data --sources hkex --hkex-target-year 2026 --hkex-target-month 04 --once
+```
+
+Run HKEX with Selenium fallback enabled (for JS/blob pages):
+
+```bash
+python -m insightsync.data --sources hkex --hkex-target-year 2026 --hkex-use-selenium-fallback --once
+```
+
 Useful InvestHK flags:
 
 - `--investhk-language` (default: `zh-cn`)
@@ -77,6 +90,18 @@ Useful InvestHK flags:
 - `--investhk-request-timeout-seconds` (default: `30`)
 - `--investhk-article-delay-seconds` (default: `0.3`)
 - `--investhk-json-url` (override feed URL if needed)
+
+Useful HKEX flags:
+
+- `--hkex-list-url` (override predefined documents list URL)
+- `--hkex-target-year` (for example `2026`)
+- `--hkex-target-month` (for example `04`)
+- `--hkex-max-items` (default: `200`)
+- `--hkex-use-selenium-fallback` (enable browser fallback for tricky pages)
+- `--hkex-no-headless` (open browser UI for debugging)
+- `--hkex-request-timeout-seconds` (default: `30`)
+- `--hkex-download-wait-seconds` (default: `30`)
+- `--hkex-page-wait-seconds` (default: `1.0`)
 
 ## Output
 

@@ -29,6 +29,7 @@ Current implementation focus is the data foundation.
 - KPMG Hong Kong Banking Outlook (PDF artifact ingestion)
 - Guangdong Statistics Bureau (CSV/table extraction)
 - InvestHK news feed (policy, expansion, financing, and market-news signals)
+- HKEX disclosure feed for listed-company annual reports (PDF collection)
 - Project structure can support additional sources such as Yahoo Finance (next integration target)
 
 ## Data Pipeline Overview
@@ -90,6 +91,12 @@ Run selected sources only:
 
 ```bash
 python -m insightsync.data --sources hkma,adb,investhk --once
+```
+
+Run HKEX annual-report collection only:
+
+```bash
+python -m insightsync.data --sources hkex --hkex-target-year 2026 --hkex-target-month 04 --once
 ```
 
 ## Collaboration Workflow

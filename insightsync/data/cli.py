@@ -51,6 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--investhk-request-timeout-seconds", type=int, default=30)
     parser.add_argument("--investhk-article-delay-seconds", type=float, default=0.3)
 
+    parser.add_argument("--hkex-list-url", default=None)
+    parser.add_argument("--hkex-target-year", default=None)
+    parser.add_argument("--hkex-target-month", default=None)
+    parser.add_argument("--hkex-max-items", type=int, default=200)
+    parser.add_argument("--hkex-request-timeout-seconds", type=int, default=30)
+    parser.add_argument("--hkex-use-selenium-fallback", action="store_true")
+    parser.add_argument("--hkex-no-headless", action="store_true")
+    parser.add_argument("--hkex-download-wait-seconds", type=int, default=30)
+    parser.add_argument("--hkex-page-wait-seconds", type=float, default=1.0)
+
     parser.add_argument("--interval-minutes", type=float, default=0.0)
     parser.add_argument("--once", action="store_true")
     return parser
@@ -82,6 +92,15 @@ def main() -> None:
         investhk_max_items=args.investhk_max_items,
         investhk_request_timeout_seconds=args.investhk_request_timeout_seconds,
         investhk_article_delay_seconds=args.investhk_article_delay_seconds,
+        hkex_list_url=args.hkex_list_url,
+        hkex_target_year=args.hkex_target_year,
+        hkex_target_month=args.hkex_target_month,
+        hkex_max_items=args.hkex_max_items,
+        hkex_request_timeout_seconds=args.hkex_request_timeout_seconds,
+        hkex_use_selenium_fallback=args.hkex_use_selenium_fallback,
+        hkex_headless=not args.hkex_no_headless,
+        hkex_download_wait_seconds=args.hkex_download_wait_seconds,
+        hkex_page_wait_seconds=args.hkex_page_wait_seconds,
     )
 
     if args.interval_minutes > 0:
