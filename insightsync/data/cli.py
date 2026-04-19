@@ -61,6 +61,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hkex-download-wait-seconds", type=int, default=30)
     parser.add_argument("--hkex-page-wait-seconds", type=float, default=1.0)
 
+    parser.add_argument("--szse-days-back", type=int, default=180)
+    parser.add_argument("--szse-start-date", default=None)
+    parser.add_argument("--szse-end-date", default=None)
+    parser.add_argument("--szse-max-records", type=int, default=50000)
+    parser.add_argument("--szse-page-size", type=int, default=30)
+    parser.add_argument("--szse-delay-seconds", type=float, default=0.3)
+    parser.add_argument("--szse-plate", default="sz")
+    parser.add_argument("--szse-stock", default="")
+    parser.add_argument("--szse-tab-name", default="fulltext")
+    parser.add_argument("--szse-request-timeout-seconds", type=int, default=15)
+
     parser.add_argument("--interval-minutes", type=float, default=0.0)
     parser.add_argument("--once", action="store_true")
     return parser
@@ -101,6 +112,16 @@ def main() -> None:
         hkex_headless=not args.hkex_no_headless,
         hkex_download_wait_seconds=args.hkex_download_wait_seconds,
         hkex_page_wait_seconds=args.hkex_page_wait_seconds,
+        szse_days_back=args.szse_days_back,
+        szse_start_date=args.szse_start_date,
+        szse_end_date=args.szse_end_date,
+        szse_max_records=args.szse_max_records,
+        szse_page_size=args.szse_page_size,
+        szse_delay_seconds=args.szse_delay_seconds,
+        szse_plate=args.szse_plate,
+        szse_stock=args.szse_stock,
+        szse_tab_name=args.szse_tab_name,
+        szse_request_timeout_seconds=args.szse_request_timeout_seconds,
     )
 
     if args.interval_minutes > 0:

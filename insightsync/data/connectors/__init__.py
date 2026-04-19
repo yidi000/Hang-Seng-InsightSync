@@ -6,6 +6,7 @@ from .kpmg_banking_outlook import (
 )
 from .investhk_client import INVESTHK_NEWS_JSON_URL_TEMPLATE, InvestHKNewsClient, extract_news_items
 from .hkex_disclosure_client import HKEX_PREDEFINED_DOCS_URL, HKEXDisclosureClient, parse_hkex_predefined_rows
+from .szse_cninfo_client import SZSECninfoClient, build_cninfo_pdf_url, timestamp_ms_to_date, timestamp_ms_to_datetime
 
 __all__ = [
     "ADBKIDBClient",
@@ -19,5 +20,9 @@ __all__ = [
     "HKEX_PREDEFINED_DOCS_URL",
     "HKEXDisclosureClient",
     "parse_hkex_predefined_rows",
+    "SZSECninfoClient",
+    "build_cninfo_pdf_url",
+    "timestamp_ms_to_date",
+    "timestamp_ms_to_datetime",
 ]
 

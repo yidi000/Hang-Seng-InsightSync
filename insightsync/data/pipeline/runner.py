@@ -13,6 +13,7 @@ from .collectors import (
     HKMACollector,
     InvestHKNewsCollector,
     KPMGCollector,
+    SZSEAnnouncementCollector,
 )
 from .storage import SQLiteRepository
 from .utils import utc_now_iso
@@ -59,6 +60,17 @@ class PipelineConfig:
     hkex_download_wait_seconds: int = 30
     hkex_page_wait_seconds: float = 1.0
 
+    szse_days_back: int = 180
+    szse_start_date: str | None = None
+    szse_end_date: str | None = None
+    szse_max_records: int = 50000
+    szse_page_size: int = 30
+    szse_delay_seconds: float = 0.3
+    szse_plate: str = "sz"
+    szse_stock: str = ""
+    szse_tab_name: str = "fulltext"
+    szse_request_timeout_seconds: int = 15
+
     runtime_meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -76,6 +88,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             key = "investhk"
         if key in ("hkex_disclosure", "hkex-disclosure", "hkex"):
             key = "hkex"
+        if key in ("szse", "szse-announcement", "szse_announcement", "cninfo", "cninfo_szse", "szse_cninfo"):
+            key = "szse"
         if key not in out:
             out.append(key)
     return tuple(out)
@@ -133,6 +147,23 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
                     headless=config.hkex_headless,
                     download_wait_seconds=config.hkex_download_wait_seconds,
                     page_wait_seconds=config.hkex_page_wait_seconds,
+                )
+            )
+            continue
+        if src == "szse":
+            collectors.append(
+                SZSEAnnouncementCollector(
+                    raw_dir=config.raw_dir,
+                    days_back=config.szse_days_back,
+                    start_date=config.szse_start_date,
+                    end_date=config.szse_end_date,
+                    max_records=config.szse_max_records,
+                    page_size=config.szse_page_size,
+                    delay_seconds=config.szse_delay_seconds,
+                    plate=config.szse_plate,
+                    stock=config.szse_stock,
+                    tab_name=config.szse_tab_name,
+                    request_timeout_seconds=config.szse_request_timeout_seconds,
                 )
             )
             continue

@@ -30,6 +30,7 @@ Current implementation focus is the data foundation.
 - Guangdong Statistics Bureau (CSV/table extraction)
 - InvestHK news feed (policy, expansion, financing, and market-news signals)
 - HKEX disclosure feed for listed-company annual reports (PDF collection)
+- SZSE/CNINFO announcement feed (A-share and partial HK-listed company disclosures with PDF links)
 - Project structure can support additional sources such as Yahoo Finance (next integration target)
 
 ## Data Pipeline Overview
@@ -97,6 +98,12 @@ Run HKEX annual-report collection only:
 
 ```bash
 python -m insightsync.data --sources hkex --hkex-target-year 2026 --hkex-target-month 04 --once
+```
+
+Run SZSE/CNINFO announcement collection (default last 180 days):
+
+```bash
+python -m insightsync.data --sources szse --once
 ```
 
 ## Collaboration Workflow

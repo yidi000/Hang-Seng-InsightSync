@@ -11,6 +11,7 @@ This folder is an independent data ingestion module for Project InsightSync.
   - Guangdong Statistics Bureau webpages
   - InvestHK news feed (JSON + optional article text)
   - HKEX predefined disclosure annual-report feed (PDF with optional Selenium fallback)
+  - SZSE/CNINFO announcements (regular reports, temporary announcements, IPO-related disclosures)
 - Normalize records into a common schema.
 - Persist cleaned data into SQLite for backend/agent consumption.
 - Support one-off and interval scheduling modes.
@@ -83,6 +84,18 @@ Run HKEX with Selenium fallback enabled (for JS/blob pages):
 python -m insightsync.data --sources hkex --hkex-target-year 2026 --hkex-use-selenium-fallback --once
 ```
 
+Run SZSE CNINFO announcements (default last 180 days):
+
+```bash
+python -m insightsync.data --sources szse --once
+```
+
+Run SZSE CNINFO with explicit date range:
+
+```bash
+python -m insightsync.data --sources szse --szse-start-date 2026-01-01 --szse-end-date 2026-04-20 --once
+```
+
 Useful InvestHK flags:
 
 - `--investhk-language` (default: `zh-cn`)
@@ -102,6 +115,18 @@ Useful HKEX flags:
 - `--hkex-request-timeout-seconds` (default: `30`)
 - `--hkex-download-wait-seconds` (default: `30`)
 - `--hkex-page-wait-seconds` (default: `1.0`)
+
+Useful SZSE/CNINFO flags:
+
+- `--szse-days-back` (default: `180`)
+- `--szse-start-date` and `--szse-end-date` (override days-back range, format: `YYYY-MM-DD`)
+- `--szse-max-records` (default: `50000`)
+- `--szse-page-size` (default: `30`)
+- `--szse-delay-seconds` (default: `0.3`)
+- `--szse-plate` (default: `sz`)
+- `--szse-stock` (optional stock code filter)
+- `--szse-tab-name` (default: `fulltext`)
+- `--szse-request-timeout-seconds` (default: `15`)
 
 ## Output
 

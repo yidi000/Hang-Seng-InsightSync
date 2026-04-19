@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -18,8 +18,12 @@ from ..connectors import (
     HKMAClient,
     InvestHKNewsClient,
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
+    SZSECninfoClient,
+    build_cninfo_pdf_url,
     download_kpmg_hong_kong_banking_outlook_pdf,
     parse_kidb_sdmx_timeseries,
+    timestamp_ms_to_date,
+    timestamp_ms_to_datetime,
 )
 from .models import CollectionBatch, IntelligenceRecord, TimelineEvent, TriggerSignal
 from .utils import (
@@ -353,6 +357,17 @@ def _matches_year_month(event_time: str | None, *, target_year: str | None, targ
     return True
 
 
+def _infer_szse_announcement_signal_type(announcement_type: str | None, title: str) -> str:
+    combined = f"{announcement_type or ''} {title}".lower()
+    if any(token in combined for token in ("ipo", "上市", "招股", "首发")):
+        return "financing"
+    if any(token in combined for token in ("风险", "处罚", "诉讼", "减值", "亏损", "st")):
+        return "risk"
+    if any(token in combined for token in ("并购", "收购", "扩产", "投资", "增长", "合作")):
+        return "growth"
+    return "market"
+
+
 class InvestHKNewsCollector(BaseCollector):
     source = "investhk_news"
 
@@ -505,6 +520,181 @@ class InvestHKNewsCollector(BaseCollector):
             "include_article_text": self.include_article_text,
             "article_fetch_success": article_success,
             "article_fetch_failed": article_failed,
+        }
+        return batch
+
+
+class SZSEAnnouncementCollector(BaseCollector):
+    source = "szse_cninfo"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        days_back: int = 180,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_records: int = 50000,
+        page_size: int = 30,
+        delay_seconds: float = 0.3,
+        plate: str = "sz",
+        stock: str = "",
+        tab_name: str = "fulltext",
+        request_timeout_seconds: int = 15,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.days_back = max(1, int(days_back))
+        self.start_date = normalize_text(start_date) or None
+        self.end_date = normalize_text(end_date) or None
+        self.max_records = max_records
+        self.page_size = max(1, int(page_size))
+        self.delay_seconds = max(0.0, float(delay_seconds))
+        self.plate = normalize_text(plate) or "sz"
+        self.stock = normalize_text(stock)
+        self.tab_name = normalize_text(tab_name) or "fulltext"
+        self.client = SZSECninfoClient(timeout_seconds=request_timeout_seconds)
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "szse_cninfo"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        end_date = self.end_date or datetime.today().strftime("%Y-%m-%d")
+        start_date = self.start_date or (datetime.today() - timedelta(days=self.days_back)).strftime("%Y-%m-%d")
+
+        result = self.client.fetch_announcements(
+            start_date=start_date,
+            end_date=end_date,
+            plate=self.plate,
+            stock=self.stock,
+            tab_name=self.tab_name,
+            page_size=self.page_size,
+            max_records=self.max_records,
+            delay_seconds=self.delay_seconds,
+        )
+        items = result.get("items", [])
+        meta = result.get("meta", {})
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        dump_path = out_dir / f"announcements_{start_date}_{end_date}_{fetched_at}.json"
+        dump_path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="announcements_feed_json",
+            record_key=f"feed|{start_date}|{end_date}|{self.plate}|{self.stock or 'all'}",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="CN",
+            title=f"CNINFO announcement feed ({self.plate})",
+            summary=f"CNINFO feed snapshot with {len(items)} announcements",
+            region="China",
+            industry="Listed Companies",
+            tags=[self.source, "feed_snapshot", self.plate],
+            payload={
+                "start_date": start_date,
+                "end_date": end_date,
+                "plate": self.plate,
+                "stock": self.stock,
+                "tab_name": self.tab_name,
+                "items_count": len(items),
+                "meta": meta,
+                "file_path": str(dump_path.resolve()),
+            },
+            evidence_url="http://www.cninfo.com.cn/",
+            lang="zh",
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+
+            announcement_id = normalize_text(item.get("announcementId"))
+            stock_code = normalize_text(item.get("secCode"))
+            stock_name = normalize_text(item.get("secName"))
+            announcement_title = normalize_text(item.get("announcementTitle")) or "(untitled announcement)"
+            announcement_type = normalize_text(item.get("announcementType"))
+            announcement_time = item.get("announcementTime")
+
+            event_time = timestamp_ms_to_date(announcement_time)
+            event_datetime = timestamp_ms_to_datetime(announcement_time)
+            pdf_url = build_cninfo_pdf_url(item.get("adjunctUrl"))
+
+            record_key = announcement_id or build_natural_key("szse_cninfo", item, fallback=f"idx-{idx}")
+            company_id = stock_code or None
+
+            payload: dict[str, Any] = {
+                "announcement_id": announcement_id,
+                "announcement_type": announcement_type,
+                "announcement_time": announcement_time,
+                "announcement_datetime": event_datetime,
+                "stock_code": stock_code,
+                "stock_name": stock_name,
+                "adjunct_type": normalize_text(item.get("adjunctType")),
+                "adjunct_size_kb": item.get("adjunctSize"),
+                "pdf_url": pdf_url,
+            }
+
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="announcements",
+                record_key=record_key,
+                record_type="event",
+                event_time=event_time or None,
+                company_id=company_id,
+                entity="CN",
+                title=announcement_title,
+                summary=announcement_type or announcement_title,
+                region="China",
+                industry="Listed Companies",
+                tags=[self.source, self.plate, announcement_type.lower() if announcement_type else "general"],
+                payload=payload,
+                evidence_url=pdf_url or None,
+                lang="zh",
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="event"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_key = f"{self.source}|{record_key}|announcement"
+            signal_type = _infer_szse_announcement_signal_type(announcement_type, announcement_title)
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="announcement_signals",
+                    signal_key=signal_key,
+                    signal_type=signal_type,
+                    event_time=signal_time,
+                    company_id=company_id,
+                    entity="CN",
+                    indicator="announcement",
+                    value_num=None,
+                    value_text=announcement_type or None,
+                    unit=None,
+                    signal_text=announcement_title,
+                    evidence_refs=[ref for ref in [pdf_url] if ref],
+                    extra={
+                        "announcement_id": announcement_id,
+                        "stock_code": stock_code,
+                        "stock_name": stock_name,
+                        "announcement_datetime": event_datetime,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "plate": self.plate,
+            "stock": self.stock,
+            "tab_name": self.tab_name,
+            "items_fetched": len(items),
+            "source_meta": meta,
         }
         return batch
 
