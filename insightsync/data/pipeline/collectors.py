@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import csv
 import json
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -13,11 +14,19 @@ import requests
 
 from ..connectors import (
     ADBKIDBClient,
+    HKGovNewsClient,
+    HKEX_PREDEFINED_DOCS_URL,
+    HKEXDisclosureClient,
     HKMAClient,
     InvestHKNewsClient,
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
+    SZSECninfoClient,
+    build_cninfo_pdf_url,
     download_kpmg_hong_kong_banking_outlook_pdf,
+    extract_hk_gov_news_id,
     parse_kidb_sdmx_timeseries,
+    timestamp_ms_to_date,
+    timestamp_ms_to_datetime,
 )
 from .models import CollectionBatch, IntelligenceRecord, TimelineEvent, TriggerSignal
 from .utils import (
@@ -334,6 +343,62 @@ def _infer_investhk_signal_type(news_type: str | None, text: str) -> str:
     return "market"
 
 
+def _matches_year_month(event_time: str | None, *, target_year: str | None, target_month: str | None) -> bool:
+    if not target_year and not target_month:
+        return True
+    if not event_time:
+        return False
+
+    parts = event_time.split("-")
+    year = parts[0] if parts else ""
+    month = parts[1] if len(parts) > 1 else ""
+
+    if target_year and year != target_year:
+        return False
+    if target_month and month != target_month:
+        return False
+    return True
+
+
+def _infer_szse_announcement_signal_type(announcement_type: str | None, title: str) -> str:
+    combined = f"{announcement_type or ''} {title}".lower()
+    if any(token in combined for token in ("ipo", "上市", "招股", "首发")):
+        return "financing"
+    if any(token in combined for token in ("风险", "处罚", "诉讼", "减值", "亏损", "st")):
+        return "risk"
+    if any(token in combined for token in ("并购", "收购", "扩产", "投资", "增长", "合作")):
+        return "growth"
+    return "market"
+
+
+def _infer_hkgov_news_signal_type(title: str, description: str, *, matched_gba_enterprise: bool) -> str:
+    combined = f"{title} {description}".lower()
+    if matched_gba_enterprise and any(
+        token in combined
+        for token in (
+            "greater bay area",
+            "cross-boundary",
+            "cross border",
+            "guangdong",
+            "shenzhen",
+            "guangzhou",
+            "粤港澳大湾区",
+            "跨境",
+            "广东",
+            "深圳",
+            "广州",
+        )
+    ):
+        return "cross_border"
+    if any(token in combined for token in ("fund", "financing", "capital", "investment", "finance", "贷款", "融资", "投资", "金融")):
+        return "financing"
+    if any(token in combined for token in ("risk", "warning", "fraud", "penalty", "uncertainty", "风险", "警告", "处罚")):
+        return "risk"
+    if any(token in combined for token in ("innovation", "technology", "manufacturing", "startup", "growth", "创新", "科技", "制造", "增长")):
+        return "growth"
+    return "market"
+
+
 class InvestHKNewsCollector(BaseCollector):
     source = "investhk_news"
 
@@ -486,6 +551,672 @@ class InvestHKNewsCollector(BaseCollector):
             "include_article_text": self.include_article_text,
             "article_fetch_success": article_success,
             "article_fetch_failed": article_failed,
+        }
+        return batch
+
+
+class HKGovNewsCollector(BaseCollector):
+    source = "hk_gov_news"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        language: str = "en",
+        since_months: int = 3,
+        since_days: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_items: int = 1000,
+        filter_limit: int = 50,
+        require_geo_and_business: bool = True,
+        request_timeout_seconds: int = 60,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.language = normalize_text(language).lower() or "en"
+        if self.language not in {"en", "tc"}:
+            raise ValueError("hkgov language must be 'en' or 'tc'")
+
+        self.since_months = int(since_months)
+        self.since_days = None if since_days is None else int(since_days)
+        self.start_date = normalize_text(start_date) or None
+        self.end_date = normalize_text(end_date) or None
+        self.max_items = int(max_items)
+        self.filter_limit = int(filter_limit)
+        self.require_geo_and_business = require_geo_and_business
+        self.request_timeout_seconds = int(request_timeout_seconds)
+        self.client = HKGovNewsClient()
+
+    @staticmethod
+    def _normalize_csv_date_time(row: dict[str, Any]) -> tuple[str, str]:
+        published_at = normalize_text(row.get("published_at"))
+        if published_at:
+            text = published_at.replace("T", " ")
+            if "+" in text:
+                text = text.split("+", 1)[0]
+            if text.endswith("Z"):
+                text = text[:-1]
+            parts = text.split(" ")
+            if len(parts) >= 2:
+                return parts[0], f"{parts[0]} {parts[1]}"
+            return text, text
+
+        pub_date = normalize_text(row.get("pubDate"))
+        return pub_date, pub_date
+
+    def _write_csv(
+        self,
+        *,
+        raw_articles: list[dict[str, Any]],
+        filtered_links: set[str],
+        output_path: Path,
+        window_label: str,
+    ) -> None:
+        headers = [
+            "news_date",
+            "news_time",
+            "language",
+            "window",
+            "title",
+            "description",
+            "link",
+            "news_id",
+            "is_gba_enterprise_match",
+        ]
+        with output_path.open("w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            for row in raw_articles:
+                link = normalize_text(row.get("link"))
+                date_text, time_text = self._normalize_csv_date_time(row)
+                writer.writerow(
+                    [
+                        date_text,
+                        time_text,
+                        self.language,
+                        window_label,
+                        normalize_text(row.get("title")),
+                        normalize_text(row.get("description")),
+                        link,
+                        extract_hk_gov_news_id(link),
+                        "yes" if link in filtered_links else "no",
+                    ]
+                )
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "hk_gov_news"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        raw_articles = self.client.fetch_articles(
+            language=self.language,
+            since_months=self.since_months,
+            since_days=self.since_days,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            timeout=self.request_timeout_seconds,
+            max_items=self.max_items,
+        )
+        filtered_articles = self.client.filter_gba_enterprise_news(
+            articles=raw_articles,
+            language=self.language,
+            require_geo_and_business=self.require_geo_and_business,
+            limit=self.filter_limit,
+        )
+        filtered_links = {
+            normalize_text(item.get("link")) for item in filtered_articles if normalize_text(item.get("link"))
+        }
+
+        if self.start_date and self.end_date:
+            window_label = f"{self.start_date}_{self.end_date}"
+        elif self.since_days is not None:
+            window_label = f"last_{self.since_days}_days"
+        elif self.since_months > 0:
+            window_label = f"last_{self.since_months}_months"
+        else:
+            window_label = "latest_rss"
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        json_path = out_dir / f"news_{self.language}_{window_label}_{fetched_at}.json"
+        csv_path = out_dir / f"news_{self.language}_{window_label}_{fetched_at}.csv"
+
+        snapshot = {
+            "meta": {
+                "fetched_at": fetched_at,
+                "language": self.language,
+                "window": window_label,
+                "since_months": self.since_months,
+                "since_days": self.since_days,
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+                "max_items": self.max_items,
+                "filter_limit": self.filter_limit,
+                "require_geo_and_business": self.require_geo_and_business,
+                "raw_count": len(raw_articles),
+                "filtered_count": len(filtered_articles),
+            },
+            "raw_articles": raw_articles,
+            "filtered_articles": filtered_articles,
+        }
+        json_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._write_csv(raw_articles=raw_articles, filtered_links=filtered_links, output_path=csv_path, window_label=window_label)
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="finance_news_feed_json",
+            record_key=f"feed|{self.language}|{window_label}",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="HKG",
+            title=f"HK Gov Business & Finance news feed ({self.language})",
+            summary=f"HK Gov finance feed snapshot with {len(raw_articles)} items",
+            region="Hong Kong",
+            industry="Public Policy / Finance",
+            tags=[self.source, "feed_snapshot", self.language],
+            payload={
+                "language": self.language,
+                "window": window_label,
+                "raw_count": len(raw_articles),
+                "filtered_count": len(filtered_articles),
+                "json_path": str(json_path.resolve()),
+                "csv_path": str(csv_path.resolve()),
+            },
+            evidence_url="https://www.news.gov.hk/",
+            lang=self.language,
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        for idx, item in enumerate(raw_articles):
+            if not isinstance(item, dict):
+                continue
+
+            title = normalize_text(item.get("title")) or "(untitled news item)"
+            description = normalize_text(item.get("description"))
+            link = normalize_text(item.get("link"))
+            pub_date = normalize_text(item.get("pubDate"))
+            published_at = normalize_text(item.get("published_at"))
+            event_time = extract_time_period_from_text(published_at or pub_date)
+            news_id = extract_hk_gov_news_id(link)
+            is_match = link in filtered_links if link else False
+
+            payload: dict[str, Any] = {
+                "title": title,
+                "description": description,
+                "link": link,
+                "news_id": news_id,
+                "pub_date": pub_date,
+                "published_at": published_at,
+                "is_gba_enterprise_match": is_match,
+            }
+
+            record_key = build_natural_key("hk_gov_news", item, fallback=f"idx-{idx}")
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="finance_news_items",
+                record_key=record_key,
+                record_type="event",
+                event_time=event_time,
+                company_id=None,
+                entity="HKG",
+                title=title,
+                summary=description or title,
+                region="Hong Kong",
+                industry="Public Policy / Finance",
+                tags=[
+                    self.source,
+                    self.language,
+                    "finance_news",
+                    "gba_match" if is_match else "general",
+                ],
+                payload=payload,
+                evidence_url=link or None,
+                lang=self.language,
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="event"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_key = f"{self.source}|{record_key}|headline"
+            signal_type = _infer_hkgov_news_signal_type(title, description, matched_gba_enterprise=is_match)
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="finance_news_signals",
+                    signal_key=signal_key,
+                    signal_type=signal_type,
+                    event_time=signal_time,
+                    company_id=None,
+                    entity="HKG",
+                    indicator="headline",
+                    value_num=None,
+                    value_text="gba_enterprise_match" if is_match else None,
+                    unit=None,
+                    signal_text=title,
+                    evidence_refs=[ref for ref in [link] if ref],
+                    extra={
+                        "language": self.language,
+                        "pub_date": pub_date,
+                        "published_at": published_at,
+                        "news_id": news_id,
+                        "is_gba_enterprise_match": is_match,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "language": self.language,
+            "window": window_label,
+            "since_months": self.since_months,
+            "since_days": self.since_days,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "max_items": self.max_items,
+            "filter_limit": self.filter_limit,
+            "require_geo_and_business": self.require_geo_and_business,
+            "items_fetched": len(raw_articles),
+            "items_filtered": len(filtered_articles),
+            "json_path": str(json_path.resolve()),
+            "csv_path": str(csv_path.resolve()),
+        }
+        return batch
+
+
+class SZSEAnnouncementCollector(BaseCollector):
+    source = "szse_cninfo"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        days_back: int = 180,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_records: int = 50000,
+        page_size: int = 30,
+        delay_seconds: float = 0.3,
+        plate: str = "sz",
+        stock: str = "",
+        tab_name: str = "fulltext",
+        request_timeout_seconds: int = 15,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.days_back = max(1, int(days_back))
+        self.start_date = normalize_text(start_date) or None
+        self.end_date = normalize_text(end_date) or None
+        self.max_records = max_records
+        self.page_size = max(1, int(page_size))
+        self.delay_seconds = max(0.0, float(delay_seconds))
+        self.plate = normalize_text(plate) or "sz"
+        self.stock = normalize_text(stock)
+        self.tab_name = normalize_text(tab_name) or "fulltext"
+        self.client = SZSECninfoClient(timeout_seconds=request_timeout_seconds)
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "szse_cninfo"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        end_date = self.end_date or datetime.today().strftime("%Y-%m-%d")
+        start_date = self.start_date or (datetime.today() - timedelta(days=self.days_back)).strftime("%Y-%m-%d")
+
+        result = self.client.fetch_announcements(
+            start_date=start_date,
+            end_date=end_date,
+            plate=self.plate,
+            stock=self.stock,
+            tab_name=self.tab_name,
+            page_size=self.page_size,
+            max_records=self.max_records,
+            delay_seconds=self.delay_seconds,
+        )
+        items = result.get("items", [])
+        meta = result.get("meta", {})
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        dump_path = out_dir / f"announcements_{start_date}_{end_date}_{fetched_at}.json"
+        dump_path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="announcements_feed_json",
+            record_key=f"feed|{start_date}|{end_date}|{self.plate}|{self.stock or 'all'}",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="CN",
+            title=f"CNINFO announcement feed ({self.plate})",
+            summary=f"CNINFO feed snapshot with {len(items)} announcements",
+            region="China",
+            industry="Listed Companies",
+            tags=[self.source, "feed_snapshot", self.plate],
+            payload={
+                "start_date": start_date,
+                "end_date": end_date,
+                "plate": self.plate,
+                "stock": self.stock,
+                "tab_name": self.tab_name,
+                "items_count": len(items),
+                "meta": meta,
+                "file_path": str(dump_path.resolve()),
+            },
+            evidence_url="http://www.cninfo.com.cn/",
+            lang="zh",
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+
+            announcement_id = normalize_text(item.get("announcementId"))
+            stock_code = normalize_text(item.get("secCode"))
+            stock_name = normalize_text(item.get("secName"))
+            announcement_title = normalize_text(item.get("announcementTitle")) or "(untitled announcement)"
+            announcement_type = normalize_text(item.get("announcementType"))
+            announcement_time = item.get("announcementTime")
+
+            event_time = timestamp_ms_to_date(announcement_time)
+            event_datetime = timestamp_ms_to_datetime(announcement_time)
+            pdf_url = build_cninfo_pdf_url(item.get("adjunctUrl"))
+
+            record_key = announcement_id or build_natural_key("szse_cninfo", item, fallback=f"idx-{idx}")
+            company_id = stock_code or None
+
+            payload: dict[str, Any] = {
+                "announcement_id": announcement_id,
+                "announcement_type": announcement_type,
+                "announcement_time": announcement_time,
+                "announcement_datetime": event_datetime,
+                "stock_code": stock_code,
+                "stock_name": stock_name,
+                "adjunct_type": normalize_text(item.get("adjunctType")),
+                "adjunct_size_kb": item.get("adjunctSize"),
+                "pdf_url": pdf_url,
+            }
+
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="announcements",
+                record_key=record_key,
+                record_type="event",
+                event_time=event_time or None,
+                company_id=company_id,
+                entity="CN",
+                title=announcement_title,
+                summary=announcement_type or announcement_title,
+                region="China",
+                industry="Listed Companies",
+                tags=[self.source, self.plate, announcement_type.lower() if announcement_type else "general"],
+                payload=payload,
+                evidence_url=pdf_url or None,
+                lang="zh",
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="event"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_key = f"{self.source}|{record_key}|announcement"
+            signal_type = _infer_szse_announcement_signal_type(announcement_type, announcement_title)
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="announcement_signals",
+                    signal_key=signal_key,
+                    signal_type=signal_type,
+                    event_time=signal_time,
+                    company_id=company_id,
+                    entity="CN",
+                    indicator="announcement",
+                    value_num=None,
+                    value_text=announcement_type or None,
+                    unit=None,
+                    signal_text=announcement_title,
+                    evidence_refs=[ref for ref in [pdf_url] if ref],
+                    extra={
+                        "announcement_id": announcement_id,
+                        "stock_code": stock_code,
+                        "stock_name": stock_name,
+                        "announcement_datetime": event_datetime,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "plate": self.plate,
+            "stock": self.stock,
+            "tab_name": self.tab_name,
+            "items_fetched": len(items),
+            "source_meta": meta,
+        }
+        return batch
+
+
+class HKEXDisclosureCollector(BaseCollector):
+    source = "hkex_disclosure"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        list_url: str | None = None,
+        target_year: str | None = None,
+        target_month: str | None = None,
+        max_items: int = 200,
+        request_timeout_seconds: int = 30,
+        use_selenium_fallback: bool = True,
+        headless: bool = True,
+        download_wait_seconds: int = 30,
+        page_wait_seconds: float = 1.0,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.list_url = normalize_text(list_url) or HKEX_PREDEFINED_DOCS_URL
+        self.target_year = normalize_text(target_year) or None
+
+        month_raw = normalize_text(target_month)
+        if month_raw and month_raw.isdigit():
+            month_raw = f"{int(month_raw):02d}"
+        self.target_month = month_raw or None
+
+        self.max_items = max_items
+        self.use_selenium_fallback = use_selenium_fallback
+        self.headless = headless
+        self.download_wait_seconds = max(5, int(download_wait_seconds))
+        self.page_wait_seconds = max(0.1, float(page_wait_seconds))
+        self.client = HKEXDisclosureClient(timeout_seconds=request_timeout_seconds)
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "hkex_disclosure"
+        pdf_dir = out_dir / "pdfs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+
+        items = self.client.fetch_predefined_items(list_url=self.list_url)
+        fetched_count = len(items)
+
+        filtered_items: list[dict[str, str]] = []
+        for item in items:
+            publish_date = normalize_text(item.get("publish_date"))
+            event_time = extract_time_period_from_text(publish_date)
+            if _matches_year_month(event_time, target_year=self.target_year, target_month=self.target_month):
+                filtered_items.append(item)
+
+        if self.max_items > 0:
+            filtered_items = filtered_items[: self.max_items]
+
+        fetched_at = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        snapshot_path = out_dir / f"hkex_predefined_docs_{fetched_at}.json"
+        snapshot_path.write_text(json.dumps(filtered_items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        feed_record = IntelligenceRecord(
+            source=self.source,
+            dataset="predefined_documents_feed",
+            record_key=f"feed|{self.target_year or 'all'}|{self.target_month or 'all'}",
+            record_type="document",
+            event_time=None,
+            company_id=None,
+            entity="HKG",
+            title="HKEX predefined disclosure feed",
+            summary=f"HKEX feed snapshot with {len(filtered_items)} filtered rows",
+            region="Hong Kong",
+            industry="Listed Companies",
+            tags=[self.source, "feed_snapshot"],
+            payload={
+                "list_url": self.list_url,
+                "items_fetched": fetched_count,
+                "items_after_filter": len(filtered_items),
+                "target_year": self.target_year,
+                "target_month": self.target_month,
+                "file_path": str(snapshot_path.resolve()),
+            },
+            evidence_url=self.list_url,
+            lang="zh",
+            raw=None,
+        )
+        batch.intelligence_records.append(feed_record)
+        batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+        download_success = 0
+        download_failed = 0
+
+        for idx, item in enumerate(filtered_items):
+            publish_date = normalize_text(item.get("publish_date"))
+            stock_code = normalize_text(item.get("stock_code"))
+            company_name = normalize_text(item.get("company_name")) or "listed company"
+            detail_url = normalize_text(item.get("detail_url"))
+            row_title = normalize_text(item.get("title")) or f"{company_name} annual report"
+            event_time = extract_time_period_from_text(publish_date)
+
+            base_name = safe_filename(f"{publish_date}_{stock_code}_{company_name}")
+            target_pdf_path = pdf_dir / f"{base_name}.pdf"
+
+            pdf_url: str | None = None
+            file_path: str | None = None
+            file_sha256: str | None = None
+            download_method: str | None = None
+            download_error: str | None = None
+
+            try:
+                pdf_url = self.client.resolve_pdf_url(detail_url)
+                if pdf_url:
+                    saved = self.client.download_pdf(pdf_url, target_pdf_path)
+                    file_path = str(saved.resolve())
+                    file_sha256 = sha256_file(saved)
+                    download_method = "requests"
+                    download_success += 1
+                elif self.use_selenium_fallback and detail_url:
+                    saved = self.client.download_with_selenium(
+                        detail_url,
+                        download_dir=pdf_dir,
+                        headless=self.headless,
+                        wait_seconds=self.download_wait_seconds,
+                        page_wait_seconds=self.page_wait_seconds,
+                    )
+                    if saved is not None:
+                        renamed = pdf_dir / f"{base_name}.pdf"
+                        if saved.resolve() != renamed.resolve():
+                            if renamed.exists():
+                                renamed.unlink()
+                            saved.replace(renamed)
+                            saved = renamed
+                        file_path = str(saved.resolve())
+                        file_sha256 = sha256_file(saved)
+                        download_method = "selenium"
+                        download_success += 1
+                    else:
+                        download_failed += 1
+                else:
+                    download_failed += 1
+            except Exception as exc:  # noqa: BLE001
+                download_error = str(exc)
+                download_failed += 1
+
+            record_key = build_natural_key("hkex_annual_reports", item, fallback=f"idx-{idx}")
+            company_id = stock_code or None
+
+            code_suffix = f" ({stock_code})" if stock_code else ""
+            summary_text = f"HKEX annual report disclosure for {company_name}{code_suffix}"
+            signal_text = f"{company_name}{code_suffix} annual report published"
+
+            payload: dict[str, Any] = {
+                "publish_date": publish_date,
+                "stock_code": stock_code,
+                "company_name": company_name,
+                "title": row_title,
+                "detail_url": detail_url,
+                "pdf_url": pdf_url,
+                "file_path": file_path,
+                "file_sha256": file_sha256,
+                "download_method": download_method,
+                "download_error": download_error,
+            }
+
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="annual_reports_pdf",
+                record_key=record_key,
+                record_type="document",
+                event_time=event_time,
+                company_id=company_id,
+                entity="HKG",
+                title=row_title,
+                summary=summary_text,
+                region="Hong Kong",
+                industry="Listed Companies",
+                tags=[self.source, "annual_report", stock_code or "unknown_code"],
+                payload=payload,
+                evidence_url=pdf_url or detail_url or None,
+                lang="zh",
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="document"))
+
+            signal_time = event_time or str(datetime.now().year)
+            signal_key = f"{self.source}|{record_key}|publication"
+            batch.trigger_signals.append(
+                TriggerSignal(
+                    source=self.source,
+                    dataset="annual_report_publication",
+                    signal_key=signal_key,
+                    signal_type="market",
+                    event_time=signal_time,
+                    company_id=company_id,
+                    entity="HKG",
+                    indicator="annual_report_published",
+                    value_num=None,
+                    value_text=publish_date or None,
+                    unit=None,
+                    signal_text=signal_text,
+                    evidence_refs=[ref for ref in [pdf_url, detail_url] if ref],
+                    extra={
+                        "stock_code": stock_code,
+                        "company_name": company_name,
+                        "download_method": download_method,
+                        "download_error": download_error,
+                    },
+                )
+            )
+
+        batch.meta = {
+            "list_url": self.list_url,
+            "items_fetched": fetched_count,
+            "items_after_filter": len(filtered_items),
+            "target_year": self.target_year,
+            "target_month": self.target_month,
+            "use_selenium_fallback": self.use_selenium_fallback,
+            "headless": self.headless,
+            "download_success": download_success,
+            "download_failed": download_failed,
         }
         return batch
 
