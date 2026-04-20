@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: insightsync
+      POSTGRES_USER: insightsync
+      POSTGRES_PASSWORD: insightsync
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insightsync -d insightsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insightsync:insightsync@postgres:5432/insightsync}
+      SQLITE_SOURCE_PATH: ${SQLITE_SOURCE_PATH:-insightsync/data/storage/demo/insightsync_demo.db}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn insightsync.backend.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  postgres_data:
