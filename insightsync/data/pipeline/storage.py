@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .models import CollectionBatch, IntelligenceRecord, TimelineEvent, TriggerSignal
+from .models import CollectionBatch, CompanyProfile, IntelligenceRecord, TimelineEvent, TriggerSignal
 from .utils import canonical_json, stable_json_hash, utc_now_iso
 
 
@@ -180,6 +180,53 @@ class SQLiteRepository:
 
             CREATE INDEX IF NOT EXISTS idx_generated_insights_lookup
               ON generated_insights(company_id, entity, insight_type, generated_at);
+
+                        CREATE TABLE IF NOT EXISTS companies (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            source TEXT NOT NULL,
+                            company_id TEXT NOT NULL,
+                            canonical_name TEXT NOT NULL,
+                            display_name TEXT,
+                            country TEXT,
+                            region TEXT,
+                            city TEXT,
+                            segments_json TEXT,
+                            industries_json TEXT,
+                            website_url TEXT,
+                            linkedin_url TEXT,
+                            facebook_url TEXT,
+                            x_url TEXT,
+                            instagram_url TEXT,
+                            wikipedia_url TEXT,
+                            profile_summary TEXT,
+                            description TEXT,
+                            extra_json TEXT,
+                            row_hash TEXT NOT NULL,
+                            updated_at TEXT NOT NULL,
+                            run_id TEXT NOT NULL,
+                            UNIQUE(company_id, row_hash)
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_companies_lookup
+                            ON companies(company_id, canonical_name, country, region);
+
+                        CREATE TABLE IF NOT EXISTS company_mapping_audit (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            run_id TEXT NOT NULL,
+                            target_table TEXT NOT NULL,
+                            target_row_id INTEGER NOT NULL,
+                            old_company_id TEXT,
+                            new_company_id TEXT NOT NULL,
+                            mapping_method TEXT NOT NULL,
+                            confidence REAL,
+                            matched_alias TEXT,
+                            matched_context TEXT,
+                            mapped_at TEXT NOT NULL,
+                            UNIQUE(run_id, target_table, target_row_id, new_company_id, mapping_method)
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_company_mapping_audit_lookup
+                            ON company_mapping_audit(target_table, target_row_id, mapped_at);
             """
         )
         self.conn.commit()
@@ -530,6 +577,64 @@ class SQLiteRepository:
         )
         return 1 if row.rowcount > 0 else 0
 
+    def _insert_company(self, company: CompanyProfile, *, fetched_at: str, run_id: str) -> int:
+        row_hash = stable_json_hash(
+            {
+                "source": company.source,
+                "company_id": company.company_id,
+                "canonical_name": company.canonical_name,
+                "display_name": company.display_name,
+                "country": company.country,
+                "region": company.region,
+                "city": company.city,
+                "segments": company.segments,
+                "industries": company.industries,
+                "website_url": company.website_url,
+                "linkedin_url": company.linkedin_url,
+                "facebook_url": company.facebook_url,
+                "x_url": company.x_url,
+                "instagram_url": company.instagram_url,
+                "wikipedia_url": company.wikipedia_url,
+                "profile_summary": company.profile_summary,
+                "description": company.description,
+                "extra": company.extra,
+            }
+        )
+        row = self.conn.execute(
+            """
+            INSERT OR IGNORE INTO companies(
+              source, company_id, canonical_name, display_name, country, region, city,
+              segments_json, industries_json, website_url, linkedin_url, facebook_url,
+              x_url, instagram_url, wikipedia_url, profile_summary, description, extra_json,
+              row_hash, updated_at, run_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                company.source,
+                company.company_id,
+                company.canonical_name,
+                company.display_name,
+                company.country,
+                company.region,
+                company.city,
+                canonical_json(company.segments),
+                canonical_json(company.industries),
+                company.website_url,
+                company.linkedin_url,
+                company.facebook_url,
+                company.x_url,
+                company.instagram_url,
+                company.wikipedia_url,
+                company.profile_summary,
+                company.description,
+                canonical_json(company.extra),
+                row_hash,
+                fetched_at,
+                run_id,
+            ),
+        )
+        return 1 if row.rowcount > 0 else 0
+
     def persist_batch(self, run_id: str, batch: CollectionBatch, *, fetched_at: str | None = None) -> dict[str, int]:
         ts = fetched_at or utc_now_iso()
         inserted_records = 0
@@ -537,6 +642,7 @@ class SQLiteRepository:
         inserted_timeline = 0
         inserted_scores = 0
         inserted_insights = 0
+        inserted_companies = 0
 
         with self.conn:
             for rec in batch.intelligence_records:
@@ -554,10 +660,14 @@ class SQLiteRepository:
             for insight in batch.generated_insights:
                 inserted_insights += self._insert_generated_insight(insight, fetched_at=ts, run_id=run_id)
 
+            for company in batch.companies:
+                inserted_companies += self._insert_company(company, fetched_at=ts, run_id=run_id)
+
         return {
             "intelligence_records": inserted_records,
             "trigger_signals": inserted_signals,
             "timeline_events": inserted_timeline,
             "prospect_scores": inserted_scores,
             "generated_insights": inserted_insights,
+            "companies": inserted_companies,
         }

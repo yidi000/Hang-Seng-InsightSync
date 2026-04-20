@@ -1,0 +1,162 @@
+[
+  {
+    "name": "WeLab",
+    "display_name": "WeLab Holdings",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "sme"],
+    "industries": ["Digital Banking", "Consumer Finance"],
+    "description": "Hong Kong based fintech group focused on digital lending and virtual banking.",
+    "profile_urls": {
+      "website": "https://www.welab.co",
+      "linkedin": "https://www.linkedin.com/company/welab",
+      "facebook": "https://www.facebook.com/welabbank",
+      "x": "https://x.com/WeLabBank",
+      "instagram": "https://www.instagram.com/welabbank",
+      "wikipedia": "https://en.wikipedia.org/wiki/WeLab"
+    },
+    "source_tags": ["seed", "hk", "fintech"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "Airwallex",
+    "display_name": "Airwallex (Hong Kong)",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Cross-border Payments", "Treasury"],
+    "description": "Cross-border payment and financial platform serving global SMEs.",
+    "profile_urls": {
+      "website": "https://www.airwallex.com",
+      "linkedin": "https://www.linkedin.com/company/airwallex",
+      "facebook": "https://www.facebook.com/airwallex",
+      "x": "https://x.com/airwallex",
+      "instagram": "https://www.instagram.com/airwallex",
+      "wikipedia": "https://en.wikipedia.org/wiki/Airwallex"
+    },
+    "source_tags": ["seed", "hk", "cross_border"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "Lalamove",
+    "display_name": "Lalamove Hong Kong",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Logistics", "On-demand Delivery"],
+    "description": "Logistics platform connecting SMEs to on-demand and regional delivery services.",
+    "profile_urls": {
+      "website": "https://www.lalamove.com",
+      "linkedin": "https://www.linkedin.com/company/lalamove",
+      "facebook": "https://www.facebook.com/lalamovehongkong",
+      "x": "https://x.com/lalamove",
+      "instagram": "https://www.instagram.com/lalamove",
+      "wikipedia": "https://en.wikipedia.org/wiki/Lalamove"
+    },
+    "source_tags": ["seed", "hk", "logistics"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "GoGoX",
+    "display_name": "GoGoX Holdings",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Logistics", "Freight Platform"],
+    "description": "Freight and delivery platform with SME merchant usage across Greater China.",
+    "profile_urls": {
+      "website": "https://www.gogox.com",
+      "linkedin": "https://www.linkedin.com/company/gogovan",
+      "facebook": "https://www.facebook.com/gogox.official",
+      "x": "https://x.com/gogovanhk",
+      "instagram": "https://www.instagram.com/gogox_official",
+      "wikipedia": "https://en.wikipedia.org/wiki/GoGoX"
+    },
+    "source_tags": ["seed", "hk", "sme"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "ZA Bank",
+    "display_name": "ZA Bank Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "sme"],
+    "industries": ["Virtual Banking", "Financial Services"],
+    "description": "Licensed virtual bank in Hong Kong providing retail and SME digital banking services.",
+    "profile_urls": {
+      "website": "https://bank.za.group",
+      "linkedin": "https://www.linkedin.com/company/za-bank",
+      "facebook": "https://www.facebook.com/zabank",
+      "x": "https://x.com/za_bank",
+      "instagram": "https://www.instagram.com/za_bank",
+      "wikipedia": "https://en.wikipedia.org/wiki/ZA_Bank"
+    },
+    "source_tags": ["seed", "hk", "banking"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "Futu Holdings",
+    "display_name": "Futu Holdings Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Brokerage", "Capital Markets"],
+    "description": "Digital brokerage and wealth platform with cross-border investment flows.",
+    "profile_urls": {
+      "website": "https://www.futuholdings.com",
+      "linkedin": "https://www.linkedin.com/company/futu-holdings",
+      "facebook": "https://www.facebook.com/moomooapp",
+      "x": "https://x.com/moomoo_app",
+      "instagram": "https://www.instagram.com/moomoo_app",
+      "wikipedia": "https://en.wikipedia.org/wiki/Futu"
+    },
+    "source_tags": ["seed", "hk", "capital_markets"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "Klook",
+    "display_name": "Klook Travel Technology",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Travel Tech", "E-commerce"],
+    "description": "Travel platform with cross-border merchant ecosystem and SME suppliers.",
+    "profile_urls": {
+      "website": "https://www.klook.com",
+      "linkedin": "https://www.linkedin.com/company/klook",
+      "facebook": "https://www.facebook.com/klooktravel",
+      "x": "https://x.com/klooktravel",
+      "instagram": "https://www.instagram.com/klooktravel",
+      "wikipedia": "https://en.wikipedia.org/wiki/Klook"
+    },
+    "source_tags": ["seed", "hk", "travel"],
+    "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "Shopline",
+    "display_name": "SHOPLINE Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["E-commerce SaaS", "Retail Tech"],
+    "description": "Commerce SaaS provider supporting SME brands in cross-border expansion.",
+    "profile_urls": {
+      "website": "https://shoplineapp.com",
+      "linkedin": "https://www.linkedin.com/company/shopline",
+      "facebook": "https://www.facebook.com/SHOPLINEglobal",
+      "x": "https://x.com/SHOPLINEglobal",
+      "instagram": "https://www.instagram.com/shoplineglobal",
+      "wikipedia": "https://en.wikipedia.org/wiki/Shopline"
+    },
+    "source_tags": ["seed", "hk", "saas"],
+    "seed_source": "manual_seed_v1"
+  }
+]
