@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from .pipeline.company_mapper import run_company_mapping_once
 from .pipeline.runner import PipelineConfig, run_ingestion_once, run_scheduler_loop
 
 
@@ -26,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="InsightSync data pipeline")
     parser.add_argument("--db-path", default="insightsync/data/storage/insightsync.db")
     parser.add_argument("--raw-dir", default="insightsync/data/storage/raw")
-    parser.add_argument("--sources", default="hkma,adb,kpmg,guangdong,investhk")
+    parser.add_argument("--sources", default="hkma,adb,kpmg,guangdong,investhk,company")
 
     parser.add_argument("--hkma-pagesize", type=int, default=200)
     parser.add_argument("--hkma-max-pages", type=int, default=4)
@@ -81,6 +82,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--szse-stock", default="")
     parser.add_argument("--szse-tab-name", default="fulltext")
     parser.add_argument("--szse-request-timeout-seconds", type=int, default=15)
+
+    parser.add_argument("--company-seed-path", default=None)
+    parser.add_argument("--company-segments", default="sme,fintech,cross_border")
+    parser.add_argument("--company-max-items", type=int, default=500)
+    parser.add_argument("--company-enable-enrichment", action="store_true")
+    parser.add_argument("--company-request-timeout-seconds", type=int, default=15)
+
+    parser.add_argument("--sync-market-companies", action="store_true")
+    parser.add_argument("--backfill-company-ids", action="store_true")
+    parser.add_argument("--mapping-dry-run", action="store_true")
+    parser.add_argument("--mapping-limit", type=int, default=0)
+    parser.add_argument("--skip-ingestion", action="store_true")
 
     parser.add_argument("--interval-minutes", type=float, default=0.0)
     parser.add_argument("--once", action="store_true")
@@ -141,13 +154,52 @@ def main() -> None:
         szse_stock=args.szse_stock,
         szse_tab_name=args.szse_tab_name,
         szse_request_timeout_seconds=args.szse_request_timeout_seconds,
+        company_seed_path=Path(args.company_seed_path) if args.company_seed_path else None,
+        company_segments=_parse_csv(args.company_segments),
+        company_max_items=args.company_max_items,
+        company_enable_enrichment=args.company_enable_enrichment,
+        company_request_timeout_seconds=args.company_request_timeout_seconds,
     )
 
     if args.interval_minutes > 0:
         run_scheduler_loop(config, interval_minutes=args.interval_minutes)
         return
 
+    mapping_summary: dict[str, object] | None = None
+    if args.sync_market_companies or args.backfill_company_ids:
+        mapping_summary = run_company_mapping_once(
+            Path(args.db_path),
+            sync_market_companies=args.sync_market_companies,
+            backfill_company_ids=args.backfill_company_ids,
+            dry_run=args.mapping_dry_run,
+            limit=max(0, int(args.mapping_limit)),
+        )
+
+    if args.skip_ingestion:
+        if mapping_summary is None:
+            print(
+                json.dumps(
+                    {
+                        "status": "no_op",
+                        "message": "skip-ingestion is enabled and no mapping operation is requested",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return
+        print(json.dumps({"company_mapping": mapping_summary}, ensure_ascii=False, indent=2))
+        return
+
     summary = run_ingestion_once(config)
+    if mapping_summary is not None:
+        output = {
+            "ingestion": summary,
+            "company_mapping": mapping_summary,
+        }
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+        return
+
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 

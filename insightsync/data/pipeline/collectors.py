@@ -4,7 +4,7 @@ import csv
 import json
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -14,6 +14,7 @@ import requests
 
 from ..connectors import (
     ADBKIDBClient,
+    CompanyProfileClient,
     HKGovNewsClient,
     HKEX_PREDEFINED_DOCS_URL,
     HKEXDisclosureClient,
@@ -24,11 +25,13 @@ from ..connectors import (
     build_cninfo_pdf_url,
     download_kpmg_hong_kong_banking_outlook_pdf,
     extract_hk_gov_news_id,
+    normalize_public_url,
     parse_kidb_sdmx_timeseries,
+    slugify_company_id,
     timestamp_ms_to_date,
     timestamp_ms_to_datetime,
 )
-from .models import CollectionBatch, IntelligenceRecord, TimelineEvent, TriggerSignal
+from .models import CollectionBatch, CompanyProfile, IntelligenceRecord, TimelineEvent, TriggerSignal
 from .utils import (
     build_natural_key,
     coerce_float,
@@ -78,6 +81,196 @@ class BaseCollector:
 
     def collect(self) -> CollectionBatch:
         raise NotImplementedError
+
+
+def _normalize_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            text = normalize_text(item)
+            if text:
+                out.append(text)
+        return out
+    return []
+
+
+class CompanyDirectoryCollector(BaseCollector):
+    source = "company_directory"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        seed_path: str | Path | None = None,
+        segments: tuple[str, ...] = ("sme", "fintech", "cross_border"),
+        max_items: int = 500,
+        enable_enrichment: bool = False,
+        request_timeout_seconds: int = 15,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        default_seed = Path(__file__).resolve().parents[1] / "seeds" / "company_candidates.json"
+        self.seed_path = Path(seed_path).expanduser().resolve() if seed_path else default_seed
+        self.segments = tuple([normalize_text(x).lower() for x in segments if normalize_text(x)])
+        self.max_items = max(1, int(max_items))
+        self.enable_enrichment = bool(enable_enrichment)
+        self.client = CompanyProfileClient(timeout_seconds=request_timeout_seconds)
+
+    def _load_seed_candidates(self) -> list[dict[str, Any]]:
+        if not self.seed_path.exists():
+            return []
+        text = self.seed_path.read_text(encoding="utf-8")
+        payload = json.loads(text)
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        return []
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "company_directory"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        candidates = self._load_seed_candidates()
+        selected_segments = set(self.segments)
+        snapshot_rows: list[dict[str, Any]] = []
+        skipped = 0
+
+        for item in candidates:
+            name = normalize_text(item.get("name") or item.get("canonical_name") or item.get("company_name"))
+            if not name:
+                skipped += 1
+                continue
+
+            segments = [seg.lower() for seg in _normalize_list(item.get("segments"))]
+            if selected_segments and not any(seg in selected_segments for seg in segments):
+                skipped += 1
+                continue
+
+            industries = _normalize_list(item.get("industries"))
+            region = normalize_text(item.get("region")) or "Hong Kong"
+            country = normalize_text(item.get("country")) or "China"
+            city = normalize_text(item.get("city")) or None
+            display_name = normalize_text(item.get("display_name") or item.get("legal_name")) or None
+            description = normalize_text(item.get("description")) or None
+
+            namespace = normalize_text(item.get("namespace") or item.get("entity") or "hkg")
+            company_id = normalize_text(item.get("company_id")) or slugify_company_id(name, namespace=namespace)
+
+            profile_urls = item.get("profile_urls") if isinstance(item.get("profile_urls"), dict) else {}
+            if self.enable_enrichment:
+                profile_out = self.client.enrich_public_profile(profile_urls)
+                normalized_urls = profile_out.get("profile_urls") if isinstance(profile_out, dict) else {}
+                enrichment = profile_out.get("enrichment") if isinstance(profile_out, dict) else {}
+            else:
+                normalized_urls = {
+                    "website": normalize_public_url(profile_urls.get("website")),
+                    "linkedin": normalize_public_url(profile_urls.get("linkedin")),
+                    "facebook": normalize_public_url(profile_urls.get("facebook")),
+                    "x": normalize_public_url(profile_urls.get("x")),
+                    "instagram": normalize_public_url(profile_urls.get("instagram")),
+                    "wikipedia": normalize_public_url(profile_urls.get("wikipedia")),
+                }
+                enrichment = {}
+
+            profile_summary = normalize_text(item.get("profile_summary")) or None
+            if not profile_summary:
+                wiki_summary = normalize_text(enrichment.get("wikipedia_summary"))
+                profile_summary = wiki_summary or None
+
+            company = CompanyProfile(
+                source=self.source,
+                company_id=company_id,
+                canonical_name=name,
+                display_name=display_name,
+                country=country,
+                region=region,
+                city=city,
+                segments=segments,
+                industries=industries,
+                website_url=normalize_text(normalized_urls.get("website")) or None,
+                linkedin_url=normalize_text(normalized_urls.get("linkedin")) or None,
+                facebook_url=normalize_text(normalized_urls.get("facebook")) or None,
+                x_url=normalize_text(normalized_urls.get("x")) or None,
+                instagram_url=normalize_text(normalized_urls.get("instagram")) or None,
+                wikipedia_url=normalize_text(normalized_urls.get("wikipedia")) or None,
+                profile_summary=profile_summary,
+                description=description,
+                extra={
+                    "website_title": enrichment.get("website_title") if isinstance(enrichment, dict) else None,
+                    "source_tags": _normalize_list(item.get("source_tags")),
+                    "seed_source": normalize_text(item.get("seed_source")) or "manual_seed",
+                },
+            )
+            batch.companies.append(company)
+
+            record = IntelligenceRecord(
+                source=self.source,
+                dataset="company_profiles",
+                record_key=company_id,
+                record_type="entity",
+                event_time=str(datetime.now().year),
+                company_id=company_id,
+                entity=country,
+                title=name,
+                summary=description or profile_summary or f"{name} profile",
+                region=region,
+                industry=(industries[0] if industries else None),
+                tags=[self.source, "company_profile", *segments],
+                payload={
+                    "company_id": company_id,
+                    "canonical_name": name,
+                    "segments": segments,
+                    "industries": industries,
+                    "profile_urls": normalized_urls,
+                },
+                evidence_url=(company.website_url or company.wikipedia_url),
+                lang="en",
+                raw=item,
+            )
+            batch.intelligence_records.append(record)
+            batch.timeline_events.append(_timeline_from_record(record, event_type="entity"))
+
+            snapshot_rows.append(
+                {
+                    "company_id": company.company_id,
+                    "canonical_name": company.canonical_name,
+                    "display_name": company.display_name,
+                    "country": company.country,
+                    "region": company.region,
+                    "city": company.city,
+                    "segments": company.segments,
+                    "industries": company.industries,
+                    "website_url": company.website_url,
+                    "linkedin_url": company.linkedin_url,
+                    "facebook_url": company.facebook_url,
+                    "x_url": company.x_url,
+                    "instagram_url": company.instagram_url,
+                    "wikipedia_url": company.wikipedia_url,
+                    "profile_summary": company.profile_summary,
+                    "description": company.description,
+                    "extra": company.extra,
+                }
+            )
+
+            if len(batch.companies) >= self.max_items:
+                break
+
+        fetched_at = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        snapshot_path = out_dir / f"companies_{fetched_at}.json"
+        snapshot_path.write_text(json.dumps(snapshot_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        batch.meta = {
+            "seed_path": str(self.seed_path),
+            "segments": list(self.segments),
+            "max_items": self.max_items,
+            "enable_enrichment": self.enable_enrichment,
+            "seed_candidates": len(candidates),
+            "companies_selected": len(batch.companies),
+            "companies_skipped": skipped,
+            "snapshot_path": str(snapshot_path.resolve()),
+        }
+        return batch
 
 
 class HKMACollector(BaseCollector):

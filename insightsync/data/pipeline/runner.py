@@ -8,6 +8,7 @@ from typing import Any
 
 from .collectors import (
     ADBCollector,
+    CompanyDirectoryCollector,
     GuangdongStatsCollector,
     HKGovNewsCollector,
     HKEXDisclosureCollector,
@@ -19,7 +20,7 @@ from .collectors import (
 from .storage import SQLiteRepository
 from .utils import utc_now_iso
 
-DEFAULT_SOURCES = ("hkma", "adb", "kpmg", "guangdong", "investhk")
+DEFAULT_SOURCES = ("hkma", "adb", "kpmg", "guangdong", "investhk", "company")
 
 
 @dataclass(slots=True)
@@ -82,6 +83,12 @@ class PipelineConfig:
     szse_tab_name: str = "fulltext"
     szse_request_timeout_seconds: int = 15
 
+    company_seed_path: Path | None = None
+    company_segments: tuple[str, ...] = ("sme", "fintech", "cross_border")
+    company_max_items: int = 500
+    company_enable_enrichment: bool = False
+    company_request_timeout_seconds: int = 15
+
     runtime_meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -103,6 +110,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             key = "hkex"
         if key in ("szse", "szse-announcement", "szse_announcement", "cninfo", "cninfo_szse", "szse_cninfo"):
             key = "szse"
+        if key in ("company", "companies", "company-directory", "company_directory", "company_master"):
+            key = "company"
         if key not in out:
             out.append(key)
     return tuple(out)
@@ -204,6 +213,18 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
                     max_links_per_category=config.guangdong_max_links_per_category,
                     max_tables_per_page=config.guangdong_max_tables_per_page,
                     max_rows_per_table=config.guangdong_max_rows_per_table,
+                )
+            )
+            continue
+        if src == "company":
+            collectors.append(
+                CompanyDirectoryCollector(
+                    raw_dir=config.raw_dir,
+                    seed_path=config.company_seed_path,
+                    segments=config.company_segments,
+                    max_items=config.company_max_items,
+                    enable_enrichment=config.company_enable_enrichment,
+                    request_timeout_seconds=config.company_request_timeout_seconds,
                 )
             )
             continue

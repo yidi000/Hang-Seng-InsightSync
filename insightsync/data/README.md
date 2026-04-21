@@ -13,6 +13,7 @@ This folder is an independent data ingestion module for Project InsightSync.
   - Hong Kong Government News (Business & Finance RSS/archive, with JSON/CSV snapshots)
   - HKEX predefined disclosure annual-report feed (PDF with optional Selenium fallback)
   - SZSE/CNINFO announcements (regular reports, temporary announcements, IPO-related disclosures)
+  - Company directory seed and public profile URLs (website / LinkedIn / Facebook / X / Instagram / Wikipedia)
 - Normalize records into a common schema.
 - Persist cleaned data into SQLite for backend/agent consumption.
 - Support one-off and interval scheduling modes.
@@ -109,6 +110,36 @@ Run SZSE CNINFO with explicit date range:
 python -m insightsync.data --sources szse --szse-start-date 2026-01-01 --szse-end-date 2026-04-20 --once
 ```
 
+Run company directory seed build (default segments: SME, Fintech, Cross-border):
+
+```bash
+python -m insightsync.data --sources company --once
+```
+
+Run company directory with public profile enrichment (website title and Wikipedia summary):
+
+```bash
+python -m insightsync.data --sources company --company-enable-enrichment --once
+```
+
+Run only market company sync (import HKEX/SZSE historical codes into `companies`):
+
+```bash
+python -m insightsync.data --skip-ingestion --sync-market-companies
+```
+
+Run historical company_id backfill for `intelligence_records` and `trigger_signals`:
+
+```bash
+python -m insightsync.data --skip-ingestion --backfill-company-ids
+```
+
+Dry-run company mapping (no DB update) with row limit:
+
+```bash
+python -m insightsync.data --skip-ingestion --sync-market-companies --backfill-company-ids --mapping-dry-run --mapping-limit 200
+```
+
 Useful InvestHK flags:
 
 - `--investhk-language` (default: `zh-cn`)
@@ -152,6 +183,22 @@ Useful SZSE/CNINFO flags:
 - `--szse-tab-name` (default: `fulltext`)
 - `--szse-request-timeout-seconds` (default: `15`)
 
+Useful company-directory flags:
+
+- `--company-seed-path` (optional path to custom company seed JSON)
+- `--company-segments` (default: `sme,fintech,cross_border`)
+- `--company-max-items` (default: `500`)
+- `--company-enable-enrichment` (fetch website title and Wikipedia summary)
+- `--company-request-timeout-seconds` (default: `15`)
+
+Useful company-mapping flags:
+
+- `--sync-market-companies` (discover companies from historical HKEX/SZSE records)
+- `--backfill-company-ids` (map historical rows with empty `company_id`)
+- `--mapping-dry-run` (preview mapping results without update)
+- `--mapping-limit` (max rows per table, default: `0` means all)
+- `--skip-ingestion` (run mapping operations only)
+
 ## Output
 
 - DB: `insightsync/data/storage/insightsync.db`
@@ -164,6 +211,8 @@ SQLite tables:
 - `client_one_view_timeline`
 - `prospect_scores`
 - `generated_insights`
+- `companies`
+- `company_mapping_audit`
 
 ## Current Database Status
 

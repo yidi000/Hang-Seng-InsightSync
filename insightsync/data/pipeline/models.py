@@ -85,6 +85,28 @@ class GeneratedInsight:
 
 
 @dataclass(slots=True)
+class CompanyProfile:
+    source: str
+    company_id: str
+    canonical_name: str
+    display_name: str | None
+    country: str | None
+    region: str | None
+    city: str | None
+    segments: list[str] = field(default_factory=list)
+    industries: list[str] = field(default_factory=list)
+    website_url: str | None = None
+    linkedin_url: str | None = None
+    facebook_url: str | None = None
+    x_url: str | None = None
+    instagram_url: str | None = None
+    wikipedia_url: str | None = None
+    profile_summary: str | None = None
+    description: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class CollectionBatch:
     source: str
     intelligence_records: list[IntelligenceRecord] = field(default_factory=list)
@@ -92,6 +114,7 @@ class CollectionBatch:
     timeline_events: list[TimelineEvent] = field(default_factory=list)
     prospect_scores: list[ProspectScore] = field(default_factory=list)
     generated_insights: list[GeneratedInsight] = field(default_factory=list)
+    companies: list[CompanyProfile] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
 
     def counts(self) -> dict[str, int]:
@@ -101,4 +124,5 @@ class CollectionBatch:
             "timeline_events": len(self.timeline_events),
             "prospect_scores": len(self.prospect_scores),
             "generated_insights": len(self.generated_insights),
+            "companies": len(self.companies),
         }
