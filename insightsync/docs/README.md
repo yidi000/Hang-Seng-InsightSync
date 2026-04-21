@@ -1,4 +1,7 @@
 # Docs
 
-Project documentation placeholder for architecture, handover, and runbooks.
+Project documentation for architecture, handover, runbooks, and frontend integration.
 
+Available guides:
+
+- `frontend-api-guide.md`: current backend capabilities, frontend integration notes, and API examples
