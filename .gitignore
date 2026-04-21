@@ -25,12 +25,14 @@ env/
 *.tmp
 .DS_Store
 
-insightsync/data/storage/*.db
+# Dev/prod SQLite artifacts are local — not the demo fixture.
+insightsync/data/storage/insightsync.db
 insightsync/data/storage/*.db-shm
 insightsync/data/storage/*.db-wal
+# Demo fixture is intentionally tracked so `git clone` is enough to run.
 !insightsync/data/storage/demo/*.db
-insightsync/data/storage/demo/*.db
-insightsync/data/storage/raw/
+# Raw dumps from data sources — PDFs/CSVs are tracked when < a few MB, otherwise
+# fetched via `python -m insightsync.data.cli --once`.
 
 dist/
 build/
