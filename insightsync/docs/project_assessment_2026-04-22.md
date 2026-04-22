@@ -2,6 +2,57 @@
 
 日期: 2026-04-22
 
+## 0. 当前推进标记（2026-04-22 更新）
+
+这部分用于标记这份 assessment 提到的关键事项目前推进到了哪一步，避免后续讨论时丢失上下文。
+
+- 已完成：多源解析持久化中间层
+  - 已新增 `insightsync/parsing/`，支持 document / html / json / text 多类型解析
+  - 已新增 SQLite 持久化表：`parsed_documents`、`parsed_sections`、`parsed_tables`、`parsed_metrics`、`parsed_risk_factors`、`parsed_business_events`
+  - 已打通 SQLite -> backend sync，并在 RAG document builder 中优先使用解析结果
+
+- 已完成：基础生产级 parser backend 接入
+  - 已接入 PDF: `pymupdf`
+  - 已接入 HTML 正文抽取: `trafilatura`
+  - 已接入 XBRL: `arelle-release`
+  - 已把新依赖补入 `insightsync/data/requirements.txt` 与 `insightsync/backend/requirements.txt`
+
+- 已完成：真实 parsing run 验证
+  - 最新一次真实 run: `parse-20260422T151728Z`
+  - 覆盖率：`240/240` success，`0` partial，`0` failed
+  - 已验证并修复几类明显误判：
+    - 指标坏值 `.` / `,` / `0,1,2`
+    - HKMA 中性利率记录被误判为 risk
+    - KPMG 页脚 / legal footer 被误判为 partnership event
+
+- 已完成：报告解析质量第一轮收敛
+  - 已做 CSV header 归一化、表格行标签指标抽取、PDF boilerplate 过滤、结构化抽取去噪
+  - 已补 regression tests，覆盖上述真实坏样本
+
+- 部分完成：company report parsing
+  - 已具备：
+    - PDF text extraction
+    - HTML text extraction
+    - CSV / JSON / text parsing
+    - section 切分
+    - table 持久化
+    - metric / risk / business event 启发式抽取
+    - management discussion summary 抽取框架
+  - 仍待加强：
+    - 长 PDF 的 layout-aware parsing
+    - 更强的表格抽取与清洗
+    - OCR 实战验证
+    - XBRL 实战验证
+    - 财务指标覆盖率与准确率
+
+- 仍未开始闭环：fusion / scoring / recommendation
+  - assessment 里提到的 company-centric fusion、prospect scoring、product recommendation、early warning workflow 目前仍未真正落地
+  - 当前完成的是“可复用解析层”，还不是最终 banker-facing intelligence layer
+
+- 对“管理层讨论摘要抽取”的当前结论
+  - 代码能力已具备，并有测试样例通过
+  - 但最新真实数据集中，尚未命中标准 MD&A section，因此 `parsed_documents.management_discussion_summary` 在真实 run 中还没有形成有代表性的真实样本
+
 ## 1. 结论先行
 
 这套仓库不是一个失败的方案，相反，它已经具备了一个不错的第一阶段工程基础；但如果严格对照恒生项目 brief，它现在还不能算一个完整的“GenAI 驱动、面向业务动作的情报平台”。
