@@ -2,6 +2,8 @@ from insightsync.backend.workflows.sync_from_sqlite import (
     _map_company,
     _map_company_mapping_audit,
     _map_intelligence_record,
+    _map_parsed_document,
+    _map_parsed_metric,
     _map_trigger_signal,
 )
 
@@ -116,3 +118,69 @@ def test_map_company_mapping_audit_parses_timestamp() -> None:
     assert mapped["target_row_id"] == 101
     assert mapped["confidence"] == 0.92
     assert mapped["mapped_at"] is not None
+
+
+def test_map_parsed_document_parses_json_fields() -> None:
+    row = {
+        "id": 7,
+        "source_table": "intelligence_records",
+        "source_id": 1,
+        "source_content_hash": "hash-1",
+        "source_record_key": "alpha-2025",
+        "source": "hkex",
+        "dataset": "annual_report",
+        "company_id": "alpha",
+        "entity": "Alpha Holdings",
+        "title": "Alpha Annual Report",
+        "summary": "Annual report",
+        "media_type": "application/json",
+        "lang": "en",
+        "file_path": None,
+        "evidence_url": "https://example.com/report",
+        "parser_name": "json",
+        "backend_name": "native",
+        "parse_version": "multisource-v2",
+        "parse_status": "success",
+        "ocr_status": None,
+        "xbrl_status": None,
+        "content_text": "Parsed text",
+        "search_text": "Search text",
+        "warnings_json": '["resolved path"]',
+        "metadata_json": '{"ocr_status": "not_needed"}',
+        "management_discussion_summary": "Summary",
+        "management_discussion_highlights_json": '["highlight"]',
+        "management_discussion_source_sections_json": '["Management Discussion"]',
+        "section_count": 2,
+        "table_count": 0,
+        "metric_count": 1,
+        "risk_factor_count": 1,
+        "business_event_count": 1,
+        "parsed_at": "2026-04-22T00:00:00Z",
+        "run_id": "parse-1",
+    }
+
+    mapped = _map_parsed_document(row)
+
+    assert mapped["warnings_json"] == ["resolved path"]
+    assert mapped["metadata_json"] == {"ocr_status": "not_needed"}
+    assert mapped["management_discussion_highlights_json"] == ["highlight"]
+    assert mapped["parsed_at"] is not None
+
+
+def test_map_parsed_metric_keeps_context() -> None:
+    row = {
+        "document_id": 3,
+        "metric_index": 0,
+        "name": "revenue",
+        "value": "HK$12.5 billion",
+        "unit": None,
+        "period": "FY2025",
+        "context": "Revenue grew to HK$12.5 billion in FY2025.",
+        "confidence": 0.6,
+    }
+
+    mapped = _map_parsed_metric(row)
+
+    assert mapped["document_id"] == 3
+    assert mapped["name"] == "revenue"
+    assert mapped["context"].startswith("Revenue grew")

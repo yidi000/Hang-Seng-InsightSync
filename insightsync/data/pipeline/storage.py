@@ -5,6 +5,9 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from insightsync.parsing import DEFAULT_PARSE_VERSION
+from insightsync.parsing.models import ParsedDocument
+
 from .models import CollectionBatch, CompanyProfile, IntelligenceRecord, TimelineEvent, TriggerSignal
 from .utils import canonical_json, stable_json_hash, utc_now_iso
 
@@ -39,6 +42,7 @@ class SQLiteRepository:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA synchronous=NORMAL;")
+        self.conn.execute("PRAGMA foreign_keys=ON;")
         self._create_schema()
         self._maybe_migrate_legacy()
 
@@ -227,6 +231,125 @@ class SQLiteRepository:
 
                         CREATE INDEX IF NOT EXISTS idx_company_mapping_audit_lookup
                             ON company_mapping_audit(target_table, target_row_id, mapped_at);
+
+            CREATE TABLE IF NOT EXISTS parsing_runs (
+              run_id TEXT PRIMARY KEY,
+              parse_version TEXT NOT NULL,
+              started_at TEXT NOT NULL,
+              finished_at TEXT,
+              status TEXT NOT NULL,
+              message TEXT,
+              summary_json TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS parsed_documents (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_table TEXT NOT NULL,
+              source_id INTEGER NOT NULL,
+              source_content_hash TEXT NOT NULL,
+              source_record_key TEXT,
+              source TEXT NOT NULL,
+              dataset TEXT,
+              company_id TEXT,
+              entity TEXT,
+              title TEXT,
+              summary TEXT,
+              media_type TEXT,
+              lang TEXT,
+              file_path TEXT,
+              evidence_url TEXT,
+              parser_name TEXT NOT NULL,
+              backend_name TEXT,
+              parse_version TEXT NOT NULL,
+              parse_status TEXT NOT NULL,
+              ocr_status TEXT,
+              xbrl_status TEXT,
+              content_text TEXT,
+              search_text TEXT,
+              warnings_json TEXT,
+              metadata_json TEXT,
+              management_discussion_summary TEXT,
+              management_discussion_highlights_json TEXT,
+              management_discussion_source_sections_json TEXT,
+              section_count INTEGER NOT NULL DEFAULT 0,
+              table_count INTEGER NOT NULL DEFAULT 0,
+              metric_count INTEGER NOT NULL DEFAULT 0,
+              risk_factor_count INTEGER NOT NULL DEFAULT 0,
+              business_event_count INTEGER NOT NULL DEFAULT 0,
+              parsed_at TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              UNIQUE(source_table, source_id, source_content_hash, parse_version)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_parsed_documents_lookup
+              ON parsed_documents(source_table, source_id, parsed_at);
+
+            CREATE INDEX IF NOT EXISTS idx_parsed_documents_company
+              ON parsed_documents(company_id, source, dataset, parsed_at);
+
+            CREATE TABLE IF NOT EXISTS parsed_sections (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              document_id INTEGER NOT NULL,
+              section_index INTEGER NOT NULL,
+              heading TEXT NOT NULL,
+              text TEXT NOT NULL,
+              level INTEGER NOT NULL DEFAULT 1,
+              section_type TEXT,
+              page_number INTEGER,
+              UNIQUE(document_id, section_index),
+              FOREIGN KEY(document_id) REFERENCES parsed_documents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS parsed_tables (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              document_id INTEGER NOT NULL,
+              table_index INTEGER NOT NULL,
+              title TEXT,
+              headers_json TEXT,
+              rows_json TEXT,
+              page_number INTEGER,
+              UNIQUE(document_id, table_index),
+              FOREIGN KEY(document_id) REFERENCES parsed_documents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS parsed_metrics (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              document_id INTEGER NOT NULL,
+              metric_index INTEGER NOT NULL,
+              name TEXT NOT NULL,
+              value TEXT NOT NULL,
+              unit TEXT,
+              period TEXT,
+              context TEXT,
+              confidence REAL,
+              UNIQUE(document_id, metric_index),
+              FOREIGN KEY(document_id) REFERENCES parsed_documents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS parsed_risk_factors (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              document_id INTEGER NOT NULL,
+              risk_index INTEGER NOT NULL,
+              category TEXT NOT NULL,
+              description TEXT NOT NULL,
+              severity TEXT NOT NULL,
+              confidence REAL,
+              UNIQUE(document_id, risk_index),
+              FOREIGN KEY(document_id) REFERENCES parsed_documents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS parsed_business_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              document_id INTEGER NOT NULL,
+              event_index INTEGER NOT NULL,
+              event_type TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              event_date TEXT,
+              parties_json TEXT,
+              confidence REAL,
+              UNIQUE(document_id, event_index),
+              FOREIGN KEY(document_id) REFERENCES parsed_documents(id) ON DELETE CASCADE
+            );
             """
         )
         self.conn.commit()
@@ -393,6 +516,43 @@ class SQLiteRepository:
         self.conn.execute(
             """
             UPDATE ingestion_runs
+            SET finished_at = ?, status = ?, message = ?, summary_json = ?
+            WHERE run_id = ?
+            """,
+            (ts, status, message, canonical_json(summary or {}), run_id),
+        )
+        self.conn.commit()
+
+    def start_parsing_run(
+        self,
+        run_id: str,
+        *,
+        parse_version: str = DEFAULT_PARSE_VERSION,
+        started_at: str | None = None,
+    ) -> None:
+        ts = started_at or utc_now_iso()
+        self.conn.execute(
+            """
+            INSERT INTO parsing_runs(run_id, parse_version, started_at, status)
+            VALUES(?, ?, ?, ?)
+            """,
+            (run_id, parse_version, ts, "running"),
+        )
+        self.conn.commit()
+
+    def finish_parsing_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        message: str | None = None,
+        summary: dict[str, Any] | None = None,
+        finished_at: str | None = None,
+    ) -> None:
+        ts = finished_at or utc_now_iso()
+        self.conn.execute(
+            """
+            UPDATE parsing_runs
             SET finished_at = ?, status = ?, message = ?, summary_json = ?
             WHERE run_id = ?
             """,
@@ -671,3 +831,275 @@ class SQLiteRepository:
             "generated_insights": inserted_insights,
             "companies": inserted_companies,
         }
+
+    def parsing_candidates(
+        self,
+        *,
+        parse_version: str = DEFAULT_PARSE_VERSION,
+        limit: int = 0,
+        force: bool = False,
+    ) -> list[dict[str, Any]]:
+        sql = """
+            SELECT ir.id AS source_id,
+                   ir.source,
+                   ir.dataset,
+                   ir.record_key,
+                   ir.record_type,
+                   ir.company_id,
+                   ir.entity,
+                   ir.event_time,
+                   ir.title,
+                   ir.summary,
+                   ir.region,
+                   ir.industry,
+                   ir.lang,
+                   ir.evidence_url,
+                   ir.payload_json,
+                   ir.content_hash,
+                   ir.run_id
+            FROM intelligence_records ir
+        """
+        params: list[Any] = []
+        if not force:
+            sql += """
+            LEFT JOIN parsed_documents pd
+              ON pd.source_table = 'intelligence_records'
+             AND pd.source_id = ir.id
+             AND pd.source_content_hash = ir.content_hash
+             AND pd.parse_version = ?
+            WHERE pd.id IS NULL
+            """
+            params.append(parse_version)
+        sql += " ORDER BY ir.id"
+        if limit > 0:
+            sql += " LIMIT ?"
+            params.append(limit)
+
+        rows = self.conn.execute(sql, tuple(params)).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["payload_json"] = json.loads(item["payload_json"]) if item.get("payload_json") else {}
+            item["source_table"] = "intelligence_records"
+            out.append(item)
+        return out
+
+    def persist_parsed_document(
+        self,
+        *,
+        source_row: dict[str, Any],
+        parsed: ParsedDocument,
+        parse_version: str = DEFAULT_PARSE_VERSION,
+        run_id: str,
+        parsed_at: str | None = None,
+        extra_warnings: list[str] | None = None,
+        replace: bool = False,
+    ) -> int:
+        parsed_ts = parsed_at or utc_now_iso()
+        existing = self.conn.execute(
+            """
+            SELECT id
+            FROM parsed_documents
+            WHERE source_table = ? AND source_id = ? AND source_content_hash = ? AND parse_version = ?
+            """,
+            (
+                source_row["source_table"],
+                source_row["source_id"],
+                source_row["content_hash"],
+                parse_version,
+            ),
+        ).fetchone()
+        if existing is not None and not replace:
+            return 0
+
+        management = parsed.management_discussion
+        warnings = list(extra_warnings or []) + list(parsed.warnings)
+        metadata = dict(parsed.metadata or {})
+        values = (
+            source_row["source_table"],
+            source_row["source_id"],
+            source_row["content_hash"],
+            source_row.get("record_key"),
+            source_row.get("source"),
+            source_row.get("dataset"),
+            source_row.get("company_id"),
+            source_row.get("entity"),
+            parsed.title,
+            parsed.summary,
+            parsed.media_type,
+            source_row.get("lang"),
+            metadata.get("resolved_file_path") or metadata.get("file_path"),
+            source_row.get("evidence_url"),
+            parsed.parser_name,
+            parsed.backend_name,
+            parse_version,
+            parsed.parse_status,
+            metadata.get("ocr_status"),
+            metadata.get("xbrl_status"),
+            parsed.text,
+            parsed.to_rag_text(),
+            canonical_json(warnings),
+            canonical_json(metadata),
+            management.summary if management else None,
+            canonical_json(management.highlights if management else []),
+            canonical_json(management.source_sections if management else []),
+            len(parsed.sections),
+            len(parsed.tables),
+            len(parsed.metrics),
+            len(parsed.risk_factors),
+            len(parsed.business_events),
+            parsed_ts,
+            run_id,
+        )
+        if existing is None:
+            row = self.conn.execute(
+                """
+                INSERT INTO parsed_documents(
+                  source_table, source_id, source_content_hash, source_record_key, source, dataset,
+                  company_id, entity, title, summary, media_type, lang, file_path, evidence_url,
+                  parser_name, backend_name, parse_version, parse_status, ocr_status, xbrl_status,
+                  content_text, search_text, warnings_json, metadata_json,
+                  management_discussion_summary, management_discussion_highlights_json,
+                  management_discussion_source_sections_json,
+                  section_count, table_count, metric_count, risk_factor_count, business_event_count,
+                  parsed_at, run_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                values,
+            )
+            document_id = int(row.lastrowid)
+        else:
+            document_id = int(existing["id"])
+            with self.conn:
+                self.conn.execute("DELETE FROM parsed_sections WHERE document_id = ?", (document_id,))
+                self.conn.execute("DELETE FROM parsed_tables WHERE document_id = ?", (document_id,))
+                self.conn.execute("DELETE FROM parsed_metrics WHERE document_id = ?", (document_id,))
+                self.conn.execute("DELETE FROM parsed_risk_factors WHERE document_id = ?", (document_id,))
+                self.conn.execute("DELETE FROM parsed_business_events WHERE document_id = ?", (document_id,))
+                self.conn.execute(
+                    """
+                    UPDATE parsed_documents
+                    SET source_record_key = ?, source = ?, dataset = ?, company_id = ?, entity = ?, title = ?, summary = ?,
+                        media_type = ?, lang = ?, file_path = ?, evidence_url = ?, parser_name = ?, backend_name = ?,
+                        parse_status = ?, ocr_status = ?, xbrl_status = ?, content_text = ?, search_text = ?,
+                        warnings_json = ?, metadata_json = ?, management_discussion_summary = ?,
+                        management_discussion_highlights_json = ?, management_discussion_source_sections_json = ?,
+                        section_count = ?, table_count = ?, metric_count = ?, risk_factor_count = ?, business_event_count = ?,
+                        parsed_at = ?, run_id = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        source_row.get("record_key"),
+                        source_row.get("source"),
+                        source_row.get("dataset"),
+                        source_row.get("company_id"),
+                        source_row.get("entity"),
+                        parsed.title,
+                        parsed.summary,
+                        parsed.media_type,
+                        source_row.get("lang"),
+                        metadata.get("resolved_file_path") or metadata.get("file_path"),
+                        source_row.get("evidence_url"),
+                        parsed.parser_name,
+                        parsed.backend_name,
+                        parsed.parse_status,
+                        metadata.get("ocr_status"),
+                        metadata.get("xbrl_status"),
+                        parsed.text,
+                        parsed.to_rag_text(),
+                        canonical_json(warnings),
+                        canonical_json(metadata),
+                        management.summary if management else None,
+                        canonical_json(management.highlights if management else []),
+                        canonical_json(management.source_sections if management else []),
+                        len(parsed.sections),
+                        len(parsed.tables),
+                        len(parsed.metrics),
+                        len(parsed.risk_factors),
+                        len(parsed.business_events),
+                        parsed_ts,
+                        run_id,
+                        document_id,
+                    ),
+                )
+        for index, section in enumerate(parsed.sections):
+            self.conn.execute(
+                """
+                INSERT INTO parsed_sections(document_id, section_index, heading, text, level, section_type, page_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    index,
+                    section.heading,
+                    section.text,
+                    section.level,
+                    section.section_type,
+                    section.page_number,
+                ),
+            )
+        for index, table in enumerate(parsed.tables):
+            self.conn.execute(
+                """
+                INSERT INTO parsed_tables(document_id, table_index, title, headers_json, rows_json, page_number)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    index,
+                    table.title,
+                    canonical_json(table.headers),
+                    canonical_json(table.rows),
+                    table.page_number,
+                ),
+            )
+        for index, metric in enumerate(parsed.metrics):
+            self.conn.execute(
+                """
+                INSERT INTO parsed_metrics(document_id, metric_index, name, value, unit, period, context, confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    index,
+                    metric.name,
+                    metric.value,
+                    metric.unit,
+                    metric.period,
+                    metric.context,
+                    metric.confidence,
+                ),
+            )
+        for index, risk in enumerate(parsed.risk_factors):
+            self.conn.execute(
+                """
+                INSERT INTO parsed_risk_factors(document_id, risk_index, category, description, severity, confidence)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    index,
+                    risk.category,
+                    risk.description,
+                    risk.severity,
+                    risk.confidence,
+                ),
+            )
+        for index, event in enumerate(parsed.business_events):
+            self.conn.execute(
+                """
+                INSERT INTO parsed_business_events(document_id, event_index, event_type, summary, event_date, parties_json, confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    index,
+                    event.event_type,
+                    event.summary,
+                    event.event_date,
+                    canonical_json(event.parties),
+                    event.confidence,
+                ),
+            )
+        self.conn.commit()
+        return 1

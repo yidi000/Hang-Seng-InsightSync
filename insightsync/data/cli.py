@@ -5,7 +5,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from insightsync.parsing import DEFAULT_PARSE_VERSION
+
 from .pipeline.company_mapper import run_company_mapping_once
+from .pipeline.parser_runner import ParsingConfig, run_parsing_once
 from .pipeline.runner import PipelineConfig, run_ingestion_once, run_scheduler_loop
 
 
@@ -93,6 +96,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backfill-company-ids", action="store_true")
     parser.add_argument("--mapping-dry-run", action="store_true")
     parser.add_argument("--mapping-limit", type=int, default=0)
+    parser.add_argument("--run-parsing", action="store_true")
+    parser.add_argument("--parse-force", action="store_true")
+    parser.add_argument("--parse-limit", type=int, default=0)
+    parser.add_argument("--parse-version", default=DEFAULT_PARSE_VERSION)
     parser.add_argument("--skip-ingestion", action="store_true")
 
     parser.add_argument("--interval-minutes", type=float, default=0.0)
@@ -176,7 +183,7 @@ def main() -> None:
         )
 
     if args.skip_ingestion:
-        if mapping_summary is None:
+        if mapping_summary is None and not args.run_parsing:
             print(
                 json.dumps(
                     {
@@ -188,16 +195,46 @@ def main() -> None:
                 )
             )
             return
-        print(json.dumps({"company_mapping": mapping_summary}, ensure_ascii=False, indent=2))
+        output: dict[str, object] = {}
+        if mapping_summary is not None:
+            output["company_mapping"] = mapping_summary
+        if args.run_parsing:
+            output["parsing"] = run_parsing_once(
+                ParsingConfig(
+                    db_path=Path(args.db_path),
+                    raw_dir=Path(args.raw_dir),
+                    parse_version=args.parse_version,
+                    limit=args.parse_limit,
+                    force=args.parse_force,
+                )
+            )
+        print(json.dumps(output, ensure_ascii=False, indent=2))
         return
 
     summary = run_ingestion_once(config)
+    parsing_summary: dict[str, object] | None = None
+    if args.run_parsing:
+        parsing_summary = run_parsing_once(
+            ParsingConfig(
+                db_path=Path(args.db_path),
+                raw_dir=Path(args.raw_dir),
+                parse_version=args.parse_version,
+                limit=args.parse_limit,
+                force=args.parse_force,
+            )
+        )
     if mapping_summary is not None:
         output = {
             "ingestion": summary,
             "company_mapping": mapping_summary,
         }
+        if parsing_summary is not None:
+            output["parsing"] = parsing_summary
         print(json.dumps(output, ensure_ascii=False, indent=2))
+        return
+
+    if parsing_summary is not None:
+        print(json.dumps({"ingestion": summary, "parsing": parsing_summary}, ensure_ascii=False, indent=2))
         return
 
     print(json.dumps(summary, ensure_ascii=False, indent=2))

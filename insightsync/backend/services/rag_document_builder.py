@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from insightsync.backend.db.tables import rag_chunks, rag_documents
 from insightsync.backend.services.chunker import chunk_text
 from insightsync.backend.utils import stable_hash
+from insightsync.parsing import parse_content
+from insightsync.parsing.request_builders import build_parse_request_from_row
 
 
 def _payload_to_text(payload: Any) -> str:
@@ -41,10 +43,11 @@ class RagDocumentBuilder:
         """
 
         rows = self._source_rows()
+        parsed_lookup = self._latest_parsed_documents()
         inserted = 0
         superseded = 0
         for row in rows:
-            doc = self._row_to_document(row)
+            doc = self._row_to_document(row, parsed_doc=parsed_lookup.get((row["source_table"], row["source_id"])))
             delete_result = self.db.execute(
                 text(
                     """
@@ -147,7 +150,29 @@ class RagDocumentBuilder:
         ).mappings()
         return [dict(row) for row in record_rows] + [dict(row) for row in signal_rows] + [dict(row) for row in timeline_rows]
 
-    def _row_to_document(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _latest_parsed_documents(self) -> dict[tuple[str, int], dict[str, Any]]:
+        try:
+            rows = self.db.execute(
+                text(
+                    """
+                    SELECT DISTINCT ON (source_table, source_id)
+                           source_table, source_id, parser_name, backend_name, parse_status,
+                           search_text, warnings_json, metadata_json, section_count, table_count,
+                           metric_count, risk_factor_count, business_event_count,
+                           management_discussion_summary, parsed_at, parse_version
+                    FROM parsed_documents
+                    ORDER BY source_table, source_id, parsed_at DESC, id DESC
+                    """
+                )
+            ).mappings()
+        except Exception:
+            return {}
+        return {
+            (str(row["source_table"]), int(row["source_id"])): dict(row)
+            for row in rows
+        }
+
+    def _row_to_document(self, row: dict[str, Any], *, parsed_doc: dict[str, Any] | None = None) -> dict[str, Any]:
         title = row.get("title") or row.get("dataset") or row.get("source_table")
         event_time = row.get("event_time")
         event_time_str = event_time.isoformat() if isinstance(event_time, (datetime, date)) else event_time
@@ -162,9 +187,36 @@ class RagDocumentBuilder:
             sections.append(f"Summary: {row['summary']}")
         if row.get("signal_text"):
             sections.append(f"Signal: {row['signal_text']}")
-        payload_text = _payload_to_text(row.get("payload_json"))
-        if payload_text:
-            sections.append(f"Payload:\n{payload_text}")
+        parse_summary: dict[str, Any]
+        parsed_text = ""
+        if parsed_doc and parsed_doc.get("search_text"):
+            parsed_text = str(parsed_doc["search_text"])
+            parse_summary = {
+                "parser_name": parsed_doc.get("parser_name"),
+                "backend_name": parsed_doc.get("backend_name"),
+                "parse_status": parsed_doc.get("parse_status"),
+                "sections_count": parsed_doc.get("section_count"),
+                "tables_count": parsed_doc.get("table_count"),
+                "metrics_count": parsed_doc.get("metric_count"),
+                "risk_factors_count": parsed_doc.get("risk_factor_count"),
+                "business_events_count": parsed_doc.get("business_event_count"),
+                "management_discussion_summary": parsed_doc.get("management_discussion_summary"),
+                "warnings": parsed_doc.get("warnings_json") or [],
+                "parse_version": parsed_doc.get("parse_version"),
+                "parsed_at": parsed_doc.get("parsed_at"),
+            }
+        else:
+            parse_request, request_warnings = build_parse_request_from_row(row, title=title)
+            parsed = parse_content(parse_request)
+            parsed_text = parsed.to_rag_text()
+            parse_summary = parsed.parse_summary()
+            parse_summary["warnings"] = request_warnings + list(parse_summary.get("warnings") or [])
+        if parsed_text:
+            sections.append(parsed_text)
+        else:
+            payload_text = _payload_to_text(row.get("payload_json"))
+            if payload_text:
+                sections.append(f"Payload:\n{payload_text}")
         content = "\n".join(section for section in sections if section)
         metadata = {
             key: row.get(key)
@@ -192,6 +244,8 @@ class RagDocumentBuilder:
             k: (v.isoformat() if isinstance(v, (datetime, date)) else v)
             for k, v in metadata.items()
         }
+        metadata_json["parse"] = parse_summary
+        metadata_json["parse_version"] = parse_summary.get("parse_version") or "multisource-v2"
         return {
             **metadata,
             "title": str(title),
