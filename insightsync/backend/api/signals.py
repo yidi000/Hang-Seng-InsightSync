@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/signals", tags=["signals"])
 def list_signals(
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    company_id: str | None = None,
     entity: str | None = None,
     signal_type: str | None = None,
     source: str | None = None,
@@ -27,6 +28,7 @@ def list_signals(
     rows = repo.list_signals(
         limit=limit,
         offset=offset,
+        company_id=company_id,
         entity=entity,
         signal_type=signal_type,
         source=source,

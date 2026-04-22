@@ -1,4 +1,9 @@
-from insightsync.backend.workflows.sync_from_sqlite import _map_intelligence_record, _map_trigger_signal
+from insightsync.backend.workflows.sync_from_sqlite import (
+    _map_company,
+    _map_company_mapping_audit,
+    _map_intelligence_record,
+    _map_trigger_signal,
+)
 
 
 def test_map_intelligence_record_parses_json_fields() -> None:
@@ -57,3 +62,57 @@ def test_map_trigger_signal_parses_evidence_refs() -> None:
 
     assert mapped["evidence_refs_json"] == ["hkma", "rates"]
     assert mapped["extra_json"] == {"lang": "en"}
+
+
+def test_map_company_parses_profile_json_fields() -> None:
+    row = {
+        "source": "company_directory",
+        "company_id": "hkg-alpha-fintech",
+        "canonical_name": "Alpha Fintech",
+        "display_name": "Alpha",
+        "country": "China",
+        "region": "Hong Kong",
+        "city": "Hong Kong",
+        "segments_json": '["fintech", "cross_border"]',
+        "industries_json": '["Payments"]',
+        "website_url": "https://alpha.example.com",
+        "linkedin_url": "https://www.linkedin.com/company/alpha",
+        "facebook_url": None,
+        "x_url": None,
+        "instagram_url": None,
+        "wikipedia_url": None,
+        "profile_summary": "Company profile",
+        "description": "Seeded company",
+        "extra_json": '{"seed_source": "manual"}',
+        "row_hash": "hash-company",
+        "updated_at": "2026-04-20T00:00:00Z",
+        "run_id": "run-1",
+    }
+
+    mapped = _map_company(row)
+
+    assert mapped["segments_json"] == ["fintech", "cross_border"]
+    assert mapped["industries_json"] == ["Payments"]
+    assert mapped["extra_json"] == {"seed_source": "manual"}
+    assert mapped["updated_at"] is not None
+
+
+def test_map_company_mapping_audit_parses_timestamp() -> None:
+    row = {
+        "run_id": "company-map-20260420T000000Z",
+        "target_table": "intelligence_records",
+        "target_row_id": 101,
+        "old_company_id": None,
+        "new_company_id": "hkg-alpha-fintech",
+        "mapping_method": "alias_match",
+        "confidence": 0.92,
+        "matched_alias": "alpha fintech",
+        "matched_context": "Alpha Fintech expands into UAE",
+        "mapped_at": "2026-04-20T00:10:00Z",
+    }
+
+    mapped = _map_company_mapping_audit(row)
+
+    assert mapped["target_row_id"] == 101
+    assert mapped["confidence"] == 0.92
+    assert mapped["mapped_at"] is not None

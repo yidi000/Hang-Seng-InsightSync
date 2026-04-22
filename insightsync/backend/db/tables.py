@@ -133,6 +133,58 @@ generated_insights = Table(
     Column("dedup_hash", Text, nullable=False, unique=True),
 )
 
+companies = Table(
+    "companies",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("source", Text, nullable=False),
+    Column("company_id", Text, nullable=False),
+    Column("canonical_name", Text, nullable=False),
+    Column("display_name", Text),
+    Column("country", Text),
+    Column("region", Text),
+    Column("city", Text),
+    Column("segments_json", JSONB),
+    Column("industries_json", JSONB),
+    Column("website_url", Text),
+    Column("linkedin_url", Text),
+    Column("facebook_url", Text),
+    Column("x_url", Text),
+    Column("instagram_url", Text),
+    Column("wikipedia_url", Text),
+    Column("profile_summary", Text),
+    Column("description", Text),
+    Column("extra_json", JSONB),
+    Column("row_hash", Text, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("run_id", Text, nullable=False),
+    UniqueConstraint("company_id", "row_hash", name="uq_companies_company_hash"),
+)
+
+company_mapping_audit = Table(
+    "company_mapping_audit",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("run_id", Text, nullable=False),
+    Column("target_table", Text, nullable=False),
+    Column("target_row_id", Integer, nullable=False),
+    Column("old_company_id", Text),
+    Column("new_company_id", Text, nullable=False),
+    Column("mapping_method", Text, nullable=False),
+    Column("confidence", Float),
+    Column("matched_alias", Text),
+    Column("matched_context", Text),
+    Column("mapped_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint(
+        "run_id",
+        "target_table",
+        "target_row_id",
+        "new_company_id",
+        "mapping_method",
+        name="uq_company_mapping_audit",
+    ),
+)
+
 rag_documents = Table(
     "rag_documents",
     metadata,

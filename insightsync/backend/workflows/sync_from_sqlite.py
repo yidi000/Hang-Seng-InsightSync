@@ -13,6 +13,8 @@ from insightsync.backend.core.config import get_settings
 from insightsync.backend.db.session import SessionLocal
 from insightsync.backend.db.tables import (
     client_one_view_timeline,
+    companies,
+    company_mapping_audit,
     generated_insights,
     ingestion_runs,
     intelligence_records,
@@ -149,6 +151,47 @@ def _map_generated_insight(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _map_company(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": row["source"],
+        "company_id": row["company_id"],
+        "canonical_name": row["canonical_name"],
+        "display_name": row.get("display_name"),
+        "country": row.get("country"),
+        "region": row.get("region"),
+        "city": row.get("city"),
+        "segments_json": _json_loads(row.get("segments_json"), []),
+        "industries_json": _json_loads(row.get("industries_json"), []),
+        "website_url": row.get("website_url"),
+        "linkedin_url": row.get("linkedin_url"),
+        "facebook_url": row.get("facebook_url"),
+        "x_url": row.get("x_url"),
+        "instagram_url": row.get("instagram_url"),
+        "wikipedia_url": row.get("wikipedia_url"),
+        "profile_summary": row.get("profile_summary"),
+        "description": row.get("description"),
+        "extra_json": _json_loads(row.get("extra_json"), {}),
+        "row_hash": row["row_hash"],
+        "updated_at": parse_timestamp(row["updated_at"]),
+        "run_id": row["run_id"],
+    }
+
+
+def _map_company_mapping_audit(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "run_id": row["run_id"],
+        "target_table": row["target_table"],
+        "target_row_id": row["target_row_id"],
+        "old_company_id": row.get("old_company_id"),
+        "new_company_id": row["new_company_id"],
+        "mapping_method": row["mapping_method"],
+        "confidence": row.get("confidence"),
+        "matched_alias": row.get("matched_alias"),
+        "matched_context": row.get("matched_context"),
+        "mapped_at": parse_timestamp(row["mapped_at"]),
+    }
+
+
 def sync_from_sqlite(sqlite_path: Path, db: Session, *, since_run_id: str | None = None) -> dict[str, dict[str, int]]:
     """Sync SQLite data module outputs into PostgreSQL.
 
@@ -169,6 +212,13 @@ def sync_from_sqlite(sqlite_path: Path, db: Session, *, since_run_id: str | None
         ("intelligence_records", intelligence_records, _map_intelligence_record, ["source", "dataset", "record_key", "content_hash"]),
         ("trigger_signals", trigger_signals, _map_trigger_signal, ["source", "dataset", "signal_key", "row_hash"]),
         ("client_one_view_timeline", client_one_view_timeline, _map_timeline_event, ["source", "dedup_hash"]),
+        ("companies", companies, _map_company, ["company_id", "row_hash"]),
+        (
+            "company_mapping_audit",
+            company_mapping_audit,
+            _map_company_mapping_audit,
+            ["run_id", "target_table", "target_row_id", "new_company_id", "mapping_method"],
+        ),
         ("generated_insights", generated_insights, _map_generated_insight, ["dedup_hash"]),
     ]
     summary: dict[str, dict[str, int]] = {}

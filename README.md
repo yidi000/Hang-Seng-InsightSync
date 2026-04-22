@@ -60,6 +60,8 @@ uvicorn insightsync.backend.main:app --reload --port 8000
 Useful backend endpoints:
 
 - `GET /healthz`
+- `GET /api/companies`
+- `GET /api/companies/{company_id}`
 - `GET /api/signals`
 - `GET /api/timeline`
 - `GET /api/dashboard/overview`
