@@ -144,7 +144,7 @@ def test_document_parser_csv_uses_real_header_row_and_row_label_metrics() -> Non
     tmp_dir.mkdir(parents=True, exist_ok=True)
     csv_path = tmp_dir / "guangdong_table.csv"
     csv_path.write_text(
-        "0,1,2\n"
+        "\ufeff0,1,2\n"
         "指标,1-2月,增长%\n"
         "中外资银行业机构本外币存款余额（亿元）,398046.34,7.8\n",
         encoding="utf-8",
@@ -162,7 +162,51 @@ def test_document_parser_csv_uses_real_header_row_and_row_label_metrics() -> Non
 
     assert parsed.tables
     assert parsed.tables[0].headers == ["指标", "1-2月", "增长%"]
+    assert parsed.text.startswith("指标 | 1-2月 | 增长%")
     assert any(metric.name == "customer deposits" and metric.value == "398046.34" for metric in parsed.metrics)
+
+
+def test_management_discussion_falls_back_to_report_overview_sections() -> None:
+    content = (
+        "Overview\n\n"
+        "Management expects strong growth in 2026 and plans to expand in the Greater Bay Area. "
+        "The bank is prioritising productivity, regulatory readiness, and cross-border opportunities.\n\n"
+        "Risk Factors\n\n"
+        "Regulatory risk remains elevated because of capital and liquidity requirements."
+    )
+
+    parsed = parse_content(
+        ParseRequest(
+            source_name="kpmg",
+            dataset="banking_outlook",
+            title="Hong Kong Banking Outlook 2026",
+            content=content,
+        )
+    )
+
+    assert parsed.management_discussion is not None
+    assert "growth" in parsed.management_discussion.summary.lower()
+    assert "Overview" in parsed.management_discussion.source_sections
+
+
+def test_management_discussion_does_not_trigger_on_report_metadata_only() -> None:
+    parsed = parse_content(
+        ParseRequest(
+            source_name="szse_cninfo",
+            dataset="announcements",
+            title="2025年度财务决算报告",
+            content={
+                "adjunct size kb": "89",
+                "adjunct type": "PDF",
+                "announcement datetime": "2026-04-20 00:00:00",
+                "pdf url": "http://static.cninfo.com.cn/finalpage/2026-04-20/1225123166.PDF",
+                "stock code": "301090",
+                "stock name": "华润材料",
+            },
+        )
+    )
+
+    assert parsed.management_discussion is None
 
 
 def test_rag_document_builder_uses_parsed_output() -> None:

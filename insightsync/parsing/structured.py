@@ -169,6 +169,47 @@ _MD_HIGHLIGHT_HINTS = (
     "监管",
     "流动性",
 )
+_REPORT_TITLE_HINTS = (
+    "annual report",
+    "interim report",
+    "outlook",
+    "results",
+    "earnings",
+    "report",
+    "年报",
+    "半年报",
+    "季报",
+    "报告",
+)
+_MD_FALLBACK_SECTION_HINTS = (
+    "overview",
+    "sector outlook",
+    "business review",
+    "financial performance",
+    "financial review",
+    "operating review",
+    "chairman",
+    "ceo",
+    "strategy",
+    "management review",
+    "discussion",
+    "analysis",
+    "概览",
+    "业务回顾",
+    "经营情况",
+    "财务表现",
+    "展望",
+)
+_MD_METADATA_MARKERS = (
+    "adjunct size",
+    "adjunct type",
+    "announcement datetime",
+    "announcement id",
+    "announcement time",
+    "pdf url",
+    "stock code",
+    "stock name",
+)
 _NON_PERCENT_METRICS = {name for name, _, allow_percent in _METRIC_SPECS if not allow_percent}
 
 
@@ -493,6 +534,9 @@ def extract_management_discussion(
                 matched_sections.append(ParsedSection(heading=normalize_text(title), text=pseudo_text))
 
     if not matched_sections:
+        matched_sections = _fallback_management_sections(title=title, sections=sections, text=text)
+
+    if not matched_sections:
         return None
 
     candidate_sentences: list[str] = []
@@ -532,3 +576,68 @@ def extract_management_discussion(
         highlights=[item[:240] for item in highlights],
         source_sections=[section.heading for section in matched_sections],
     )
+
+
+def _looks_like_report_title(title: str | None) -> bool:
+    normalized = normalize_text(title).lower()
+    if not normalized:
+        return False
+    return any(hint in normalized for hint in _REPORT_TITLE_HINTS)
+
+
+def _looks_like_management_narrative(text: str) -> bool:
+    normalized = normalize_text(text)
+    if len(normalized) < 120:
+        return False
+
+    lower = normalized.lower()
+    if any(marker in lower for marker in _MD_METADATA_MARKERS):
+        return False
+    if re.match(r"^(?:date|title)\n", lower):
+        return False
+    if any(hint in lower for hint in _MD_HIGHLIGHT_HINTS):
+        return True
+    if normalized.count("\n") >= 2 and not re.search(r"[.!?。！？]", normalized):
+        return False
+
+    long_sentences = [sentence for sentence in _split_sentences(normalized) if len(sentence) >= 50]
+    return len(long_sentences) >= 2
+
+
+def _fallback_management_sections(
+    *,
+    title: str | None,
+    sections: list[ParsedSection] | None,
+    text: str,
+) -> list[ParsedSection]:
+    if not _looks_like_report_title(title):
+        return []
+
+    fallback_sections: list[ParsedSection] = []
+    for section in sections or []:
+        heading = normalize_text(section.heading).lower()
+        body = normalize_text(section.text)
+        if not body or not _looks_like_management_narrative(body) or _is_noise_text(body[:120]):
+            continue
+        if any(hint in heading for hint in _MD_FALLBACK_SECTION_HINTS):
+            fallback_sections.append(section)
+
+    if fallback_sections:
+        return fallback_sections[:3]
+
+    for section in sections or []:
+        heading = normalize_text(section.heading).lower()
+        body = normalize_text(section.text)
+        if not body or not _looks_like_management_narrative(body) or _is_noise_text(body[:120]):
+            continue
+        if heading in {"text", "body", "document"} or not heading:
+            fallback_sections.append(section)
+        elif len(heading.split()) <= 8:
+            fallback_sections.append(section)
+        if len(fallback_sections) >= 2:
+            return fallback_sections
+
+    excerpt = normalize_text(text)[:2500]
+    if excerpt and _looks_like_management_narrative(excerpt):
+        return [ParsedSection(heading=normalize_text(title) or "Report", text=excerpt)]
+    return []

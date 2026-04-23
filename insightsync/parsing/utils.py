@@ -10,6 +10,7 @@ from .models import ParsedSection, ParsedTable
 
 _WHITESPACE_RE = re.compile(r"[ \t\r\f\v]+")
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
+_INVISIBLE_CHARS_RE = re.compile(r"[\ufeff\u200b\u200c\u200d]")
 _DATE_RE = re.compile(
     r"\b(?:20\d{2}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}\s+[A-Z][a-z]{2,8}\s+20\d{2}|[A-Z][a-z]{2,8}\s+\d{1,2},\s+20\d{2})\b"
 )
@@ -48,7 +49,8 @@ def normalize_text(value: Any) -> str:
         text = value
     else:
         text = str(value)
-    text = html.unescape(text).replace("\r\n", "\n").replace("\r", "\n")
+    text = html.unescape(text).replace("\xa0", " ").replace("\r\n", "\n").replace("\r", "\n")
+    text = _INVISIBLE_CHARS_RE.sub("", text)
     text = _WHITESPACE_RE.sub(" ", text)
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = _BLANK_LINES_RE.sub("\n\n", text)
@@ -214,3 +216,15 @@ def _looks_like_positional_index_row(row: list[str]) -> bool:
     if len(cells) < 2:
         return False
     return all(re.fullmatch(r"\d+", cell) for cell in cells)
+
+
+def table_to_text(table: ParsedTable, *, max_rows: int = 40) -> str:
+    headers = [normalize_text(cell) for cell in table.headers if normalize_text(cell)]
+    lines: list[str] = []
+    if headers:
+        lines.append(" | ".join(headers))
+    for row in table.rows[: max(0, max_rows)]:
+        cells = [normalize_text(cell) for cell in row if normalize_text(cell)]
+        if cells:
+            lines.append(" | ".join(cells))
+    return normalize_text("\n".join(lines))

@@ -10,7 +10,7 @@ from typing import Any
 from ..base import BaseParser
 from ..models import ParseRequest, ParsedDocument, ParsedSection, ParsedTable
 from ..structured import extract_business_events, extract_management_discussion, extract_metrics, extract_risk_factors
-from ..utils import csv_text_to_table, guess_media_type, normalize_text, read_text_file, split_text_sections
+from ..utils import csv_text_to_table, guess_media_type, normalize_text, read_text_file, split_text_sections, table_to_text
 
 _DOCUMENT_SUFFIXES = {
     ".pdf",
@@ -92,9 +92,10 @@ class DocumentParser(BaseParser):
             tables = []
             backend_name = "plain-text"
         elif suffix == ".csv":
-            text = read_text_file(path)
-            table = csv_text_to_table(text, title=path.name)
+            raw_text = read_text_file(path)
+            table = csv_text_to_table(raw_text, title=path.name)
             tables = [table] if table is not None else []
+            text = table_to_text(table, max_rows=60) if table is not None else raw_text
             backend_name = "csv"
         elif suffix in {".xbrl", ".xml", ".xhtml"}:
             text, tables, xbrl_warnings, backend_name, extra_metadata = self._parse_xbrl(path)
@@ -304,6 +305,8 @@ class DocumentParser(BaseParser):
 
         headers = normalized_rows[header_row_index]
         rows = normalized_rows[header_row_index + 1 :]
+        if rows and rows[0] == headers:
+            rows = rows[1:]
         if not rows or self._looks_like_layout_table(headers, rows):
             return None
         return headers, rows[:20]
@@ -320,6 +323,8 @@ class DocumentParser(BaseParser):
         if len(non_empty_cells) < 4:
             return True
         joined = " ".join(non_empty_cells).lower()
+        if any(len(cell) > 400 for cell in headers):
+            return True
         if any(marker in joined for marker in ("all rights reserved", "member firm", "contact us")):
             return True
         if all(sum(1 for cell in row if cell) <= 1 for row in sample_rows):
