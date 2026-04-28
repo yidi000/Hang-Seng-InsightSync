@@ -24,6 +24,10 @@ env/
 *.log
 *.tmp
 .DS_Store
+.tmp_*/
+.tmp_test/
+pytest-cache-files-*/
+tmp*/
 
 # Dev/prod SQLite artifacts are local — not the demo fixture.
 insightsync/data/storage/insightsync.db

@@ -222,6 +222,129 @@ Frontend can use now:
 - call `/api/signals?limit=5&entity=HKG`
 - map each item into homepage cards manually
 
+### `GET /api/companies`
+
+Status:
+
+- `Available now`
+
+Purpose:
+
+- company-centric list view built from the latest company snapshot plus linked activity counts
+
+Query params:
+
+- `limit`
+- `offset`
+- `q`
+- `region`
+- `segment`
+- `industry`
+
+Current response shape:
+
+```json
+{
+  "items": [
+    {
+      "source": "company_directory",
+      "company_id": "hkg-alpha-fintech",
+      "canonical_name": "Alpha Fintech",
+      "display_name": "Alpha Fintech Holdings",
+      "country": "China",
+      "region": "Hong Kong",
+      "city": "Hong Kong",
+      "segments": ["fintech", "sme"],
+      "industries": ["Payments"],
+      "website_url": "https://alpha.example.com",
+      "linkedin_url": "https://linkedin.com/company/alpha",
+      "facebook_url": null,
+      "x_url": null,
+      "instagram_url": null,
+      "wikipedia_url": null,
+      "profile_summary": "Latest summary",
+      "description": "Latest description",
+      "extra": { "seed_source": "manual_seed_v2" },
+      "updated_at": "2026-04-20T09:00:00Z",
+      "signal_count": 2,
+      "timeline_event_count": 1,
+      "generated_insight_count": 1,
+      "last_signal_at": "2026-04-22T10:00:00Z",
+      "last_event_at": "2026-04-22T10:00:00Z",
+      "last_insight_at": "2026-04-22T11:00:00Z",
+      "activity_at": "2026-04-22T10:00:00Z"
+    }
+  ],
+  "limit": 20,
+  "offset": 0
+}
+```
+
+Frontend note:
+
+- This endpoint is the first company-centric substitute for the future prospects list.
+- It does not yet provide banker ranking, tiering, or revenue features.
+- It is suitable now for a company explorer or candidate list page.
+
+### `GET /api/companies/{company_id}`
+
+Status:
+
+- `Available now`
+
+Purpose:
+
+- company-centric detail view with recent signals, timeline, and generated insights
+
+Current response shape:
+
+```json
+{
+  "company": {
+    "source": "company_directory",
+    "company_id": "hkg-alpha-fintech",
+    "canonical_name": "Alpha Fintech",
+    "display_name": "Alpha Fintech Holdings",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "sme"],
+    "industries": ["Payments"],
+    "website_url": "https://alpha.example.com",
+    "linkedin_url": "https://linkedin.com/company/alpha",
+    "facebook_url": null,
+    "x_url": null,
+    "instagram_url": null,
+    "wikipedia_url": null,
+    "profile_summary": "Latest summary",
+    "description": "Latest description",
+    "extra": { "seed_source": "manual_seed_v2" },
+    "updated_at": "2026-04-20T09:00:00Z"
+  },
+  "stats": {
+    "signal_count": 2,
+    "timeline_event_count": 1,
+    "generated_insight_count": 1,
+    "last_signal_at": "2026-04-22T10:00:00Z",
+    "last_event_at": "2026-04-22T10:00:00Z",
+    "last_insight_at": "2026-04-22T11:00:00Z",
+    "signal_type_distribution": [
+      { "name": "cross_border", "count": 1 },
+      { "name": "growth", "count": 1 }
+    ]
+  },
+  "recent_signals": [],
+  "recent_timeline": [],
+  "recent_insights": []
+}
+```
+
+Frontend note:
+
+- This endpoint is the first company-centric substitute for the future prospect detail page.
+- It is useful now for a company drill-down page and evidence panel.
+- It is still not the full final `prospects/:id` contract.
+
 ### `GET /api/prospects`
 
 Status:
@@ -677,6 +800,13 @@ Frontend can connect now:
 
 - `GET /api/timeline`
 
+### Company Explorer / Detail
+
+Frontend can connect now:
+
+- `GET /api/companies`
+- `GET /api/companies/{company_id}`
+
 ### Copilot / Ask Page
 
 Frontend can connect now:
@@ -689,6 +819,7 @@ Frontend can connect now:
 Frontend cannot connect yet:
 
 - all `prospects` endpoints are still future work
+- frontend can use the `companies` endpoints as the current company-centric substitute
 
 ## Filter Metadata
 
