@@ -8,7 +8,10 @@ from typing import Any
 
 from .collectors import (
     ADBCollector,
+    CENSTATDCollector,
     CompanyDirectoryCollector,
+    DongfangAKShareCollector,
+    DongfangCSVCollector,
     GuangdongStatsCollector,
     HKGovNewsCollector,
     HKEXDisclosureCollector,
@@ -37,6 +40,10 @@ class PipelineConfig:
     adb_start_year: int = datetime.now().year - 8
     adb_end_year: int = datetime.now().year
     adb_min_interval_seconds: float = 3.2
+
+    censtatd_language: str = "en"
+    censtatd_include_full_series: bool = True
+    censtatd_request_timeout_seconds: int = 60
 
     guangdong_years: tuple[int, ...] = (datetime.now().year, datetime.now().year - 1)
     guangdong_max_links_per_category: int = 20
@@ -89,6 +96,16 @@ class PipelineConfig:
     company_enable_enrichment: bool = False
     company_request_timeout_seconds: int = 15
 
+    dongfang_csv_paths: tuple[str, ...] = ()
+    dongfang_fetch_enabled: bool = False
+    dongfang_fetch_markets: tuple[str, ...] = ("northbound", "shanghai_connect", "shenzhen_connect")
+    dongfang_fetch_retry: int = 3
+    dongfang_fetch_sleep_seconds: float = 1.0
+    dongfang_snapshot_date: str | None = None
+    dongfang_min_increase_value: float = 0.0
+    dongfang_min_holding_ratio: float = 0.0
+    dongfang_top_n_rank_signal: int = 20
+
     runtime_meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -100,6 +117,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             continue
         if key in ("adb_kidb", "adb"):
             key = "adb"
+        if key in ("censtatd", "csd", "census", "census_statistics", "hong_kong_statistics"):
+            key = "censtatd"
         if key in ("guangdong_stats", "gd", "guangdong"):
             key = "guangdong"
         if key in ("investhk_news", "investhk-news", "investhk"):
@@ -112,6 +131,8 @@ def _normalize_sources(values: tuple[str, ...] | list[str] | set[str]) -> tuple[
             key = "szse"
         if key in ("company", "companies", "company-directory", "company_directory", "company_master"):
             key = "company"
+        if key in ("dongfang", "eastmoney", "dongfang_eastmoney", "eastmoney_connect"):
+            key = "dongfang"
         if key not in out:
             out.append(key)
     return tuple(out)
@@ -137,6 +158,16 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
                     start_year=config.adb_start_year,
                     end_year=config.adb_end_year,
                     min_interval_seconds=config.adb_min_interval_seconds,
+                )
+            )
+            continue
+        if src == "censtatd":
+            collectors.append(
+                CENSTATDCollector(
+                    raw_dir=config.raw_dir,
+                    language=config.censtatd_language,
+                    include_full_series=config.censtatd_include_full_series,
+                    request_timeout_seconds=config.censtatd_request_timeout_seconds,
                 )
             )
             continue
@@ -227,6 +258,32 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
                     request_timeout_seconds=config.company_request_timeout_seconds,
                 )
             )
+            continue
+        if src == "dongfang":
+            if config.dongfang_fetch_enabled:
+                collectors.append(
+                    DongfangAKShareCollector(
+                        raw_dir=config.raw_dir,
+                        snapshot_date=config.dongfang_snapshot_date,
+                        min_increase_value=config.dongfang_min_increase_value,
+                        min_holding_ratio=config.dongfang_min_holding_ratio,
+                        top_n_rank_signal=config.dongfang_top_n_rank_signal,
+                        fetch_markets=config.dongfang_fetch_markets,
+                        retry=config.dongfang_fetch_retry,
+                        sleep_seconds=config.dongfang_fetch_sleep_seconds,
+                    )
+                )
+            else:
+                collectors.append(
+                    DongfangCSVCollector(
+                        raw_dir=config.raw_dir,
+                        csv_paths=config.dongfang_csv_paths,
+                        snapshot_date=config.dongfang_snapshot_date,
+                        min_increase_value=config.dongfang_min_increase_value,
+                        min_holding_ratio=config.dongfang_min_holding_ratio,
+                        top_n_rank_signal=config.dongfang_top_n_rank_signal,
+                    )
+                )
             continue
         raise ValueError(f"Unsupported source: {src}")
     return collectors

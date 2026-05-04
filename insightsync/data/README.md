@@ -7,12 +7,14 @@ This folder is an independent data ingestion module for Project InsightSync.
 - Ingest market and report signals from:
   - HKMA Open API
   - ADB KIDB API
+  - Hong Kong Census and Statistics Department retail sales / external merchandise trade API
   - KPMG Hong Kong Banking Outlook PDF
   - Guangdong Statistics Bureau webpages
   - InvestHK news feed (JSON + optional article text)
   - Hong Kong Government News (Business & Finance RSS/archive, with JSON/CSV snapshots)
   - HKEX predefined disclosure annual-report feed (PDF with optional Selenium fallback)
   - SZSE/CNINFO announcements (regular reports, temporary announcements, IPO-related disclosures)
+  - Dongfang / Eastmoney connect-flow holdings rankings (AKShare fetch or CSV import)
   - Company directory seed and public profile URLs (website / LinkedIn / Facebook / X / Instagram / Wikipedia)
 - Normalize records into a common schema.
 - Persist cleaned data into SQLite for backend/agent consumption.
@@ -60,6 +62,12 @@ Run only selected sources:
 
 ```bash
 python -m insightsync.data --sources hkma,adb --once
+```
+
+Run Hong Kong Census and Statistics Department retail / trade data:
+
+```bash
+python -m insightsync.data --sources censtatd --once
 ```
 
 Run InvestHK only:
@@ -122,6 +130,18 @@ Run company directory with public profile enrichment (website title and Wikipedi
 python -m insightsync.data --sources company --company-enable-enrichment --once
 ```
 
+Run Dongfang / Eastmoney connect-flow direct fetch:
+
+```bash
+python -m insightsync.data --sources dongfang --dongfang-fetch --once
+```
+
+Run Dongfang / Eastmoney connect-flow CSV import:
+
+```bash
+python -m insightsync.data --sources dongfang --dongfang-csv-paths "C:\\data\\北向资金持股排行.csv,C:\\data\\沪股通持股排行.csv" --dongfang-snapshot-date 2026-05-01 --once
+```
+
 Run only market company sync (import HKEX/SZSE historical codes into `companies`):
 
 ```bash
@@ -147,6 +167,12 @@ Useful InvestHK flags:
 - `--investhk-request-timeout-seconds` (default: `30`)
 - `--investhk-article-delay-seconds` (default: `0.3`)
 - `--investhk-json-url` (override feed URL if needed)
+
+Useful Hong Kong Census and Statistics Department flags:
+
+- `--censtatd-language` (default: `en`)
+- `--censtatd-no-full-series` (fetch default response window instead of full history)
+- `--censtatd-request-timeout-seconds` (default: `60`)
 
 Useful Hong Kong Government news flags:
 
@@ -190,6 +216,18 @@ Useful company-directory flags:
 - `--company-max-items` (default: `500`)
 - `--company-enable-enrichment` (fetch website title and Wikipedia summary)
 - `--company-request-timeout-seconds` (default: `15`)
+
+Useful Dongfang / Eastmoney flags:
+
+- `--dongfang-fetch` (fetch latest rankings directly via AKShare instead of importing existing CSV)
+- `--dongfang-fetch-markets` (default: `northbound,shanghai_connect,shenzhen_connect`; run `southbound` separately)
+- `--dongfang-fetch-retry` (default: `3`)
+- `--dongfang-fetch-sleep-seconds` (default: `1.0`)
+- `--dongfang-csv-paths` (comma-separated CSV paths exported from the notebook)
+- `--dongfang-snapshot-date` (optional fallback date if CSV does not contain `日期`)
+- `--dongfang-min-increase-value` (default: `0.0`; only larger inflows trigger increase-value signals)
+- `--dongfang-min-holding-ratio` (default: `0.0`; only larger float-holding ratios trigger holding-depth signals)
+- `--dongfang-top-n-rank-signal` (default: `20`; generate ranking signal for top N names)
 
 Useful company-mapping flags:
 
