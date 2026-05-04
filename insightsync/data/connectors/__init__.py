@@ -1,4 +1,10 @@
 from .adb_kidb_client import ADBKIDBClient, parse_kidb_sdmx_timeseries
+from .censtatd_client import (
+    CENSTATDClient,
+    EXTERNAL_TRADE_TABLE_ID,
+    RETAIL_SALES_TABLE_ID,
+    extract_censtatd_rows,
+)
 from .hkma_client import HKMAClient
 from .kpmg_banking_outlook import (
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
@@ -12,10 +18,14 @@ from .company_profile_client import CompanyProfileClient, normalize_public_url, 
 
 __all__ = [
     "ADBKIDBClient",
+    "CENSTATDClient",
+    "RETAIL_SALES_TABLE_ID",
+    "EXTERNAL_TRADE_TABLE_ID",
     "HKMAClient",
     "KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL",
     "download_kpmg_hong_kong_banking_outlook_pdf",
     "parse_kidb_sdmx_timeseries",
+    "extract_censtatd_rows",
     "INVESTHK_NEWS_JSON_URL_TEMPLATE",
     "InvestHKNewsClient",
     "extract_news_items",

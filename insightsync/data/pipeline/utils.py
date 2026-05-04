@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -90,7 +90,7 @@ def extract_time_period_from_text(text: str | None) -> str | None:
     if not value:
         return None
 
-    m = re.search(r"(20\d{2})[年/\-.](\d{1,2})[月/\-.](\d{1,2})", value)
+    m = re.fullmatch(r"(20\d{2})(\d{2})(\d{2})", value)
     if m:
         year = int(m.group(1))
         month = int(m.group(2))
@@ -98,7 +98,22 @@ def extract_time_period_from_text(text: str | None) -> str | None:
         if 1 <= month <= 12 and 1 <= day <= 31:
             return f"{year:04d}-{month:02d}-{day:02d}"
 
-    m = re.search(r"(20\d{2})[年/\-.](\d{1,2})[月]?", value)
+    m = re.fullmatch(r"(20\d{2})(\d{2})", value)
+    if m:
+        year = int(m.group(1))
+        month = int(m.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    m = re.search(r"(20\d{2})[\u5e74/\-.](\d{1,2})[\u6708/\-.](\d{1,2})", value)
+    if m:
+        year = int(m.group(1))
+        month = int(m.group(2))
+        day = int(m.group(3))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return f"{year:04d}-{month:02d}-{day:02d}"
+
+    m = re.search(r"(20\d{2})[\u5e74/\-.](\d{1,2})[\u6708]?", value)
     if m:
         year = int(m.group(1))
         month = int(m.group(2))
@@ -130,9 +145,9 @@ def detect_record_time(record: Mapping[str, Any]) -> str | None:
 def is_likely_date_string(value: str) -> bool:
     if not value:
         return False
-    if re.search(r"(20\d{2}[年/\-.]\d{1,2})|(20\d{2}[年/\-.]\d{1,2}[月/\-.]\d{1,2})", value):
+    if re.fullmatch(r"20\d{2}(\d{2}){0,2}", value):
         return True
-    if re.fullmatch(r"20\d{2}", value):
+    if re.search(r"(20\d{2})[\u5e74/\-.]\d{1,2}", value):
         return True
     return False
 
@@ -195,4 +210,3 @@ def infer_unit(indicator: str | None, value_text: str | None) -> str | None:
     if "usd" in key or "hkd" in key or "cny" in key or "fob" in key:
         return "currency"
     return None
-
