@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import random
+import shutil
 import time
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -14,16 +15,20 @@ import requests
 
 from ..connectors import (
     ADBKIDBClient,
+    CENSTATDClient,
     CompanyProfileClient,
+    EXTERNAL_TRADE_TABLE_ID,
     HKGovNewsClient,
     HKEX_PREDEFINED_DOCS_URL,
     HKEXDisclosureClient,
     HKMAClient,
     InvestHKNewsClient,
     KPMG_HONG_KONG_BANKING_OUTLOOK_PDF_URL,
+    RETAIL_SALES_TABLE_ID,
     SZSECninfoClient,
     build_cninfo_pdf_url,
     download_kpmg_hong_kong_banking_outlook_pdf,
+    extract_censtatd_rows,
     extract_hk_gov_news_id,
     normalize_public_url,
     parse_kidb_sdmx_timeseries,
@@ -94,6 +99,25 @@ def _normalize_list(value: Any) -> list[str]:
                 out.append(text)
         return out
     return []
+
+
+def _coerce_code_text(value: Any) -> str | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    if text.endswith(".0"):
+        text = text[:-2]
+    digits = "".join(ch for ch in text if ch.isdigit())
+    return digits or text
+
+
+def _coerce_percent(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = normalize_text(value).replace("%", "")
+    return coerce_float(text)
 
 
 class CompanyDirectoryCollector(BaseCollector):
@@ -480,6 +504,181 @@ class ADBCollector(BaseCollector):
         }
         if errors and not batch.trigger_signals:
             raise RuntimeError("ADB collector failed: " + "; ".join(errors))
+        return batch
+
+
+class CENSTATDCollector(BaseCollector):
+    source = "censtatd"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        language: str = "en",
+        include_full_series: bool = True,
+        request_timeout_seconds: int = 60,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.language = normalize_text(language).lower() or "en"
+        self.include_full_series = bool(include_full_series)
+        self.request_timeout_seconds = int(request_timeout_seconds)
+        self.client = CENSTATDClient()
+
+    @staticmethod
+    def _row_entity(row: dict[str, Any]) -> str:
+        outlet_desc = normalize_text(row.get("OUTLET_TYPEDesc"))
+        return outlet_desc or "HKG"
+
+    @staticmethod
+    def _row_title(dataset: str, row: dict[str, Any]) -> str:
+        label = normalize_text(row.get("OUTLET_TYPEDesc")) or "Total"
+        period = normalize_text(row.get("period"))
+        return f"{dataset} {label} {period}".strip()
+
+    @staticmethod
+    def _row_summary(dataset: str, row: dict[str, Any]) -> str:
+        label = normalize_text(row.get("OUTLET_TYPEDesc")) or "Total"
+        sv = normalize_text(row.get("sv"))
+        figure = normalize_text(row.get("figure")) or normalize_text(row.get("sd_value"))
+        period = normalize_text(row.get("period"))
+        return f"{dataset}; {label}; {sv}; {period}; {figure}".strip()
+
+    @staticmethod
+    def _normalize_figure(value: Any) -> tuple[float | None, str | None]:
+        value_num = coerce_float(value)
+        value_text = normalize_text(value)
+        return value_num, value_text or None
+
+    def _iter_dataset_rows(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        rows = extract_censtatd_rows(payload)
+        return rows
+
+    def collect(self) -> CollectionBatch:
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "censtatd"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        datasets = [
+            ("retail_sales", RETAIL_SALES_TABLE_ID, self.client.retail_sales),
+            ("external_merchandise_trade", EXTERNAL_TRADE_TABLE_ID, self.client.external_merchandise_trade),
+        ]
+        meta_rows: list[dict[str, Any]] = []
+
+        for dataset, table_id, fetcher in datasets:
+            payload = fetcher(
+                lang=self.language,
+                full_series=self.include_full_series,
+                timeout=self.request_timeout_seconds,
+            )
+            fetched_at = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            raw_path = out_dir / f"{dataset}_{fetched_at}.json"
+            raw_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            rows = self._iter_dataset_rows(payload)
+            header = payload.get("header") if isinstance(payload, dict) else {}
+            title = normalize_text((header or {}).get("title")) or dataset
+
+            feed_record = IntelligenceRecord(
+                source=self.source,
+                dataset=f"{dataset}_feed_json",
+                record_key=f"{dataset}|{table_id}|{fetched_at}",
+                record_type="document",
+                event_time=None,
+                company_id=None,
+                entity="HKG",
+                title=title,
+                summary=f"{dataset} snapshot rows={len(rows)}",
+                region="Hong Kong",
+                industry="Macro",
+                tags=[self.source, dataset, "feed_snapshot"],
+                payload={
+                    "table_id": table_id,
+                    "rows": len(rows),
+                    "language": self.language,
+                    "full_series": self.include_full_series,
+                    "file_path": str(raw_path.resolve()),
+                },
+                evidence_url=f"https://www.censtatd.gov.hk/en/web_table.html?id={table_id}",
+                lang=self.language,
+                raw=None,
+            )
+            batch.intelligence_records.append(feed_record)
+            batch.timeline_events.append(_timeline_from_record(feed_record, event_type="document"))
+
+            meta_rows.append(
+                {
+                    "dataset": dataset,
+                    "table_id": table_id,
+                    "rows": len(rows),
+                    "file_path": str(raw_path.resolve()),
+                }
+            )
+
+            for idx, row in enumerate(rows):
+                event_time = extract_time_period_from_text(normalize_text(row.get("period")))
+                if not event_time:
+                    continue
+
+                value_num, value_text = self._normalize_figure(row.get("figure"))
+                sd_value = normalize_text(row.get("sd_value")) or None
+                indicator = normalize_text(row.get("sv")) or None
+                entity = self._row_entity(row)
+                label = normalize_text(row.get("OUTLET_TYPEDesc")) or None
+                record_key = build_natural_key(dataset, row, fallback=f"idx-{idx}")
+
+                record = IntelligenceRecord(
+                    source=self.source,
+                    dataset=dataset,
+                    record_key=record_key,
+                    record_type="metric",
+                    event_time=event_time,
+                    company_id=None,
+                    entity=entity,
+                    title=self._row_title(dataset, row),
+                    summary=self._row_summary(dataset, row),
+                    region="Hong Kong",
+                    industry="Macro",
+                    tags=[self.source, dataset, indicator or "unknown_indicator"],
+                    payload=row,
+                    evidence_url=f"https://www.censtatd.gov.hk/en/web_table.html?id={table_id}",
+                    lang=self.language,
+                    raw=row,
+                )
+                batch.intelligence_records.append(record)
+                batch.timeline_events.append(_timeline_from_record(record, event_type="metric"))
+
+                signal_key = f"{dataset}|{entity}|{indicator}|{event_time}|{value_text or sd_value or idx}"
+                batch.trigger_signals.append(
+                    TriggerSignal(
+                        source=self.source,
+                        dataset=dataset,
+                        signal_key=signal_key,
+                        signal_type=_infer_signal_type(indicator, dataset),
+                        event_time=event_time,
+                        company_id=None,
+                        entity="HKG",
+                        indicator=indicator,
+                        value_num=value_num,
+                        value_text=value_text or sd_value,
+                        unit=normalize_text(row.get("svDesc")) or None,
+                        signal_text=f"{label or 'Total'} {indicator or dataset}: {value_text or sd_value or ''}".strip(),
+                        evidence_refs=[f"https://www.censtatd.gov.hk/en/web_table.html?id={table_id}"],
+                        extra={
+                            "freq": normalize_text(row.get("freq")) or None,
+                            "period": normalize_text(row.get("period")) or None,
+                            "special_value_flag": sd_value,
+                            "outlet_type": row.get("OUTLET_TYPE"),
+                            "outlet_desc": label,
+                            "table_id": table_id,
+                        },
+                    )
+                )
+
+        batch.meta = {
+            "language": self.language,
+            "include_full_series": self.include_full_series,
+            "datasets": meta_rows,
+        }
         return batch
 
 
@@ -1647,6 +1846,505 @@ class GuangdongStatsCollector(BaseCollector):
             "pages_processed": page_count,
             "tables_processed": table_count,
             "rows_processed": row_count,
+        }
+        return batch
+
+
+class DongfangCSVCollector(BaseCollector):
+    source = "dongfang_eastmoney"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        csv_paths: tuple[str, ...],
+        snapshot_date: str | None = None,
+        min_increase_value: float = 0.0,
+        min_holding_ratio: float = 0.0,
+        top_n_rank_signal: int = 20,
+    ) -> None:
+        self.raw_dir = Path(raw_dir)
+        self.csv_paths = tuple(Path(path).expanduser().resolve() for path in csv_paths if normalize_text(path))
+        self.snapshot_date = normalize_text(snapshot_date) or None
+        self.min_increase_value = float(min_increase_value)
+        self.min_holding_ratio = float(min_holding_ratio)
+        self.top_n_rank_signal = max(1, int(top_n_rank_signal))
+
+    @staticmethod
+    def _market_from_filename(path: Path) -> str:
+        name = path.stem
+        if "北向" in name:
+            return "northbound"
+        if "沪股通" in name:
+            return "shanghai_connect"
+        if "深股通" in name:
+            return "shenzhen_connect"
+        if "港股通" in name:
+            return "southbound"
+        return safe_filename(name).lower()
+
+    def _normalize_row(self, row: dict[str, Any], *, market: str, source_file: str) -> dict[str, Any]:
+        date_text = normalize_text(row.get("日期")) or self.snapshot_date
+        event_time = extract_time_period_from_text(date_text)
+        code = _coerce_code_text(row.get("代码"))
+        name = normalize_text(row.get("名称"))
+        sector = normalize_text(row.get("所属板块"))
+        rank = int(coerce_float(row.get("序号")) or 0)
+
+        return {
+            "market": market,
+            "source_file": source_file,
+            "date": date_text or None,
+            "event_time": event_time,
+            "rank": rank,
+            "company_id": code,
+            "company_name": name,
+            "sector": sector or None,
+            "close_price": coerce_float(row.get("今日收盘价")),
+            "price_change_pct": _coerce_percent(row.get("今日涨跌幅")),
+            "holding_shares": coerce_float(row.get("今日持股-股数")),
+            "holding_value": coerce_float(row.get("今日持股-市值")),
+            "holding_float_ratio_pct": _coerce_percent(row.get("今日持股-占流通股比")),
+            "holding_total_ratio_pct": _coerce_percent(row.get("今日持股-占总股本比")),
+            "increase_shares": coerce_float(row.get("今日增持估计-股数")),
+            "increase_value": coerce_float(row.get("今日增持估计-市值")),
+            "increase_value_pct": _coerce_percent(row.get("今日增持估计-市值增幅")),
+            "increase_float_ratio_pct": _coerce_percent(row.get("今日增持估计-占流通股比")),
+            "increase_total_ratio_pct": _coerce_percent(row.get("今日增持估计-占总股本比")),
+            "raw_row": row,
+        }
+
+    @staticmethod
+    def _summary_text(item: dict[str, Any]) -> str:
+        parts = [item["company_name"] or item["company_id"] or "Unknown company"]
+        if item.get("sector"):
+            parts.append(f"sector {item['sector']}")
+        if item.get("holding_value") is not None:
+            parts.append(f"holding value {item['holding_value']:.2f}")
+        if item.get("increase_value") is not None:
+            parts.append(f"increase value {item['increase_value']:.2f}")
+        if item.get("price_change_pct") is not None:
+            parts.append(f"price change {item['price_change_pct']:.2f}%")
+        return "; ".join(parts)
+
+    def _signal_candidates(self, item: dict[str, Any]) -> list[tuple[str, str, float | None, str | None, str]]:
+        signals: list[tuple[str, str, float | None, str | None, str]] = []
+        holding_value = item.get("holding_value")
+        increase_value = item.get("increase_value")
+        holding_float_ratio_pct = item.get("holding_float_ratio_pct")
+        increase_float_ratio_pct = item.get("increase_float_ratio_pct")
+        price_change_pct = item.get("price_change_pct")
+        rank = item.get("rank") or 0
+
+        if rank and rank <= self.top_n_rank_signal:
+            signals.append(
+                (
+                    "market_attention",
+                    "ranking",
+                    float(rank),
+                    f"top_{self.top_n_rank_signal}",
+                    f"{item['company_name']} ranks {rank} in {item['market']} holdings.",
+                )
+            )
+        if increase_value is not None and increase_value > self.min_increase_value:
+            signals.append(
+                (
+                    "growth",
+                    "estimated_increase_value",
+                    increase_value,
+                    "currency",
+                    f"{item['company_name']} saw estimated connect-flow increase of {increase_value:.2f}.",
+                )
+            )
+        if holding_float_ratio_pct is not None and holding_float_ratio_pct > self.min_holding_ratio:
+            signals.append(
+                (
+                    "market",
+                    "holding_float_ratio_pct",
+                    holding_float_ratio_pct,
+                    "percent",
+                    f"{item['company_name']} has {holding_float_ratio_pct:.2f}% connect holding over float shares.",
+                )
+            )
+        if price_change_pct is not None and increase_value is not None and price_change_pct > 0 and increase_value > self.min_increase_value:
+            signals.append(
+                (
+                    "growth",
+                    "price_and_flow_resonance",
+                    price_change_pct,
+                    "percent",
+                    f"{item['company_name']} rose {price_change_pct:.2f}% with simultaneous connect inflow.",
+                )
+            )
+        if increase_float_ratio_pct is not None and increase_float_ratio_pct > 0:
+            signals.append(
+                (
+                    "market_attention",
+                    "increase_float_ratio_pct",
+                    increase_float_ratio_pct,
+                    "percent",
+                    f"{item['company_name']} increased connect holding by {increase_float_ratio_pct:.2f}% of float shares.",
+                )
+            )
+        if holding_value is not None and holding_value > 0 and item.get("sector"):
+            signals.append(
+                (
+                    "market",
+                    "sector_capital_presence",
+                    holding_value,
+                    "currency",
+                    f"{item['company_name']} shows material connect capital presence in sector {item['sector']}.",
+                )
+            )
+        return signals
+
+    @staticmethod
+    def _expected_market_token(market: str) -> str:
+        mapping = {
+            "northbound": "北向资金持股排行",
+            "shanghai_connect": "沪股通持股排行",
+            "shenzhen_connect": "深股通持股排行",
+            "southbound": "港股通持股排行",
+        }
+        return mapping.get(market, market)
+
+    def collect(self) -> CollectionBatch:
+        if not self.csv_paths:
+            raise ValueError("dongfang collector requires at least one CSV path")
+
+        batch = CollectionBatch(source=self.source)
+        out_dir = self.raw_dir / "dongfang_eastmoney"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        imported_files = 0
+        imported_rows = 0
+        generated_signals = 0
+        seen_companies: set[str] = set()
+
+        for csv_path in self.csv_paths:
+            if not csv_path.exists():
+                raise FileNotFoundError(f"Dongfang CSV not found: {csv_path}")
+
+            market = self._market_from_filename(csv_path)
+            copied_path = out_dir / csv_path.name
+            if copied_path.resolve() != csv_path.resolve():
+                shutil.copy2(csv_path, copied_path)
+            digest = sha256_file(copied_path)
+
+            file_record = IntelligenceRecord(
+                source=self.source,
+                dataset="holdings_csv_snapshot",
+                record_key=f"{market}|{digest}",
+                record_type="document",
+                event_time=self.snapshot_date,
+                company_id=None,
+                entity="CN",
+                title=f"Dongfang {market} holdings snapshot",
+                summary=f"Connect-flow holdings ranking snapshot from {csv_path.name}",
+                region="China",
+                industry="Listed Companies",
+                tags=[self.source, market, "csv_snapshot"],
+                payload={
+                    "file_path": str(copied_path.resolve()),
+                    "file_sha256": digest,
+                    "market": market,
+                    "snapshot_date": self.snapshot_date,
+                    "source_filename": csv_path.name,
+                },
+                evidence_url=None,
+                lang="zh",
+                raw=None,
+            )
+            batch.intelligence_records.append(file_record)
+            batch.timeline_events.append(_timeline_from_record(file_record, event_type="document"))
+            imported_files += 1
+
+            with copied_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for idx, row in enumerate(reader):
+                    normalized = self._normalize_row(row, market=market, source_file=csv_path.name)
+                    company_id = normalized["company_id"]
+                    company_name = normalized["company_name"]
+                    if not company_id or not company_name:
+                        continue
+
+                    imported_rows += 1
+                    event_time = normalized["event_time"] or self.snapshot_date or str(datetime.now().year)
+                    record_key = f"{market}|{company_id}|{normalized['date'] or 'unknown'}|{idx}"
+
+                    row_record = IntelligenceRecord(
+                        source=self.source,
+                        dataset="holdings_rank_rows",
+                        record_key=record_key,
+                        record_type="metric",
+                        event_time=event_time,
+                        company_id=company_id,
+                        entity="CN",
+                        title=f"{company_name} connect holdings snapshot",
+                        summary=self._summary_text(normalized),
+                        region="China",
+                        industry=normalized.get("sector"),
+                        tags=[self.source, market, "connect_holdings", normalized.get("sector") or "unknown_sector"],
+                        payload=normalized,
+                        evidence_url=None,
+                        lang="zh",
+                        raw=row,
+                    )
+                    batch.intelligence_records.append(row_record)
+                    batch.timeline_events.append(_timeline_from_record(row_record, event_type="metric"))
+
+                    if company_id not in seen_companies:
+                        batch.companies.append(
+                            CompanyProfile(
+                                source=self.source,
+                                company_id=company_id,
+                                canonical_name=company_name,
+                                display_name=company_name,
+                                country="China",
+                                region="Mainland China",
+                                city=None,
+                                segments=["listed_company", "connect_flow"],
+                                industries=[normalized["sector"]] if normalized.get("sector") else [],
+                                profile_summary="Company observed in Dongfang connect holdings ranking.",
+                                description=self._summary_text(normalized),
+                                extra={
+                                    "market": market,
+                                    "last_snapshot_date": normalized.get("date"),
+                                    "source_filename": csv_path.name,
+                                },
+                            )
+                        )
+                        seen_companies.add(company_id)
+
+                    for signal_type, indicator, value_num, unit, signal_text in self._signal_candidates(normalized):
+                        signal_key = f"{market}|{company_id}|{event_time}|{indicator}"
+                        batch.trigger_signals.append(
+                            TriggerSignal(
+                                source=self.source,
+                                dataset="connect_flow_signals",
+                                signal_key=signal_key,
+                                signal_type=signal_type,
+                                event_time=event_time,
+                                company_id=company_id,
+                                entity="CN",
+                                indicator=indicator,
+                                value_num=value_num,
+                                value_text=normalized.get("sector"),
+                                unit=unit,
+                                signal_text=signal_text,
+                                evidence_refs=[str(copied_path.resolve())],
+                                extra={
+                                    "market": market,
+                                    "rank": normalized.get("rank"),
+                                    "company_name": company_name,
+                                    "sector": normalized.get("sector"),
+                                    "snapshot_date": normalized.get("date"),
+                                    "close_price": normalized.get("close_price"),
+                                    "price_change_pct": normalized.get("price_change_pct"),
+                                    "holding_value": normalized.get("holding_value"),
+                                    "increase_value": normalized.get("increase_value"),
+                                },
+                            )
+                        )
+                        generated_signals += 1
+
+        batch.meta = {
+            "csv_paths": [str(path) for path in self.csv_paths],
+            "snapshot_date": self.snapshot_date,
+            "files_imported": imported_files,
+            "rows_imported": imported_rows,
+            "companies_discovered": len(seen_companies),
+            "signals_generated": generated_signals,
+            "min_increase_value": self.min_increase_value,
+            "min_holding_ratio": self.min_holding_ratio,
+            "top_n_rank_signal": self.top_n_rank_signal,
+        }
+        return batch
+
+
+class DongfangAKShareCollector(DongfangCSVCollector):
+    source = "dongfang_eastmoney"
+
+    def __init__(
+        self,
+        *,
+        raw_dir: str | Path,
+        snapshot_date: str | None = None,
+        min_increase_value: float = 0.0,
+        min_holding_ratio: float = 0.0,
+        top_n_rank_signal: int = 20,
+        fetch_markets: tuple[str, ...] = ("northbound", "shanghai_connect", "shenzhen_connect", "southbound"),
+        retry: int = 3,
+        sleep_seconds: float = 1.0,
+    ) -> None:
+        super().__init__(
+            raw_dir=raw_dir,
+            csv_paths=(),
+            snapshot_date=snapshot_date,
+            min_increase_value=min_increase_value,
+            min_holding_ratio=min_holding_ratio,
+            top_n_rank_signal=top_n_rank_signal,
+        )
+        self.fetch_markets = tuple(fetch_markets)
+        self.retry = max(1, int(retry))
+        self.sleep_seconds = max(0.0, float(sleep_seconds))
+
+    @staticmethod
+    def _ak_market_name(market: str) -> str:
+        mapping = {
+            "northbound": "北向",
+            "shanghai_connect": "沪股通",
+            "shenzhen_connect": "深股通",
+        }
+        return mapping[market]
+
+    @staticmethod
+    def _southbound_trade_dates() -> tuple[str, ...]:
+        return (
+            "20260505",
+            "20260502",
+            "20260430",
+            "20260429",
+            "20260428",
+            "20260427",
+            "20260424",
+        )
+
+    @staticmethod
+    def _southbound_dataframe_from_statistics(df: Any):
+        import pandas as pd
+
+        if df is None:
+            return pd.DataFrame()
+
+        renamed = pd.DataFrame(df).copy()
+        if renamed.empty:
+            return pd.DataFrame()
+        renamed["序号"] = range(1, len(renamed) + 1)
+        renamed["代码"] = renamed.get("股票代码")
+        renamed["名称"] = renamed.get("股票简称")
+        renamed["今日收盘价"] = renamed.get("当日收盘价")
+        renamed["今日涨跌幅"] = renamed.get("当日涨跌幅")
+        renamed["今日持股-股数"] = renamed.get("持股数量")
+        renamed["今日持股-市值"] = renamed.get("持股市值")
+        renamed["今日持股-占流通股比"] = renamed.get("持股数量占发行股百分比")
+        renamed["今日持股-占总股本比"] = renamed.get("持股数量占发行股百分比")
+        renamed["今日增持估计-股数"] = None
+        renamed["今日增持估计-市值"] = renamed.get("持股市值变化-1日")
+        renamed["今日增持估计-市值增幅"] = None
+        renamed["今日增持估计-占流通股比"] = None
+        renamed["今日增持估计-占总股本比"] = None
+        renamed["所属板块"] = "Hong Kong Connect"
+        renamed["日期"] = pd.to_datetime(renamed.get("持股日期"), errors="coerce").dt.strftime("%Y-%m-%d")
+        return renamed[
+            [
+                "序号",
+                "代码",
+                "名称",
+                "今日收盘价",
+                "今日涨跌幅",
+                "今日持股-股数",
+                "今日持股-市值",
+                "今日持股-占流通股比",
+                "今日持股-占总股本比",
+                "今日增持估计-股数",
+                "今日增持估计-市值",
+                "今日增持估计-市值增幅",
+                "今日增持估计-占流通股比",
+                "今日增持估计-占总股本比",
+                "所属板块",
+                "日期",
+            ]
+        ]
+
+    def _fetch_market_df(self, market: str):
+        import os
+        import pandas as pd
+
+        for proxy_var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+            os.environ.pop(proxy_var, None)
+        os.environ["NO_PROXY"] = "*"
+        os.environ["no_proxy"] = "*"
+
+        import akshare as ak
+
+        last_error: Exception | None = None
+        if market == "southbound":
+            for trade_date in self._southbound_trade_dates():
+                for attempt in range(1, self.retry + 1):
+                    try:
+                        raw_df = ak.stock_hsgt_stock_statistics_em(
+                            symbol="南向持股",
+                            start_date=trade_date,
+                            end_date=trade_date,
+                        )
+                        df = self._southbound_dataframe_from_statistics(raw_df)
+                        if df is None or df.empty:
+                            break
+                        if self.snapshot_date is None:
+                            self.snapshot_date = trade_date[:4] + "-" + trade_date[4:6] + "-" + trade_date[6:]
+                        return df
+                    except Exception as exc:  # noqa: BLE001
+                        last_error = exc
+                        if attempt < self.retry and self.sleep_seconds > 0:
+                            time.sleep(self.sleep_seconds)
+                if self.sleep_seconds > 0:
+                    time.sleep(self.sleep_seconds)
+            if last_error is not None:
+                raise last_error
+            return pd.DataFrame()
+
+        ak_market = self._ak_market_name(market)
+        for attempt in range(1, self.retry + 1):
+            try:
+                try:
+                    df = ak.stock_hsgt_hold_stock_em(market=ak_market, indicator="今日排行")
+                except TypeError:
+                    df = ak.stock_hsgt_hold_stock_em(market=ak_market)
+                if df is None:
+                    return pd.DataFrame()
+                return df
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if attempt < self.retry and self.sleep_seconds > 0:
+                    time.sleep(self.sleep_seconds)
+        if last_error is not None:
+            raise last_error
+        return pd.DataFrame()
+
+    def collect(self) -> CollectionBatch:
+        import pandas as pd
+
+        out_dir = self.raw_dir / "dongfang_eastmoney"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fetched_paths: list[str] = []
+        fetched_meta: list[dict[str, Any]] = []
+
+        for market in self.fetch_markets:
+            df = self._fetch_market_df(market)
+            if df is None or df.empty:
+                continue
+            expected_name = f"{self._expected_market_token(market)}.csv"
+            output_path = out_dir / expected_name
+            cleaned_df = pd.DataFrame(df).copy()
+            cleaned_df.to_csv(output_path, index=False, encoding="utf-8-sig")
+            fetched_paths.append(str(output_path.resolve()))
+            fetched_meta.append(
+                {
+                    "market": market,
+                    "rows": int(len(cleaned_df)),
+                    "path": str(output_path.resolve()),
+                }
+            )
+            if self.sleep_seconds > 0:
+                time.sleep(self.sleep_seconds)
+
+        self.csv_paths = tuple(Path(path) for path in fetched_paths)
+        batch = super().collect()
+        batch.meta = {
+            **batch.meta,
+            "fetch_mode": "akshare",
+            "fetched_files": fetched_meta,
         }
         return batch
 

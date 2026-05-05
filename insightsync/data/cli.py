@@ -41,6 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--adb-end-year", type=int, default=current_year)
     parser.add_argument("--adb-min-interval-seconds", type=float, default=3.2)
 
+    parser.add_argument("--censtatd-language", default="en")
+    parser.add_argument("--censtatd-no-full-series", action="store_true")
+    parser.add_argument("--censtatd-request-timeout-seconds", type=int, default=60)
+
     parser.add_argument("--guangdong-years", default=f"{current_year},{current_year - 1}")
     parser.add_argument("--guangdong-max-links-per-category", type=int, default=20)
     parser.add_argument("--guangdong-max-tables-per-page", type=int, default=2)
@@ -92,6 +96,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--company-enable-enrichment", action="store_true")
     parser.add_argument("--company-request-timeout-seconds", type=int, default=15)
 
+    parser.add_argument("--dongfang-csv-paths", default="")
+    parser.add_argument("--dongfang-fetch", action="store_true")
+    parser.add_argument("--dongfang-fetch-markets", default="northbound,shanghai_connect,shenzhen_connect")
+    parser.add_argument("--dongfang-fetch-retry", type=int, default=3)
+    parser.add_argument("--dongfang-fetch-sleep-seconds", type=float, default=1.0)
+    parser.add_argument("--dongfang-snapshot-date", default=None)
+    parser.add_argument("--dongfang-min-increase-value", type=float, default=0.0)
+    parser.add_argument("--dongfang-min-holding-ratio", type=float, default=0.0)
+    parser.add_argument("--dongfang-top-n-rank-signal", type=int, default=20)
+
     parser.add_argument("--sync-market-companies", action="store_true")
     parser.add_argument("--backfill-company-ids", action="store_true")
     parser.add_argument("--mapping-dry-run", action="store_true")
@@ -122,6 +136,9 @@ def main() -> None:
         adb_start_year=args.adb_start_year,
         adb_end_year=args.adb_end_year,
         adb_min_interval_seconds=args.adb_min_interval_seconds,
+        censtatd_language=args.censtatd_language,
+        censtatd_include_full_series=not args.censtatd_no_full_series,
+        censtatd_request_timeout_seconds=args.censtatd_request_timeout_seconds,
         guangdong_years=_parse_years(args.guangdong_years),
         guangdong_max_links_per_category=args.guangdong_max_links_per_category,
         guangdong_max_tables_per_page=args.guangdong_max_tables_per_page,
@@ -166,6 +183,15 @@ def main() -> None:
         company_max_items=args.company_max_items,
         company_enable_enrichment=args.company_enable_enrichment,
         company_request_timeout_seconds=args.company_request_timeout_seconds,
+        dongfang_csv_paths=_parse_csv(args.dongfang_csv_paths),
+        dongfang_fetch_enabled=args.dongfang_fetch,
+        dongfang_fetch_markets=_parse_csv(args.dongfang_fetch_markets),
+        dongfang_fetch_retry=args.dongfang_fetch_retry,
+        dongfang_fetch_sleep_seconds=args.dongfang_fetch_sleep_seconds,
+        dongfang_snapshot_date=args.dongfang_snapshot_date,
+        dongfang_min_increase_value=args.dongfang_min_increase_value,
+        dongfang_min_holding_ratio=args.dongfang_min_holding_ratio,
+        dongfang_top_n_rank_signal=args.dongfang_top_n_rank_signal,
     )
 
     if args.interval_minutes > 0:
