@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from insightsync.backend.tests.test_company_api import _test_client
 
 
@@ -101,3 +103,63 @@ def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:
     assert payload["key_metrics"][0]["name"] == "revenue_growth"
     assert payload["key_risk_factors"][0]["category"] == "regulatory"
     assert payload["key_business_events"][0]["event_type"] == "expansion"
+
+
+def test_get_prospect_brief_returns_banker_facing_summary() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/brief")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["priority_level"] == "high"
+    assert payload["title"] == "Alpha Fintech Holdings brief"
+    assert "high priority" in payload["summary"]
+    assert payload["recommended_product_themes"][0] == "cross-border payments"
+    assert len(payload["top_opportunities"]) >= 1
+    assert len(payload["evidence_highlights"]) >= 1
+
+
+def test_post_prospect_question_returns_evidence_grounded_answer() -> None:
+    fake_result = {
+        "answer": "Alpha Fintech shows recent cross-border expansion evidence.",
+        "status": "ok",
+        "retrieval_run_id": 42,
+        "citations": [
+            {
+                "chunk_id": 1,
+                "document_id": 41,
+                "score": 0.9,
+                "source": "hkex_disclosure",
+                "dataset": "annual_report_publication",
+                "record_key": "hkex-annual-1",
+                "signal_key": "signal-alpha-growth",
+                "evidence_url": "https://alpha.example.com/reports/annual-2025.pdf",
+                "text": "Alpha Fintech expands into UAE",
+            }
+        ],
+        "structured_insight": {
+            "title": "Evidence-grounded summary",
+            "summary": "Alpha Fintech shows recent cross-border expansion evidence.",
+        },
+    }
+
+    with patch(
+        "insightsync.backend.services.prospect_service.InsightGenerator.answer_question",
+        return_value=fake_result,
+    ):
+        with _test_client() as client:
+            response = client.post(
+                "/api/prospects/prospect:hkg-alpha-fintech/question",
+                json={"question": "What recent expansion signals does this company have?", "include_chunks": True},
+            )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["company_id"] == "hkg-alpha-fintech"
+    assert payload["status"] == "ok"
+    assert payload["retrieval_run_id"] == 42
+    assert payload["citations"][0]["signal_key"] == "signal-alpha-growth"
+    assert payload["citations"][0]["text"] == "Alpha Fintech expands into UAE"
+    assert payload["structured_insight"]["summary"] == "Alpha Fintech shows recent cross-border expansion evidence."

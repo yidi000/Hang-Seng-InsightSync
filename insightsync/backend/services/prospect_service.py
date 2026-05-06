@@ -4,17 +4,20 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from insightsync.backend.core.config import Settings
 from insightsync.backend.repositories.read_repository import ReadRepository
 from insightsync.backend.services.company_service import CompanyService
+from insightsync.backend.services.insight_generator import InsightGenerator
 
 
 class ProspectService:
     """Build business-facing prospect views from company-centric state."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, settings: Settings | None = None) -> None:
         self.db = db
         self.repo = ReadRepository(db)
         self.company_service = CompanyService(db)
+        self.settings = settings
 
     @staticmethod
     def _prospect_id(company_id: str) -> str:
@@ -362,4 +365,82 @@ class ProspectService:
             "key_metrics": detail["key_metrics"],
             "key_risk_factors": detail["key_risk_factors"],
             "key_business_events": detail["key_business_events"],
+        }
+
+    def get_prospect_brief(self, prospect_id: str) -> dict[str, Any] | None:
+        company_id = self._company_id_from_prospect_id(prospect_id)
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+
+        prospect = self._build_prospect_summary(detail)
+        latest_state = detail["latest_state"]
+        top_opportunities = [
+            item.get("detail") or item.get("title")
+            for item in latest_state.get("opportunity_signals", [])[:3]
+            if item.get("detail") or item.get("title")
+        ]
+        top_risks = [
+            item.get("detail") or item.get("title")
+            for item in latest_state.get("risk_signals", [])[:3]
+            if item.get("detail") or item.get("title")
+        ]
+        evidence_highlights = latest_state.get("signal_highlights", [])[:3]
+
+        display_name = prospect.get("display_name") or prospect["canonical_name"]
+        summary_parts = [
+            f"{display_name} is currently {prospect['priority_level']} priority with status {prospect['status']}."
+        ]
+        if prospect.get("why_prioritized"):
+            summary_parts.append(prospect["why_prioritized"][0])
+        if prospect.get("recommended_next_step"):
+            summary_parts.append(f"Next step: {prospect['recommended_next_step']}.")
+
+        return {
+            "prospect_id": prospect_id,
+            "company_id": company_id,
+            "title": f"{display_name} brief",
+            "summary": " ".join(summary_parts),
+            "priority_level": prospect["priority_level"],
+            "recommended_next_step": prospect.get("recommended_next_step"),
+            "recommended_product_themes": prospect.get("recommended_product_themes", []),
+            "top_opportunities": top_opportunities,
+            "top_risks": top_risks,
+            "evidence_highlights": evidence_highlights,
+        }
+
+    def answer_prospect_question(
+        self,
+        prospect_id: str,
+        *,
+        question: str,
+        top_k: int | None = None,
+        insight_type: str = "explanation",
+    ) -> dict[str, Any] | None:
+        company_id = self._company_id_from_prospect_id(prospect_id)
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail or not self.settings:
+            return None
+
+        company = detail["company"]
+        filters = {
+            "company_id": company_id,
+        }
+        if company.get("region") == "Hong Kong":
+            filters["entity"] = "HKG"
+
+        result = InsightGenerator(self.db, self.settings).answer_question(
+            question=question,
+            filters=filters,
+            top_k=top_k,
+            insight_type=insight_type,
+        )
+        return {
+            "prospect_id": prospect_id,
+            "company_id": company_id,
+            "answer": result["answer"],
+            "status": result["status"],
+            "retrieval_run_id": result.get("retrieval_run_id"),
+            "citations": result.get("citations", []),
+            "structured_insight": result.get("structured_insight"),
         }

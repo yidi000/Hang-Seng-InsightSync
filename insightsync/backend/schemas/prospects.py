@@ -15,6 +15,7 @@ from insightsync.backend.schemas.companies import (
     CompanyRiskFactorOut,
     ParsedDocumentPreviewOut,
 )
+from insightsync.backend.schemas.rag import CitationOut
 from insightsync.backend.schemas.signals import SignalOut
 from insightsync.backend.schemas.timeline import TimelineEventOut
 
@@ -95,3 +96,39 @@ class ProspectScoreBreakdownOut(BaseModel):
     opportunity_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
     risk_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
     priority_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
+
+
+class ProspectBriefOut(BaseModel):
+    """Banker-facing brief derived from prospect state and linked evidence."""
+
+    prospect_id: str
+    company_id: str
+    title: str
+    summary: str
+    priority_level: str
+    recommended_next_step: str | None = None
+    recommended_product_themes: list[str] = Field(default_factory=list)
+    top_opportunities: list[str] = Field(default_factory=list)
+    top_risks: list[str] = Field(default_factory=list)
+    evidence_highlights: list[str] = Field(default_factory=list)
+
+
+class ProspectQuestionIn(BaseModel):
+    """Prospect-scoped question request."""
+
+    question: str = Field(min_length=1)
+    top_k: int | None = Field(default=None, ge=1, le=20)
+    include_chunks: bool = False
+    insight_type: str = "explanation"
+
+
+class ProspectQuestionOut(BaseModel):
+    """Prospect-scoped evidence-grounded answer."""
+
+    prospect_id: str
+    company_id: str
+    answer: str
+    status: str
+    retrieval_run_id: int | None = None
+    citations: list[CitationOut] = Field(default_factory=list)
+    structured_insight: dict | None = None

@@ -3,8 +3,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from insightsync.backend.core.config import get_settings
 from insightsync.backend.db.session import get_db
-from insightsync.backend.schemas.prospects import ProspectDetailOut, ProspectEvidenceOut, ProspectListOut
+from insightsync.backend.schemas.prospects import (
+    ProspectBriefOut,
+    ProspectDetailOut,
+    ProspectEvidenceOut,
+    ProspectListOut,
+    ProspectQuestionIn,
+    ProspectQuestionOut,
+)
 from insightsync.backend.schemas.signals import SignalListOut
 from insightsync.backend.schemas.timeline import TimelineListOut
 from insightsync.backend.services.prospect_service import ProspectService
@@ -87,3 +95,38 @@ def get_prospect_evidence(prospect_id: str, db: Session = Depends(get_db)) -> Pr
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectEvidenceOut(**payload)
+
+
+@router.get("/{prospect_id}/brief", response_model=ProspectBriefOut)
+def get_prospect_brief(prospect_id: str, db: Session = Depends(get_db)) -> ProspectBriefOut:
+    """Return a banker-facing brief for a prospect."""
+
+    payload = ProspectService(db).get_prospect_brief(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectBriefOut(**payload)
+
+
+@router.post("/{prospect_id}/question", response_model=ProspectQuestionOut)
+def ask_prospect_question(
+    prospect_id: str,
+    payload: ProspectQuestionIn,
+    db: Session = Depends(get_db),
+) -> ProspectQuestionOut:
+    """Answer a prospect-scoped question using evidence-grounded retrieval."""
+
+    settings = get_settings()
+    result = ProspectService(db, settings=settings).answer_prospect_question(
+        prospect_id,
+        question=payload.question,
+        top_k=payload.top_k,
+        insight_type=payload.insight_type,
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    db.commit()
+    citations = [
+        {**item, "text": item.get("text") if payload.include_chunks else None}
+        for item in result.get("citations", [])
+    ]
+    return ProspectQuestionOut(**{**result, "citations": citations})
