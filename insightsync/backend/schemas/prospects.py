@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from insightsync.backend.schemas.companies import (
     CompanyBusinessEventOut,
+    CompanyCoverageFlagsOut,
+    CompanyEvidenceSummaryOut,
     CompanyInsightPreviewOut,
     CompanyLatestStateOut,
     CompanyMetricOut,
@@ -58,6 +60,19 @@ class ProspectDetailOut(BaseModel):
     recent_signals: list[SignalOut] = Field(default_factory=list)
     recent_timeline: list[TimelineEventOut] = Field(default_factory=list)
     recent_insights: list[CompanyInsightPreviewOut] = Field(default_factory=list)
+    recent_documents: list[ParsedDocumentPreviewOut] = Field(default_factory=list)
+    key_metrics: list[CompanyMetricOut] = Field(default_factory=list)
+    key_risk_factors: list[CompanyRiskFactorOut] = Field(default_factory=list)
+    key_business_events: list[CompanyBusinessEventOut] = Field(default_factory=list)
+
+
+class ProspectEvidenceOut(BaseModel):
+    """Evidence bundle linked to a business-facing prospect."""
+
+    prospect_id: str
+    company_id: str
+    coverage_flags: CompanyCoverageFlagsOut
+    evidence_summary: CompanyEvidenceSummaryOut
     recent_documents: list[ParsedDocumentPreviewOut] = Field(default_factory=list)
     key_metrics: list[CompanyMetricOut] = Field(default_factory=list)
     key_risk_factors: list[CompanyRiskFactorOut] = Field(default_factory=list)

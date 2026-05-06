@@ -59,3 +59,40 @@ def test_get_prospect_detail_returns_404_for_unknown_prospect() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Prospect not found"
+
+
+def test_get_prospect_signals_returns_linked_signals() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/signals?limit=1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["signal_key"] == "signal-alpha-growth"
+
+
+def test_get_prospect_timeline_returns_linked_events() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/timeline")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["headline"] == "Alpha Fintech expands into UAE"
+    assert payload["items"][0]["company_id"] == "hkg-alpha-fintech"
+
+
+def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/evidence")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["company_id"] == "hkg-alpha-fintech"
+    assert payload["coverage_flags"]["has_parsed_reports"] is True
+    assert payload["evidence_summary"]["parsed_document_count"] == 1
+    assert payload["recent_documents"][0]["title"] == "Alpha Fintech Annual Report 2025"
+    assert payload["key_metrics"][0]["name"] == "revenue_growth"
+    assert payload["key_risk_factors"][0]["category"] == "regulatory"
+    assert payload["key_business_events"][0]["event_type"] == "expansion"

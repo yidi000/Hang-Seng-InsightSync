@@ -208,3 +208,44 @@ class ProspectService:
             "key_risk_factors": detail["key_risk_factors"],
             "key_business_events": detail["key_business_events"],
         }
+
+    def list_prospect_signals(self, prospect_id: str, *, limit: int, offset: int) -> dict[str, Any] | None:
+        company_id = prospect_id.removeprefix("prospect:")
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+        items = detail["recent_signals"]
+        return {
+            "items": items[offset : offset + limit],
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def list_prospect_timeline(self, prospect_id: str, *, limit: int, offset: int) -> dict[str, Any] | None:
+        company_id = prospect_id.removeprefix("prospect:")
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+        items = detail["recent_timeline"]
+        return {
+            "items": items[offset : offset + limit],
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def get_prospect_evidence(self, prospect_id: str) -> dict[str, Any] | None:
+        company_id = prospect_id.removeprefix("prospect:")
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+        latest_state = detail["latest_state"]
+        return {
+            "prospect_id": prospect_id,
+            "company_id": company_id,
+            "coverage_flags": latest_state["coverage_flags"],
+            "evidence_summary": latest_state["evidence_summary"],
+            "recent_documents": detail["recent_documents"],
+            "key_metrics": detail["key_metrics"],
+            "key_risk_factors": detail["key_risk_factors"],
+            "key_business_events": detail["key_business_events"],
+        }

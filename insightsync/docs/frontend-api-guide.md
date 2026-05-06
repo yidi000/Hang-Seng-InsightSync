@@ -392,43 +392,47 @@ Current limitation:
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Why not available yet:
+Current scope:
 
-- current signal data is not consistently linked to a stable `prospectId`
+- returns recent signals using the company-linked prospect identifier
 
-Can it exist later:
+Current limitation:
 
-- yes
+- still derived from `company_id`, not a separately persisted prospect lifecycle
+
 
 ### `GET /api/prospects/:prospectId/timeline`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Why not available yet:
+Current scope:
 
-- timeline exists today, but mostly at the `entity` level, not at the fully linked prospect level
+- returns company-linked timeline events through the prospect identifier
 
-Can it exist later:
+Current limitation:
 
-- yes
+- still reuses company-linked events, not a prospect-owned workflow history
+
 
 ### `GET /api/prospects/:prospectId/evidence`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Why not available yet:
+Current scope:
 
-- evidence exists today inside RAG citations and source records, but not yet as a dedicated prospect evidence endpoint
+- returns parsed-document evidence bundle for the linked company
+- includes coverage flags, evidence summary, parsed documents, metrics, risks, and business events
 
-Can it exist later:
+Current limitation:
 
-- yes
+- does not yet include curated banker notes or human review state
+
 
 ### `GET /api/prospects/:prospectId/insights`
 

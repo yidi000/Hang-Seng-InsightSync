@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from insightsync.backend.db.session import get_db
-from insightsync.backend.schemas.prospects import ProspectDetailOut, ProspectListOut
+from insightsync.backend.schemas.prospects import ProspectDetailOut, ProspectEvidenceOut, ProspectListOut
+from insightsync.backend.schemas.signals import SignalListOut
+from insightsync.backend.schemas.timeline import TimelineListOut
 from insightsync.backend.services.prospect_service import ProspectService
 
 router = APIRouter(prefix="/api/prospects", tags=["prospects"])
@@ -45,3 +47,43 @@ def get_prospect_detail(prospect_id: str, db: Session = Depends(get_db)) -> Pros
     if not detail:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectDetailOut(**detail)
+
+
+@router.get("/{prospect_id}/signals", response_model=SignalListOut)
+def list_prospect_signals(
+    prospect_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> SignalListOut:
+    """Return recent signals linked to a business-facing prospect."""
+
+    payload = ProspectService(db).list_prospect_signals(prospect_id, limit=limit, offset=offset)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return SignalListOut(**payload)
+
+
+@router.get("/{prospect_id}/timeline", response_model=TimelineListOut)
+def list_prospect_timeline(
+    prospect_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> TimelineListOut:
+    """Return recent timeline events linked to a business-facing prospect."""
+
+    payload = ProspectService(db).list_prospect_timeline(prospect_id, limit=limit, offset=offset)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return TimelineListOut(**payload)
+
+
+@router.get("/{prospect_id}/evidence", response_model=ProspectEvidenceOut)
+def get_prospect_evidence(prospect_id: str, db: Session = Depends(get_db)) -> ProspectEvidenceOut:
+    """Return parsed-document evidence linked to a business-facing prospect."""
+
+    payload = ProspectService(db).get_prospect_evidence(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectEvidenceOut(**payload)
