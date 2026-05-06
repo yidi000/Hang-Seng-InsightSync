@@ -132,3 +132,12 @@ class ProspectQuestionOut(BaseModel):
     retrieval_run_id: int | None = None
     citations: list[CitationOut] = Field(default_factory=list)
     structured_insight: dict | None = None
+
+
+class ProspectCopilotOut(BaseModel):
+    """Prospect-centered copilot workspace payload."""
+
+    prospect: ProspectSummaryOut
+    brief: ProspectBriefOut
+    evidence: ProspectEvidenceOut
+    suggested_questions: list[str] = Field(default_factory=list)

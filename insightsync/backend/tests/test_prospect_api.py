@@ -163,3 +163,18 @@ def test_post_prospect_question_returns_evidence_grounded_answer() -> None:
     assert payload["citations"][0]["signal_key"] == "signal-alpha-growth"
     assert payload["citations"][0]["text"] == "Alpha Fintech expands into UAE"
     assert payload["structured_insight"]["summary"] == "Alpha Fintech shows recent cross-border expansion evidence."
+
+
+def test_get_prospect_copilot_returns_workspace_payload() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/copilot")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect"]["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["prospect"]["priority_level"] == "high"
+    assert payload["brief"]["title"] == "Alpha Fintech Holdings brief"
+    assert payload["evidence"]["coverage_flags"]["has_parsed_reports"] is True
+    assert payload["evidence"]["key_metrics"][0]["name"] == "revenue_growth"
+    assert len(payload["suggested_questions"]) >= 2
+    assert "Alpha Fintech Holdings" in payload["suggested_questions"][0]

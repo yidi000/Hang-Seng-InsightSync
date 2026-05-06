@@ -7,6 +7,7 @@ from insightsync.backend.core.config import get_settings
 from insightsync.backend.db.session import get_db
 from insightsync.backend.schemas.prospects import (
     ProspectBriefOut,
+    ProspectCopilotOut,
     ProspectDetailOut,
     ProspectEvidenceOut,
     ProspectListOut,
@@ -130,3 +131,13 @@ def ask_prospect_question(
         for item in result.get("citations", [])
     ]
     return ProspectQuestionOut(**{**result, "citations": citations})
+
+
+@router.get("/{prospect_id}/copilot", response_model=ProspectCopilotOut)
+def get_prospect_copilot(prospect_id: str, db: Session = Depends(get_db)) -> ProspectCopilotOut:
+    """Return a prospect-centered copilot workspace payload."""
+
+    payload = ProspectService(db).get_prospect_copilot(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectCopilotOut(**payload)

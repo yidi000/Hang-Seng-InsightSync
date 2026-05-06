@@ -409,6 +409,50 @@ class ProspectService:
             "evidence_highlights": evidence_highlights,
         }
 
+    @staticmethod
+    def _suggested_questions(detail: dict[str, Any]) -> list[str]:
+        company = detail["company"]
+        latest_state = detail["latest_state"]
+        display_name = company.get("display_name") or company["canonical_name"]
+        questions: list[str] = []
+
+        if latest_state.get("opportunity_signals"):
+            questions.append(f"What are the strongest opportunity signals for {display_name}?")
+        if latest_state.get("risk_signals"):
+            questions.append(f"What are the main risks to watch for {display_name}?")
+        if latest_state["coverage_flags"].get("has_business_events"):
+            questions.append(f"What recent business events matter most for {display_name}?")
+        if latest_state["coverage_flags"].get("has_structured_metrics"):
+            questions.append(f"Which metrics best support RM outreach for {display_name}?")
+
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for item in questions:
+            if item in seen:
+                continue
+            seen.add(item)
+            ordered.append(item)
+        return ordered[:4]
+
+    def get_prospect_copilot(self, prospect_id: str) -> dict[str, Any] | None:
+        company_id = self._company_id_from_prospect_id(prospect_id)
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+
+        prospect = self._build_prospect_summary(detail)
+        brief = self.get_prospect_brief(prospect_id)
+        evidence = self.get_prospect_evidence(prospect_id)
+        if not brief or not evidence:
+            return None
+
+        return {
+            "prospect": prospect,
+            "brief": brief,
+            "evidence": evidence,
+            "suggested_questions": self._suggested_questions(detail),
+        }
+
     def answer_prospect_question(
         self,
         prospect_id: str,
