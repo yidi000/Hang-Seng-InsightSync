@@ -295,7 +295,7 @@ def run_ingestion_once(config: PipelineConfig) -> dict[str, Any]:
     cfg.raw_dir = Path(cfg.raw_dir).expanduser().resolve()
     cfg.raw_dir.mkdir(parents=True, exist_ok=True)
 
-    run_id = datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ")
+    run_id = datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%S%fZ")
     started_at = utc_now_iso()
 
     with SQLiteRepository(cfg.db_path) as repo:
@@ -361,4 +361,3 @@ def run_scheduler_loop(config: PipelineConfig, *, interval_minutes: float) -> No
         elapsed = time.monotonic() - started
         wait = max(1.0, sleep_seconds - elapsed)
         time.sleep(wait)
-

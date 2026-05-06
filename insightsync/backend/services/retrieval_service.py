@@ -23,7 +23,7 @@ class RetrievalService:
         """Return ranked evidence chunks for a question."""
 
         limit = top_k or self.settings.rag_top_k
-        if not self.settings.openai_api_key:
+        if self.settings.embedding_provider == "fallback" or not self.settings.openai_api_key:
             evidence = self._retrieve_lexical(question=question, filters=filters, limit=limit)
             run_id = self._record_retrieval(question=question, filters=filters, top_k=limit, evidence=evidence)
             return {"retrieval_run_id": run_id, "evidence": evidence}

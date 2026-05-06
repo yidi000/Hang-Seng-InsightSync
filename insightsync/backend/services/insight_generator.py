@@ -120,7 +120,7 @@ class InsightGenerator:
                 "confidence": insight.get("confidence"),
                 "record_keys": json.dumps(record_keys, ensure_ascii=False),
                 "signal_keys": json.dumps(signal_keys, ensure_ascii=False),
-                "model_name": self.settings.openai_chat_model,
+                "model_name": self.settings.chat_model,
                 "model_version": None,
                 "prompt_version": PROMPT_VERSION,
                 "meta": json.dumps({"citations": citations, "retrieval_run_id": result.get("retrieval_run_id")}, ensure_ascii=False),
@@ -181,7 +181,7 @@ class InsightGenerator:
             {
                 "retrieval_run_id": retrieval_run_id,
                 "prompt_version": PROMPT_VERSION,
-                "model_name": self.settings.openai_chat_model,
+                "model_name": self.settings.chat_model,
                 "input": json.dumps({"question": question, "evidence": evidence}, ensure_ascii=False, default=str),
                 "output": json.dumps(output, ensure_ascii=False, default=str),
                 "status": status,

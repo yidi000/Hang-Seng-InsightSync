@@ -110,6 +110,9 @@ class RagDocumentBuilder:
         return {"documents_scanned": scanned, "chunks_inserted": inserted}
 
     def _source_rows(self) -> list[dict[str, Any]]:
+        curated_rows = self._curated_source_rows()
+        if curated_rows:
+            return curated_rows
         record_rows = self.db.execute(
             text(
                 """
@@ -149,6 +152,26 @@ class RagDocumentBuilder:
             )
         ).mappings()
         return [dict(row) for row in record_rows] + [dict(row) for row in signal_rows] + [dict(row) for row in timeline_rows]
+
+    def _curated_source_rows(self) -> list[dict[str, Any]]:
+        try:
+            rows = self.db.execute(
+                text(
+                    """
+                    SELECT 'prospect_evidence_items' AS source_table, id AS source_id, source, dataset,
+                           evidence_id AS record_key, NULL::text AS signal_key, NULL::text AS entity,
+                           company_id, event_time, evidence_type AS record_type, evidence_type AS signal_type,
+                           NULL::text AS region, NULL::text AS industry, NULL::text AS lang, url AS evidence_url,
+                           title, summary, metadata_json AS payload_json, NULL::text AS signal_text
+                    FROM prospect_evidence_items
+                    ORDER BY event_time DESC NULLS LAST, id DESC
+                    LIMIT 20000
+                    """
+                )
+            ).mappings().all()
+        except Exception:
+            return []
+        return [dict(row) for row in rows]
 
     def _latest_parsed_documents(self) -> dict[tuple[str, int], dict[str, Any]]:
         try:
@@ -204,6 +227,17 @@ class RagDocumentBuilder:
                 "warnings": parsed_doc.get("warnings_json") or [],
                 "parse_version": parsed_doc.get("parse_version"),
                 "parsed_at": parsed_doc.get("parsed_at"),
+            }
+        elif row.get("source_table") == "prospect_evidence_items":
+            payload_text = _payload_to_text(row.get("payload_json"))
+            if payload_text:
+                sections.append(f"Metadata:\n{payload_text}")
+            parse_summary = {
+                "parser_name": "curated_evidence",
+                "backend_name": "curated",
+                "parse_status": "skipped",
+                "warnings": [],
+                "parse_version": "curated-v1",
             }
         else:
             parse_request, request_warnings = build_parse_request_from_row(row, title=title)

@@ -9,7 +9,7 @@ from insightsync.backend.utils import stable_hash
 
 
 class OpenAIProvider:
-    """OpenAI-backed provider with deterministic local fallbacks."""
+    """OpenAI-compatible provider with deterministic local fallbacks."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -17,7 +17,7 @@ class OpenAIProvider:
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Return embeddings for input texts."""
 
-        if not self.settings.openai_api_key:
+        if self.settings.embedding_provider == "fallback" or not self.settings.openai_api_key:
             return [self._fallback_embedding(text) for text in texts]
 
         from openai import OpenAI
@@ -38,7 +38,7 @@ class OpenAIProvider:
 
         from openai import OpenAI
 
-        client = OpenAI(api_key=self.settings.openai_api_key)
+        client = OpenAI(api_key=self.settings.chat_api_key, base_url=self.settings.llm_base_url)
         prompt = {
             "question": question,
             "insight_type": insight_type,
@@ -50,13 +50,52 @@ class OpenAIProvider:
             ],
         }
         response = client.chat.completions.create(
-            model=self.settings.openai_chat_model,
+            model=self.settings.chat_model,
             messages=[
                 {
                     "role": "system",
                     "content": "You produce evidence-grounded commercial banking insights as strict JSON.",
                 },
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            response_format={"type": "json_object"},
+        )
+        content = response.choices[0].message.content or "{}"
+        return json.loads(content)
+
+    def generate_structured_json(self, *, system: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Generate strict JSON for OpenAI-compatible chat models."""
+
+        evidence = payload.get("evidence") if isinstance(payload.get("evidence"), list) else []
+        question = str(payload.get("question") or payload.get("message") or "")
+        if not self.settings.llm_enabled:
+            citations = []
+            for item in evidence:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("evidence_id"):
+                    citations.append({"evidence_id": item.get("evidence_id"), "reason": "Matched retrieved evidence."})
+                elif item.get("chunk_id"):
+                    citations.append({"chunk_id": item.get("chunk_id"), "reason": "Matched retrieved evidence."})
+            return {
+                "status": "ok" if citations else "insufficient_evidence",
+                "title": "Evidence-grounded answer" if citations else "Insufficient evidence",
+                "summary": f"Retrieved {len(citations)} evidence item(s) relevant to: {question}" if citations else "No evidence was available.",
+                "answer": f"Retrieved {len(citations)} evidence item(s) relevant to: {question}" if citations else "Insufficient evidence was retrieved for this question.",
+                "citations": citations,
+                "suggested_actions": ["Review cited evidence before outreach."] if citations else [],
+                "confidence": 0.5 if citations else 0.0,
+                "requires_human_review": True,
+            }
+
+        from openai import OpenAI
+
+        client = OpenAI(api_key=self.settings.chat_api_key, base_url=self.settings.llm_base_url)
+        response = client.chat.completions.create(
+            model=self.settings.chat_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
             ],
             response_format={"type": "json_object"},
         )

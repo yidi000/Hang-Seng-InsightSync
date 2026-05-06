@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     openai_embedding_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBEDDING_MODEL")
     embedding_dimensions: int = Field(default=1536, alias="EMBEDDING_DIMENSIONS")
 
+    llm_provider: str = Field(default="bigmodel", alias="LLM_PROVIDER")
+    llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
+    llm_base_url: str | None = Field(default="https://open.bigmodel.cn/api/paas/v4", alias="LLM_BASE_URL")
+    llm_chat_model: str = Field(default="glm-4.7-flash", alias="LLM_CHAT_MODEL")
+    embedding_provider: str = Field(default="fallback", alias="EMBEDDING_PROVIDER")
+
     rag_top_k: int = Field(default=6, alias="RAG_TOP_K")
     rag_min_score: float = Field(default=0.15, alias="RAG_MIN_SCORE")
     enable_llm_generation: bool = Field(default=False, alias="ENABLE_LLM_GENERATION")
@@ -57,7 +63,19 @@ class Settings(BaseSettings):
     def llm_enabled(self) -> bool:
         """Return whether real LLM calls are allowed."""
 
-        return bool(self.enable_llm_generation and self.openai_api_key)
+        return bool(self.enable_llm_generation and self.chat_api_key)
+
+    @property
+    def chat_api_key(self) -> str | None:
+        """Return the configured chat API key with legacy OpenAI fallback."""
+
+        return self.llm_api_key or self.openai_api_key
+
+    @property
+    def chat_model(self) -> str:
+        """Return the configured chat model with legacy OpenAI fallback."""
+
+        return self.llm_chat_model or self.openai_chat_model
 
 
 @lru_cache

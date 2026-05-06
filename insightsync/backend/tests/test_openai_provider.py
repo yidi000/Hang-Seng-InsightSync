@@ -21,3 +21,11 @@ def test_fallback_generation_requires_evidence() -> None:
 
     assert output["status"] == "insufficient_evidence"
     assert output["citations"] == []
+
+
+def test_llm_settings_use_glm_compatible_defaults() -> None:
+    settings = Settings(ENABLE_LLM_GENERATION=True, LLM_API_KEY="test-key")
+
+    assert settings.llm_enabled is True
+    assert settings.chat_model == "glm-4.7-flash"
+    assert settings.llm_base_url == "https://open.bigmodel.cn/api/paas/v4"

@@ -38,6 +38,12 @@ class ReadRepository:
             return default
         return parsed
 
+    @staticmethod
+    def _bounded_string_ids(value: Any, *, limit: int = 10) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, str)][:limit]
+
     def _hydrate_company_row(self, row: dict[str, Any]) -> dict[str, Any]:
         return {
             **row,
@@ -398,3 +404,123 @@ class ReadRepository:
             "signal_type_distribution": [dict(row) for row in signal_dist],
             "source_distribution": [dict(row) for row in source_dist],
         }
+
+    def dashboard_summary(self) -> dict[str, Any]:
+        lead_pool = int(self.db.execute(text("SELECT COUNT(*) FROM prospects")).scalar_one())
+        high_priority = int(self.db.execute(text("SELECT COUNT(*) FROM prospect_scores WHERE tier IN ('A', 'B')")).scalar_one())
+        cross_border = int(
+            self.db.execute(text("SELECT COUNT(*) FROM prospect_signals WHERE signal_subtype = 'cross_border'")).scalar_one()
+        )
+        financing = int(
+            self.db.execute(text("SELECT COUNT(*) FROM prospect_signals WHERE signal_subtype = 'funding'")).scalar_one()
+        )
+        last_updated = self.db.execute(
+            text("SELECT MAX(updated_at)::text FROM prospect_scores")
+        ).scalar_one_or_none()
+        return {
+            "leadPool": lead_pool,
+            "highPriority": high_priority,
+            "crossBorder": cross_border,
+            "financingSignals": financing,
+            "lastUpdated": last_updated,
+        }
+
+    def chart_breakdown(self, column: str) -> list[dict[str, Any]]:
+        if column not in {"industry", "region", "size_band"}:
+            raise ValueError("Unsupported breakdown column")
+        rows = self.db.execute(
+            text(
+                f"""
+                WITH buckets AS (
+                  SELECT COALESCE({column}, 'Unknown') AS key,
+                         COALESCE({column}, 'Unknown') AS label,
+                         COUNT(*) AS value
+                  FROM prospects
+                  GROUP BY {column}
+                  ORDER BY value DESC, label ASC
+                  LIMIT 20
+                )
+                SELECT b.key, b.label, b.value,
+                       COALESCE(drilldown.prospect_ids, ARRAY[]::text[]) AS prospect_ids,
+                       ARRAY[]::text[] AS evidence_ids
+                FROM buckets b
+                LEFT JOIN LATERAL (
+                  SELECT array_agg(limited.prospect_id ORDER BY limited.last_activity_at DESC NULLS LAST, limited.prospect_id ASC) AS prospect_ids
+                  FROM (
+                    SELECT p.prospect_id, p.last_activity_at
+                    FROM prospects p
+                    WHERE COALESCE(p.{column}, 'Unknown') = b.key
+                    ORDER BY p.last_activity_at DESC NULLS LAST, p.prospect_id ASC
+                    LIMIT 10
+                  ) limited
+                ) drilldown ON TRUE
+                ORDER BY b.value DESC, b.label ASC
+                """
+            )
+        ).mappings()
+        return [
+            {
+                "key": row["key"],
+                "label": row["label"],
+                "value": row["value"],
+                "drilldown": {
+                    "prospectIds": self._bounded_string_ids(row.get("prospect_ids"), limit=10),
+                    "evidenceIds": self._bounded_string_ids(row.get("evidence_ids"), limit=10),
+                },
+            }
+            for row in rows
+        ]
+
+    def signal_breakdown(self) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            text(
+                """
+                SELECT signal_subtype AS key, signal_subtype AS label, COUNT(*) AS value
+                FROM prospect_signals
+                GROUP BY signal_subtype
+                ORDER BY value DESC, label ASC
+                LIMIT 20
+                """
+            )
+        ).mappings()
+        return [dict(row) for row in rows]
+
+    def priority_prospects(self, *, limit: int = 10) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            text(
+                """
+                SELECT p.prospect_id, p.display_name, p.industry, p.region, s.score, s.tier,
+                       s.reasons_json, s.recommended_products_json, s.recommended_entry_angle,
+                       s.score_inputs_json
+                FROM prospect_scores s
+                JOIN prospects p ON p.prospect_id = s.prospect_id
+                ORDER BY s.score DESC, p.last_activity_at DESC NULLS LAST
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        ).mappings()
+        return [
+            {
+                **dict(row),
+                "score_reasons": self._json_field(row.get("reasons_json"), []),
+                "recommended_products": self._json_field(row.get("recommended_products_json"), []),
+                "score_inputs": self._json_field(row.get("score_inputs_json"), {}),
+            }
+            for row in rows
+        ]
+
+    def dashboard_trigger_signals(self, *, limit: int = 10) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            text(
+                """
+                SELECT ps.signal_id, ps.prospect_id, ps.signal_type, ps.signal_subtype, ps.signal_text,
+                       ps.event_time::text AS event_time, ps.metadata_json->>'source' AS source
+                FROM prospect_signals ps
+                ORDER BY ps.event_time DESC NULLS LAST, ps.id DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        ).mappings()
+        return [dict(row) for row in rows]
