@@ -42,7 +42,7 @@ Current status:
 
 - `signalId`: available now through `id` in `/api/signals`
 - `insightId`: not exposed yet as a dedicated field in frontend-ready APIs
-- `prospectId`: not available now because the backend does not yet have a proper prospect domain model
+- `prospectId`: available now in first-pass form through `/api/prospects` as `prospect:{company_id}`
 - `entityId`: not available now; current APIs expose `entity` as a string label such as `HKG`
 
 ### Time format
@@ -349,40 +349,44 @@ Frontend note:
 
 Status:
 
-- `Planned later`
+- `Available now`
 
 Frontend need:
 
 - prospect list page with search, filters, and pagination
 
-Why not available yet:
+Current scope:
 
-- no prospect domain model
-- no search layer for named companies
-- no ranking, tiering, revenue normalization, or company card assembly yet
+- first-pass business-facing list derived from `company latest-state`
+- includes `priority_level`, `priority_score`, `opportunity_score`, `risk_score`
+- includes `recommended_next_step` and `recommended_product_themes`
+- supports search and basic filters aligned to company fields
 
-Can it exist later:
+Current limitation:
 
-- yes
+- no dedicated persisted prospect table yet
+- no RM ownership model yet
+- no revenue normalization or banker-assignment logic yet
 
 ### `GET /api/prospects/:prospectId`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
 Frontend need:
 
 - prospect detail base profile
 
-Why not available yet:
+Current scope:
 
-- no prospect record identity
-- no company profile aggregation service
+- returns a business-facing prospect object plus linked company evidence
+- detail is derived from the existing company-centric evidence layer
 
-Can it exist later:
+Current limitation:
 
-- yes
+- prospect identity is still derived from `company_id`
+- no separate persisted prospect lifecycle yet
 
 ### `GET /api/prospects/:prospectId/signals`
 
@@ -816,10 +820,15 @@ Frontend can connect now:
 
 ### Prospect List / Prospect Detail
 
-Frontend cannot connect yet:
+Frontend can connect now:
 
-- all `prospects` endpoints are still future work
-- frontend can use the `companies` endpoints as the current company-centric substitute
+- `GET /api/prospects`
+- `GET /api/prospects/{prospect_id}`
+
+Current limitation:
+
+- `prospect_id` is currently derived from `company_id`
+- signal/timeline/evidence sub-resources under `/api/prospects/:id/*` are still future work
 
 ## Filter Metadata
 

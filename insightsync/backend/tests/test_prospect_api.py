@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from insightsync.backend.tests.test_company_api import _test_client
+
+
+def test_list_prospects_returns_ranked_business_view() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 2
+    assert payload["limit"] == 20
+    assert payload["offset"] == 0
+    assert len(payload["items"]) == 2
+
+    top = payload["items"][0]
+    assert top["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert top["company_id"] == "hkg-alpha-fintech"
+    assert top["status"] == "actionable"
+    assert top["priority_level"] == "high"
+    assert top["priority_score"] >= payload["items"][1]["priority_score"]
+    assert top["opportunity_score"] > top["risk_score"]
+    assert "growth" in top["focus_tags"]
+    assert "cross-border payments" in top["recommended_product_themes"]
+    assert top["recommended_next_step"].startswith("review latest risk factors")
+    assert len(top["why_prioritized"]) >= 2
+
+
+def test_list_prospects_supports_priority_filter() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects?priority_level=high")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["prospect_id"] == "prospect:hkg-alpha-fintech"
+
+
+def test_get_prospect_detail_returns_company_backed_detail() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect"]["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["prospect"]["priority_level"] == "high"
+    assert payload["prospect"]["recommended_product_themes"][0] == "cross-border payments"
+    assert payload["company"]["company_id"] == "hkg-alpha-fintech"
+    assert payload["latest_state"]["status"] == "actionable"
+    assert payload["recent_signals"][0]["signal_key"] == "signal-alpha-growth"
+    assert payload["recent_documents"][0]["title"] == "Alpha Fintech Annual Report 2025"
+    assert payload["key_metrics"][0]["name"] == "revenue_growth"
+
+
+def test_get_prospect_detail_returns_404_for_unknown_prospect() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:missing-company")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Prospect not found"
