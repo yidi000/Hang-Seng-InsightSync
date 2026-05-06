@@ -20,16 +20,20 @@ The goal is to answer three questions clearly:
 
 Frontend-facing endpoints should return page-ready JSON instead of raw database rows.
 
-The current backend already does this for implemented endpoints, but some future endpoints still need business-layer aggregation before they should be exposed.
+Current status:
+
+- implemented company, prospect, and dashboard endpoints already return frontend-friendly business payloads
+- older low-level endpoints such as `/api/signals` and `/api/timeline` still look closer to source-shaped records
 
 ### Stable IDs
 
-Current implemented endpoints provide stable numeric IDs for database-backed resources:
+Current implemented endpoints provide stable IDs for database-backed or derived resources:
 
 - `id` on signals
 - `id` on timeline events
 - `chunk_id` and `document_id` on RAG citations
 - `retrieval_run_id` on RAG query responses
+- `prospect_id` on `/api/prospects*` and dashboard prospect blocks
 
 The frontend request document asks for business IDs such as:
 
@@ -40,10 +44,10 @@ The frontend request document asks for business IDs such as:
 
 Current status:
 
-- `signalId`: available now through `id` in `/api/signals`
+- `signalId`: available now through `id` in `/api/signals` and `signal_id` in dashboard trigger cards
 - `insightId`: not exposed yet as a dedicated field in frontend-ready APIs
-- `prospectId`: available now in first-pass form through `/api/prospects` as `prospect:{company_id}`
-- `entityId`: not available now; current APIs expose `entity` as a string label such as `HKG`
+- `prospectId`: available now as `prospect:{company_id}`
+- `entityId`: not available now as a separate normalized business object ID; current APIs still mainly expose company IDs and string entity labels such as `HKG`
 
 ### Time format
 
@@ -51,8 +55,8 @@ All new frontend-facing APIs should use ISO-8601 timestamps.
 
 Current status:
 
-- implemented endpoints already serialize datetime-compatible values through FastAPI/Pydantic
-- older source data still contains date-like strings from upstream records, so some payload values remain source-shaped
+- implemented endpoints serialize datetime-compatible values through FastAPI/Pydantic
+- older source data still contains date-like strings from upstream records, so some low-level payload values remain source-shaped
 
 ### Optional field rules
 
@@ -73,6 +77,9 @@ Current implemented pagination:
 
 - `/api/signals`: `items`, `limit`, `offset`
 - `/api/timeline`: `items`, `limit`, `offset`
+- `/api/prospects`: `items`, `limit`, `offset`
+- `/api/prospects/{prospect_id}/signals`: `items`, `limit`, `offset`
+- `/api/prospects/{prospect_id}/timeline`: `items`, `limit`, `offset`
 
 Requested future pagination:
 
@@ -111,116 +118,147 @@ Current status:
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Frontend need:
+Purpose:
 
-- top four homepage cards
-- `leadPool`
-- `highPriority`
-- `crossBorder`
-- `financingSignals`
-- `lastUpdated`
+- homepage summary cards derived from the current prospect layer
 
-Current backend substitute:
-
-- `GET /api/dashboard/overview`
-
-Why not available yet:
-
-- the backend does not yet have a stable prospect model or ranking model
-- `leadPool` and `highPriority` require prospect-level scoring logic that is not implemented yet
-- `crossBorder` and `financingSignals` also need explicit counting rules at company level or signal level
-
-Can it exist later:
-
-- yes
-
-Recommended future response shape:
+Current response shape:
 
 ```json
 {
-  "leadPool": 1247,
-  "highPriority": 86,
-  "crossBorder": 234,
-  "financingSignals": 45,
-  "lastUpdated": "2026-04-20T10:32:00Z"
+  "lead_pool": 1247,
+  "high_priority": 86,
+  "cross_border": 234,
+  "financing_signals": 45,
+  "last_updated": "2026-05-06T10:32:00Z"
 }
 ```
+
+Current logic:
+
+- `lead_pool`: count of current prospects
+- `high_priority`: prospects whose `priority_level` is `high`
+- `cross_border`: prospects whose `focus_tags` include `cross_border`
+- `financing_signals`: prospects whose `focus_tags` include financing-oriented tags such as `financing`, `market`, `growth`, or `expansion`
+
+Frontend note:
+
+- backend field names are currently `snake_case`
+- if the UI expects `camelCase`, the frontend adapter should map them explicitly
 
 ### `GET /api/dashboard/market-overview`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Frontend need:
+Purpose:
 
 - homepage chart section
-- `industryBreakdown`
-- `regionBreakdown`
-- `companySizeBreakdown`
+- `industry_breakdown`
+- `region_breakdown`
+- `company_size_breakdown`
 
-Current backend substitute:
+Current response shape:
 
-- `GET /api/dashboard/overview` exposes source and signal-type breakdowns only
+```json
+{
+  "industry_breakdown": [
+    { "name": "Payments", "count": 8 }
+  ],
+  "region_breakdown": [
+    { "name": "Hong Kong", "count": 12 }
+  ],
+  "company_size_breakdown": []
+}
+```
 
-Why not available yet:
+Current logic:
 
-- industry and region breakdown can be derived from current data
-- company size breakdown is not available because there is no company financial profile model yet
+- `industry_breakdown`: aggregated from current prospect/company industries
+- `region_breakdown`: aggregated from current prospect/company regions
+- `company_size_breakdown`: intentionally empty today because there is no reliable size model yet
 
-Can it exist later:
+Frontend note:
 
-- yes
-
-Notes:
-
-- `industryBreakdown`: feasible later from normalized data
-- `regionBreakdown`: feasible later from normalized data
-- `companySizeBreakdown`: feasible only after a company/prospect profile layer exists
+- `company_size_breakdown` being `[]` is expected, not an error
+- backend does not fabricate size buckets without real company profile data
 
 ### `GET /api/dashboard/priority-prospects`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Frontend need:
+Purpose:
 
 - homepage priority prospect list
 
-Why not available yet:
+Current response shape:
 
-- there is no implemented `prospect_scores` generation pipeline
-- there is no stable prospect entity API yet
+```json
+{
+  "items": [
+    {
+      "prospect_id": "prospect:hkg-alpha-fintech",
+      "company_id": "hkg-alpha-fintech",
+      "display_name": "Alpha Fintech Holdings",
+      "priority_level": "high",
+      "priority_score": 82,
+      "opportunity_score": 74,
+      "risk_score": 21,
+      "region": "Hong Kong",
+      "industries": ["Payments"],
+      "focus_tags": ["growth", "cross_border"],
+      "why_prioritized": ["Recent expansion signals", "Cross-border activity"],
+      "recommended_next_step": "Review recent expansion and treasury needs."
+    }
+  ]
+}
+```
 
-Can it exist later:
+Current logic:
 
-- yes
+- list is derived from the current prospect layer
+- top items are sorted by prospect priority
+- payload is intentionally compact for homepage use
 
 ### `GET /api/dashboard/trigger-signals`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Current backend substitute:
+Purpose:
 
-- `GET /api/signals`
+- homepage trigger-signal cards
 
-Why not available yet:
+Current response shape:
 
-- current `/api/signals` returns general signal records, not a homepage-tailored compact panel response
+```json
+{
+  "items": [
+    {
+      "signal_id": 11,
+      "company_id": "hkg-alpha-fintech",
+      "prospect_id": "prospect:hkg-alpha-fintech",
+      "signal_type": "growth",
+      "source": "hk_gov_news",
+      "title": "Alpha Fintech expands into UAE",
+      "event_time": "2026-05-05T08:00:00Z",
+      "focus_tags": ["growth", "cross_border"]
+    }
+  ]
+}
+```
 
-Can it exist later:
+Current logic:
 
-- yes
-
-Frontend can use now:
-
-- call `/api/signals?limit=5&entity=HKG`
-- map each item into homepage cards manually
+- cards are pulled from recent signals
+- when a signal is linked to a company, the API also derives the linked `prospect_id`
+- `focus_tags` are backfilled from the linked prospect for lightweight UI context
 
 ### `GET /api/companies`
 
@@ -282,9 +320,8 @@ Current response shape:
 
 Frontend note:
 
-- This endpoint is the first company-centric substitute for the future prospects list.
-- It does not yet provide banker ranking, tiering, or revenue features.
-- It is suitable now for a company explorer or candidate list page.
+- this endpoint is the company explorer and base company list
+- it is not the same thing as the business-facing prospect list
 
 ### `GET /api/companies/{company_id}`
 
@@ -296,54 +333,11 @@ Purpose:
 
 - company-centric detail view with recent signals, timeline, and generated insights
 
-Current response shape:
-
-```json
-{
-  "company": {
-    "source": "company_directory",
-    "company_id": "hkg-alpha-fintech",
-    "canonical_name": "Alpha Fintech",
-    "display_name": "Alpha Fintech Holdings",
-    "country": "China",
-    "region": "Hong Kong",
-    "city": "Hong Kong",
-    "segments": ["fintech", "sme"],
-    "industries": ["Payments"],
-    "website_url": "https://alpha.example.com",
-    "linkedin_url": "https://linkedin.com/company/alpha",
-    "facebook_url": null,
-    "x_url": null,
-    "instagram_url": null,
-    "wikipedia_url": null,
-    "profile_summary": "Latest summary",
-    "description": "Latest description",
-    "extra": { "seed_source": "manual_seed_v2" },
-    "updated_at": "2026-04-20T09:00:00Z"
-  },
-  "stats": {
-    "signal_count": 2,
-    "timeline_event_count": 1,
-    "generated_insight_count": 1,
-    "last_signal_at": "2026-04-22T10:00:00Z",
-    "last_event_at": "2026-04-22T10:00:00Z",
-    "last_insight_at": "2026-04-22T11:00:00Z",
-    "signal_type_distribution": [
-      { "name": "cross_border", "count": 1 },
-      { "name": "growth", "count": 1 }
-    ]
-  },
-  "recent_signals": [],
-  "recent_timeline": [],
-  "recent_insights": []
-}
-```
-
 Frontend note:
 
-- This endpoint is the first company-centric substitute for the future prospect detail page.
-- It is useful now for a company drill-down page and evidence panel.
-- It is still not the full final `prospects/:id` contract.
+- this is the fact-layer company detail
+- it is useful for evidence drill-down and raw company context
+- it is not the same thing as the banker-facing prospect detail contract
 
 ### `GET /api/prospects`
 
@@ -357,7 +351,7 @@ Frontend need:
 
 Current scope:
 
-- first-pass business-facing list derived from `company latest-state`
+- business-facing list derived from `company latest-state`
 - includes `priority_level`, `priority_score`, `opportunity_score`, `risk_score`
 - includes `score_breakdown` so the frontend can explain where the scores came from
 - includes `recommended_next_step` and `recommended_product_themes`
@@ -369,7 +363,7 @@ Current limitation:
 - no RM ownership model yet
 - no revenue normalization or banker-assignment logic yet
 
-### `GET /api/prospects/:prospectId`
+### `GET /api/prospects/{prospect_id}`
 
 Status:
 
@@ -389,7 +383,7 @@ Current limitation:
 - prospect identity is still derived from `company_id`
 - no separate persisted prospect lifecycle yet
 
-### `GET /api/prospects/:prospectId/signals`
+### `GET /api/prospects/{prospect_id}/signals`
 
 Status:
 
@@ -399,12 +393,7 @@ Current scope:
 
 - returns recent signals using the company-linked prospect identifier
 
-Current limitation:
-
-- still derived from `company_id`, not a separately persisted prospect lifecycle
-
-
-### `GET /api/prospects/:prospectId/timeline`
+### `GET /api/prospects/{prospect_id}/timeline`
 
 Status:
 
@@ -414,12 +403,7 @@ Current scope:
 
 - returns company-linked timeline events through the prospect identifier
 
-Current limitation:
-
-- still reuses company-linked events, not a prospect-owned workflow history
-
-
-### `GET /api/prospects/:prospectId/evidence`
+### `GET /api/prospects/{prospect_id}/evidence`
 
 Status:
 
@@ -434,8 +418,44 @@ Current limitation:
 
 - does not yet include curated banker notes or human review state
 
+### `GET /api/prospects/{prospect_id}/brief`
 
-### `GET /api/prospects/:prospectId/insights`
+Status:
+
+- `Available now`
+
+Current scope:
+
+- returns a banker-facing summary block for quick briefing
+- derived from the current prospect and evidence state
+
+### `POST /api/prospects/{prospect_id}/question`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- answers a prospect-scoped question through evidence-grounded retrieval
+- can optionally return chunk text when `include_chunks=true`
+
+Current limitation:
+
+- response quality still depends on current retrieval coverage and prompt quality
+
+### `GET /api/prospects/{prospect_id}/copilot`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- returns a prospect-centered copilot workspace payload
+- intended to give the frontend a single entry payload for ask/brief/evidence context
+
+### `GET /api/prospects/{prospect_id}/insights`
 
 Status:
 
@@ -444,14 +464,11 @@ Status:
 Current backend substitute:
 
 - `POST /api/insights/generate`
+- `POST /api/prospects/{prospect_id}/question`
 
 Why not available yet:
 
-- insight generation exists, but not yet as a prospect-scoped historical list endpoint
-
-Can it exist later:
-
-- yes
+- insight generation exists, but not yet as a dedicated prospect-scoped historical list endpoint
 
 ### `GET /api/metadata/filters`
 
@@ -481,15 +498,6 @@ Purpose:
 
 - backend online check
 
-Example response:
-
-```json
-{
-  "status": "ok",
-  "app_env": "local"
-}
-```
-
 ### `GET /api/dashboard/overview`
 
 Status:
@@ -498,42 +506,60 @@ Status:
 
 Purpose:
 
-- general dashboard overview
+- operational dashboard overview
 
 What it is good for:
 
 - backend status card
 - ingestion status
-- basic KPI cards
 - source distribution chart
 - signal-type distribution chart
 
 What it is not:
 
-- not the final `dashboard/summary`
-- not the final `market-overview`
+- not the homepage business summary
+- not the priority prospect list
+- not the market opportunity overview expected by the banker-facing homepage
 
-Example response:
+### `GET /api/dashboard/summary`
 
-```json
-{
-  "ingestion_runs": 5,
-  "intelligence_records": 177,
-  "trigger_signals": 1334,
-  "timeline_events": 183,
-  "generated_insights": 0,
-  "latest_run_status": "success",
-  "latest_run_id": "run-20260407T011831Z",
-  "signal_type_distribution": [
-    { "name": "market", "count": 1168 },
-    { "name": "cross_border", "count": 162 }
-  ],
-  "source_distribution": [
-    { "name": "hkma", "count": 100 },
-    { "name": "guangdong_stats", "count": 71 }
-  ]
-}
-```
+Status:
+
+- `Available now`
+
+Purpose:
+
+- homepage summary cards
+
+### `GET /api/dashboard/market-overview`
+
+Status:
+
+- `Available now`
+
+Purpose:
+
+- homepage market opportunity charts
+
+### `GET /api/dashboard/priority-prospects`
+
+Status:
+
+- `Available now`
+
+Purpose:
+
+- homepage top prospects panel
+
+### `GET /api/dashboard/trigger-signals`
+
+Status:
+
+- `Available now`
+
+Purpose:
+
+- homepage trigger signals panel
 
 ### `GET /api/signals`
 
@@ -543,53 +569,12 @@ Status:
 
 Purpose:
 
-- paginated trigger signal list
-
-Query params:
-
-- `limit`
-- `offset`
-- `entity`
-- `signal_type`
-- `source`
-- `date_from`
-- `date_to`
-
-Current response shape:
-
-```json
-{
-  "items": [
-    {
-      "id": 1220,
-      "source": "hkma",
-      "dataset": "press_releases_en",
-      "signal_key": "press_releases_en|2026-03-31|title|Residential Mortgage Survey Results for February 2026",
-      "signal_type": "market",
-      "company_id": null,
-      "entity": "HKG",
-      "event_time": "2026-03-31T00:00:00",
-      "indicator": "title",
-      "value_num": 2026.0,
-      "value_text": "Residential Mortgage Survey Results for February 2026",
-      "unit": null,
-      "signal_text": "title: Residential Mortgage Survey Results for February 2026",
-      "signal_score": null,
-      "signal_level": null,
-      "evidence_refs": ["hkma", "press_releases_en"],
-      "extra": { "lang": "en" }
-    }
-  ],
-  "limit": 20,
-  "offset": 0
-}
-```
+- paginated low-level trigger signal list
 
 Frontend note:
 
-- This endpoint is usable now for a signal list page.
-- It is also usable as a temporary data source for the dashboard trigger signals panel.
-- Current `id` can be treated as `signalId` for UI state and list rendering.
+- usable now for signal pages and debug/detail experiences
+- current `id` can be treated as `signalId` for UI state and list rendering
 
 ### `GET /api/timeline`
 
@@ -599,51 +584,7 @@ Status:
 
 Purpose:
 
-- paginated event timeline
-
-Query params:
-
-- `limit`
-- `offset`
-- `company_id`
-- `entity`
-- `event_type`
-- `source`
-- `date_from`
-- `date_to`
-
-Current response shape:
-
-```json
-{
-  "items": [
-    {
-      "id": 81,
-      "source": "hkma",
-      "company_id": null,
-      "entity": "HKG",
-      "event_time": "2026-04-02T00:00:00",
-      "event_type": "event",
-      "headline": "Exchange Fund Bills Tender Results",
-      "detail": "Exchange Fund Bills Tender Results",
-      "evidence_url": null,
-      "payload": {
-        "source": "hkma",
-        "dataset": "press_releases_en",
-        "record_key": "press_releases_en|Exchange Fund Bills Tender Results|idx-0"
-      }
-    }
-  ],
-  "limit": 20,
-  "offset": 0
-}
-```
-
-Frontend note:
-
-- This endpoint is usable now for a timeline page.
-- It can also serve as a temporary detail evidence timeline for entity-level experiences.
-- It is not yet a proper `prospectId` timeline API.
+- paginated low-level event timeline
 
 ### `GET /api/rag/index/status`
 
@@ -655,18 +596,6 @@ Purpose:
 
 - admin or debug status page
 
-Current response shape:
-
-```json
-{
-  "document_count": 1694,
-  "chunk_count": 1694,
-  "embedded_chunk_count": 1694,
-  "embedding_model": "text-embedding-3-small",
-  "last_indexed_at": "2026-04-16 19:17:44.04974+00"
-}
-```
-
 ### `POST /api/rag/query`
 
 Status:
@@ -675,56 +604,12 @@ Status:
 
 Purpose:
 
-- Copilot / RAG question answering
-
-Request body:
-
-```json
-{
-  "question": "What cross-border signals are recent for Hong Kong?",
-  "filters": {
-    "entity": "HKG",
-    "signal_type": "cross_border"
-  },
-  "top_k": 3,
-  "include_chunks": false
-}
-```
-
-Current response shape:
-
-```json
-{
-  "answer": "Retrieved 3 evidence item(s) relevant to: What cross-border signals are recent for Hong Kong?",
-  "status": "ok",
-  "retrieval_run_id": 4,
-  "citations": [
-    {
-      "chunk_id": 1588,
-      "document_id": 1588,
-      "score": 0.125,
-      "source": "hkma",
-      "dataset": "press_releases_en",
-      "record_key": "press_releases_en|Inaugural Guangdong-Hong Kong-Macao-Shenzhen Joint Financial Regulatory Meeting|idx-16",
-      "signal_key": null,
-      "evidence_url": null,
-      "text": null
-    }
-  ],
-  "structured_insight": {
-    "status": "ok",
-    "insight_type": "explanation",
-    "title": "Evidence-grounded summary",
-    "summary": "Retrieved 3 evidence item(s) relevant to: What cross-border signals are recent for Hong Kong?"
-  }
-}
-```
+- general Copilot / RAG question answering
 
 Frontend note:
 
-- This is the current endpoint for the Copilot chat panel.
-- The frontend should not call OpenAI directly.
-- The frontend should call this endpoint and render `answer`, `status`, and `citations`.
+- this remains the generic ask endpoint
+- for prospect-specific pages, prefer the prospect-scoped APIs first
 
 ### `POST /api/insights/generate`
 
@@ -736,66 +621,17 @@ Purpose:
 
 - generate a structured insight and persist it if valid citations exist
 
-Request body:
-
-```json
-{
-  "question": "Summarize recent cross-border signals for HKG",
-  "insight_type": "action",
-  "filters": {
-    "entity": "HKG"
-  }
-}
-```
-
-Current response shape:
-
-```json
-{
-  "status": "ok",
-  "insight": {
-    "status": "ok",
-    "insight_type": "action",
-    "title": "Evidence-grounded summary",
-    "summary": "Retrieved 6 evidence item(s) relevant to: Summarize recent cross-border signals for HKG",
-    "recommended_action": "Review the cited evidence before taking client action."
-  },
-  "citations": [
-    {
-      "chunk_id": 1578,
-      "document_id": 1578,
-      "score": 0.3333333333333333,
-      "source": "hkma",
-      "dataset": "press_releases_en",
-      "record_key": "press_releases_en|International Reserves and Foreign Currency Liquidity|idx-6",
-      "signal_key": null,
-      "evidence_url": null,
-      "text": "Title : International Reserves and Foreign Currency Liquidity ..."
-    }
-  ]
-}
-```
-
-Frontend note:
-
-- This is the current closest match to future AI insight blocks.
-- It is useful now for a generated recommendation panel.
-- It is not yet the same as `GET /api/prospects/:id/insights`.
-
 ## What Frontend Can Connect To Today
 
 ### Homepage
 
 Frontend can connect now:
 
-- `GET /api/dashboard/overview`
-- `GET /api/signals?limit=5...`
-
-Frontend cannot connect yet:
-
-- final top-card summary API
-- final market overview API
-- final priority prospect list API
+- `GET /api/dashboard/summary`
+- `GET /api/dashboard/market-overview`
+- `GET /api/dashboard/priority-prospects`
+- `GET /api/dashboard/trigger-signals`
+- `GET /api/dashboard/overview` for operational/admin panels
 
 ### Signals Page
 
@@ -822,6 +658,9 @@ Frontend can connect now:
 
 - `POST /api/rag/query`
 - `POST /api/insights/generate`
+- `GET /api/prospects/{prospect_id}/copilot`
+- `GET /api/prospects/{prospect_id}/brief`
+- `POST /api/prospects/{prospect_id}/question`
 
 ### Prospect List / Prospect Detail
 
@@ -829,11 +668,17 @@ Frontend can connect now:
 
 - `GET /api/prospects`
 - `GET /api/prospects/{prospect_id}`
+- `GET /api/prospects/{prospect_id}/signals`
+- `GET /api/prospects/{prospect_id}/timeline`
+- `GET /api/prospects/{prospect_id}/evidence`
+- `GET /api/prospects/{prospect_id}/brief`
+- `POST /api/prospects/{prospect_id}/question`
+- `GET /api/prospects/{prospect_id}/copilot`
 
 Current limitation:
 
 - `prospect_id` is currently derived from `company_id`
-- signal/timeline/evidence sub-resources under `/api/prospects/:id/*` are still future work
+- there is not yet a separately persisted banker workflow state
 
 ## Filter Metadata
 
@@ -849,9 +694,10 @@ For now, frontend can hardcode or derive temporary options from current API resu
 
 Current feasible temporary values:
 
-- `entity`: currently `HKG` is the most reliable option
-- `signal_type`: `market`, `cross_border`, `financing`, `risk`
-- `source`: `hkma`, `guangdong_stats`, `adb_kidb`, `kpmg`
+- `entity`: currently `HKG` is the most reliable option on low-level signal/timeline views
+- `signal_type`: `market`, `cross_border`, `financing`, `risk`, `growth`
+- `source`: depends on loaded source coverage
+- `priority_level`: `high`, `medium`, `low` on the prospect layer
 
 ## Empty Data Rules
 
@@ -872,14 +718,13 @@ Use these rules in frontend integration:
 
 ## Recommended Next Backend Additions
 
-If the frontend wants to match the current UI more closely, the next backend additions should be:
+If the frontend wants to match the target product more closely, the next backend additions should be:
 
-1. `GET /api/dashboard/summary`
-2. `GET /api/dashboard/market-overview`
-3. `GET /api/dashboard/priority-prospects`
-4. `GET /api/dashboard/trigger-signals`
-5. `GET /api/metadata/filters`
-6. full `prospects` resource family
+1. `GET /api/metadata/filters`
+2. persisted prospect workflow state such as owner, stage, and last-action
+3. prospect insight history endpoint
+4. company size segmentation once a reliable size/profile model exists
+5. standardized frontend error contract
 
 ## Development Checklist
 
