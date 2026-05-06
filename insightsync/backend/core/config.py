@@ -25,9 +25,14 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    openai_base_url: str | None = Field(default=None, alias="OPENAI_BASE_URL")
     openai_chat_model: str = Field(default="gpt-4o-mini", alias="OPENAI_CHAT_MODEL")
     openai_embedding_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBEDDING_MODEL")
     embedding_dimensions: int = Field(default=1536, alias="EMBEDDING_DIMENSIONS")
+
+    llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
+    llm_base_url: str | None = Field(default=None, alias="LLM_BASE_URL")
+    llm_chat_model: str = Field(default="gpt-4o-mini", alias="LLM_CHAT_MODEL")
 
     rag_top_k: int = Field(default=6, alias="RAG_TOP_K")
     rag_min_score: float = Field(default=0.15, alias="RAG_MIN_SCORE")
@@ -57,7 +62,7 @@ class Settings(BaseSettings):
     def llm_enabled(self) -> bool:
         """Return whether real LLM calls are allowed."""
 
-        return bool(self.enable_llm_generation and self.openai_api_key)
+        return bool(self.enable_llm_generation and self.llm_api_key)
 
 
 @lru_cache

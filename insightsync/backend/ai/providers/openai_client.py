@@ -22,7 +22,7 @@ class OpenAIProvider:
 
         from openai import OpenAI
 
-        client = OpenAI(api_key=self.settings.openai_api_key)
+        client = OpenAI(api_key=self.settings.openai_api_key, base_url=self.settings.openai_base_url)
         response = client.embeddings.create(
             model=self.settings.openai_embedding_model,
             input=texts,
@@ -38,7 +38,7 @@ class OpenAIProvider:
 
         from openai import OpenAI
 
-        client = OpenAI(api_key=self.settings.openai_api_key)
+        client = OpenAI(api_key=self.settings.llm_api_key, base_url=self.settings.llm_base_url)
         prompt = {
             "question": question,
             "insight_type": insight_type,
@@ -50,7 +50,7 @@ class OpenAIProvider:
             ],
         }
         response = client.chat.completions.create(
-            model=self.settings.openai_chat_model,
+            model=self.settings.llm_chat_model,
             messages=[
                 {
                     "role": "system",

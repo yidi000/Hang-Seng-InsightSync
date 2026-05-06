@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from insightsync.backend.core.config import Settings
 from insightsync.backend.repositories.read_repository import ReadRepository
 from insightsync.backend.services.company_service import CompanyService
+from insightsync.backend.services.fusion_explainer import FusionExplainer
 from insightsync.backend.services.insight_generator import InsightGenerator
 
 
@@ -30,154 +31,73 @@ class ProspectService:
     @staticmethod
     def _recommended_product_themes(detail: dict[str, Any]) -> list[str]:
         latest_state = detail["latest_state"]
-        focus_tags = set(latest_state.get("focus_tags", []))
-        products: list[str] = []
-
-        if "cross_border" in focus_tags:
-            products.extend(["cross-border payments", "trade finance", "treasury"])
-        if "growth" in focus_tags or "expansion" in focus_tags:
-            products.extend(["working capital", "term loan", "cash management"])
-        if "market" in focus_tags:
-            products.append("capital markets")
-        if latest_state.get("risk_signals"):
-            products.append("risk review")
-
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for item in products:
-            if item in seen:
-                continue
-            seen.add(item)
-            ordered.append(item)
-        return ordered[:4]
+        return [item["product_name"] for item in latest_state.get("product_fit", [])[:4]]
 
     @staticmethod
     def _build_opportunity_score(detail: dict[str, Any]) -> tuple[int, list[dict[str, Any]]]:
         latest_state = detail["latest_state"]
-        coverage_flags = latest_state["coverage_flags"]
-        components: list[dict[str, Any]] = []
-
-        opportunity_signal_points = min(len(latest_state.get("opportunity_signals", [])) * 20, 40)
-        if opportunity_signal_points > 0:
-            components.append(
-                {
-                    "name": "opportunity_signals",
-                    "category": "opportunity",
-                    "points": opportunity_signal_points,
-                    "detail": f"{len(latest_state.get('opportunity_signals', []))} opportunity signal(s) linked",
-                }
-            )
-
-        recent_signal_points = min(detail["stats"].get("signal_count", 0) * 5, 15)
-        if recent_signal_points > 0:
-            components.append(
-                {
-                    "name": "recent_signal_volume",
-                    "category": "opportunity",
-                    "points": recent_signal_points,
-                    "detail": f"{detail['stats'].get('signal_count', 0)} recent signal(s) linked to the company",
-                }
-            )
-
-        if coverage_flags.get("has_management_discussion"):
-            components.append(
-                {
-                    "name": "management_discussion",
-                    "category": "opportunity",
-                    "points": 10,
-                    "detail": "management discussion summary is available",
-                }
-            )
-        if coverage_flags.get("has_business_events"):
-            components.append(
-                {
-                    "name": "business_events",
-                    "category": "opportunity",
-                    "points": 10,
-                    "detail": "structured business events are available",
-                }
-            )
-        if coverage_flags.get("has_structured_metrics"):
-            components.append(
-                {
-                    "name": "structured_metrics",
-                    "category": "opportunity",
-                    "points": 10,
-                    "detail": "structured metrics are available for validation",
-                }
-            )
-        if detail["stats"].get("generated_insight_count", 0) > 0:
-            components.append(
-                {
-                    "name": "generated_insights",
-                    "category": "opportunity",
-                    "points": 15,
-                    "detail": f"{detail['stats'].get('generated_insight_count', 0)} generated insight(s) already exist",
-                }
-            )
-
-        score = sum(item["points"] for item in components)
+        components = [
+            {
+                "name": feature["feature_key"],
+                "category": feature["feature_group"],
+                "points": feature["score_contribution"],
+                "detail": feature["rationale"],
+            }
+            for feature in latest_state.get("decision_features", [])
+            if feature["feature_group"] in {"commercial_attractiveness", "immediacy", "product_fit"}
+        ]
+        score = (
+            latest_state.get("commercial_attractiveness_score", 0)
+            + latest_state.get("immediacy_score", 0)
+            + latest_state.get("product_fit_score", 0)
+        )
         return min(score, 100), components
 
     @staticmethod
     def _build_risk_score(detail: dict[str, Any]) -> tuple[int, list[dict[str, Any]]]:
         latest_state = detail["latest_state"]
-        components: list[dict[str, Any]] = []
-
-        for index, risk in enumerate(latest_state.get("risk_signals", []), start=1):
-            severity = (risk.get("severity") or "").lower()
-            if severity == "high":
-                points = 35
-            elif severity == "medium":
-                points = 20
-            elif severity == "low":
-                points = 10
-            else:
-                points = 15
-            components.append(
-                {
-                    "name": f"risk_signal_{index}",
-                    "category": "risk",
-                    "points": points,
-                    "detail": risk.get("detail") or "risk signal linked",
-                }
-            )
-
-        if detail["latest_state"]["coverage_flags"].get("has_risk_factors"):
-            components.append(
-                {
-                    "name": "risk_factor_coverage",
-                    "category": "risk",
-                    "points": 10,
-                    "detail": "structured risk factors are present in parsed evidence",
-                }
-            )
-
-        score = sum(item["points"] for item in components)
-        return min(score, 100), components
+        components = [
+            {
+                "name": feature["feature_key"],
+                "category": feature["feature_group"],
+                "points": feature["score_contribution"],
+                "detail": feature["rationale"],
+            }
+            for feature in latest_state.get("decision_features", [])
+            if feature["feature_group"] == "risk_penalty"
+        ]
+        return min(latest_state.get("risk_penalty_score", 0), 100), components
 
     @staticmethod
     def _build_priority_score(
         *,
         opportunity_score: int,
         risk_score: int,
+        evidence_confidence_score: int,
         status: str,
     ) -> tuple[int, list[dict[str, Any]]]:
-        opportunity_points = int(opportunity_score * 0.7)
+        opportunity_points = int(opportunity_score * 0.6)
+        confidence_points = int(evidence_confidence_score * 0.15)
         risk_headroom = max(0, 40 - risk_score)
-        risk_buffer_points = int(risk_headroom * 0.3)
+        risk_buffer_points = int(risk_headroom * 0.25)
         components = [
             {
                 "name": "opportunity_weighted",
                 "category": "priority",
                 "points": opportunity_points,
-                "detail": f"70% weighting applied to opportunity score {opportunity_score}",
+                "detail": f"60% weighting applied to opportunity score {opportunity_score}",
+            },
+            {
+                "name": "evidence_confidence_weighted",
+                "category": "priority",
+                "points": confidence_points,
+                "detail": f"15% weighting applied to evidence confidence score {evidence_confidence_score}",
             },
             {
                 "name": "risk_buffer",
                 "category": "priority",
                 "points": risk_buffer_points,
-                "detail": f"30% weighting applied to remaining risk headroom {risk_headroom}",
+                "detail": f"25% weighting applied to remaining risk headroom {risk_headroom}",
             },
         ]
         if status == "actionable":
@@ -190,13 +110,13 @@ class ProspectService:
                 }
             )
 
-        return min(opportunity_points + risk_buffer_points, 100), components
+        return min(opportunity_points + confidence_points + risk_buffer_points, 100), components
 
     @classmethod
     def _priority_level(cls, *, priority_score: int, status: str) -> str:
-        if status == "actionable" and priority_score >= 55:
+        if status == "actionable" and priority_score >= 50:
             return "high"
-        if priority_score >= 45:
+        if priority_score >= 38:
             return "medium"
         return "monitor"
 
@@ -205,7 +125,12 @@ class ProspectService:
         latest_state = detail["latest_state"]
         reasons: list[str] = []
 
+        for answer in latest_state.get("decision_answers", [])[:2]:
+            if answer.get("answer"):
+                reasons.append(answer["answer"])
         reasons.extend(latest_state.get("signal_highlights", [])[:2])
+        if latest_state.get("fusion_summary"):
+            reasons.append(latest_state["fusion_summary"])
         if latest_state.get("why_now"):
             reasons.append(latest_state["why_now"])
         if latest_state.get("state_summary"):
@@ -225,9 +150,12 @@ class ProspectService:
         latest_state = detail["latest_state"]
         opportunity_score, opportunity_components = self._build_opportunity_score(detail)
         risk_score, risk_components = self._build_risk_score(detail)
+        evidence_confidence_score = latest_state.get("evidence_confidence_score", 0)
+        decision_answers = latest_state.get("decision_answers", [])
         priority_score, priority_components = self._build_priority_score(
             opportunity_score=opportunity_score,
             risk_score=risk_score,
+            evidence_confidence_score=evidence_confidence_score,
             status=latest_state["status"],
         )
         priority_level = self._priority_level(priority_score=priority_score, status=latest_state["status"])
@@ -247,10 +175,20 @@ class ProspectService:
             "priority_score": priority_score,
             "opportunity_score": opportunity_score,
             "risk_score": risk_score,
+            "evidence_confidence_score": evidence_confidence_score,
+            "commercial_attractiveness_score": latest_state.get("commercial_attractiveness_score", 0),
+            "immediacy_score": latest_state.get("immediacy_score", 0),
+            "product_fit_score": latest_state.get("product_fit_score", 0),
+            "risk_penalty_score": latest_state.get("risk_penalty_score", 0),
             "focus_tags": latest_state.get("focus_tags", []),
             "why_prioritized": self._why_prioritized(detail),
             "recommended_next_step": latest_state.get("recommended_next_step"),
             "recommended_product_themes": self._recommended_product_themes(detail),
+            "product_fit": latest_state.get("product_fit", []),
+            "recommended_entry_angles": latest_state.get("recommended_entry_angles", []),
+            "decision_features": latest_state.get("decision_features", []),
+            "decision_answers": decision_answers,
+            "fusion": latest_state.get("fusion"),
             "score_breakdown": {
                 "opportunity_components": opportunity_components,
                 "risk_components": risk_components,
@@ -313,10 +251,12 @@ class ProspectService:
         detail = self.company_service.get_company_detail(company_id)
         if not detail:
             return None
+        brief = self.get_prospect_brief(prospect_id)
         return {
             "prospect": self._build_prospect_summary(detail),
             "company": detail["company"],
             "latest_state": detail["latest_state"],
+            "fusion_explanation": brief.get("fusion_explanation") if brief else None,
             "recent_signals": detail["recent_signals"],
             "recent_timeline": detail["recent_timeline"],
             "recent_insights": detail["recent_insights"],
@@ -375,6 +315,13 @@ class ProspectService:
 
         prospect = self._build_prospect_summary(detail)
         latest_state = detail["latest_state"]
+        explanation = None
+        if self.settings:
+            explanation = FusionExplainer(self.settings).explain(
+                company=detail["company"],
+                latest_state=latest_state,
+                prospect=prospect,
+            )
         top_opportunities = [
             item.get("detail") or item.get("title")
             for item in latest_state.get("opportunity_signals", [])[:3]
@@ -391,7 +338,9 @@ class ProspectService:
         summary_parts = [
             f"{display_name} is currently {prospect['priority_level']} priority with status {prospect['status']}."
         ]
-        if prospect.get("why_prioritized"):
+        if explanation and explanation.get("headline"):
+            summary_parts.append(explanation["headline"])
+        elif prospect.get("why_prioritized"):
             summary_parts.append(prospect["why_prioritized"][0])
         if prospect.get("recommended_next_step"):
             summary_parts.append(f"Next step: {prospect['recommended_next_step']}.")
@@ -404,9 +353,12 @@ class ProspectService:
             "priority_level": prospect["priority_level"],
             "recommended_next_step": prospect.get("recommended_next_step"),
             "recommended_product_themes": prospect.get("recommended_product_themes", []),
+            "recommended_entry_angles": prospect.get("recommended_entry_angles", []),
             "top_opportunities": top_opportunities,
             "top_risks": top_risks,
             "evidence_highlights": evidence_highlights,
+            "fusion_explanation": explanation,
+            "decision_answers": latest_state.get("decision_answers", []),
         }
 
     @staticmethod
@@ -450,6 +402,7 @@ class ProspectService:
             "prospect": prospect,
             "brief": brief,
             "evidence": evidence,
+            "fusion_explanation": brief.get("fusion_explanation"),
             "suggested_questions": self._suggested_questions(detail),
         }
 

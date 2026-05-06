@@ -436,6 +436,10 @@ def test_company_detail_returns_company_centric_view() -> None:
     assert payload["latest_state"]["signal_highlights"][0].startswith("2 recent signals linked")
     assert payload["latest_state"]["opportunity_signals"][0]["signal_type"] in {"growth", "cross_border"}
     assert payload["latest_state"]["opportunity_signals"][0]["source_type"] == "trigger_signal"
+    assert payload["latest_state"]["context_signals"][0]["signal_type"] in {"growth", "cross_border"}
+    assert payload["latest_state"]["context_signals"][0]["linkage_type"] == "direct_company_link"
+    assert payload["latest_state"]["context_signals"][0]["linkage_strength"] == "strong"
+    assert payload["latest_state"]["context_signals"][0]["linkage_rationale"] is not None
     assert payload["latest_state"]["risk_signals"][0]["signal_type"] == "regulatory"
     assert payload["latest_state"]["risk_signals"][0]["severity"] == "medium"
     assert payload["latest_state"]["coverage_flags"]["has_recent_signals"] is True
@@ -448,6 +452,31 @@ def test_company_detail_returns_company_centric_view() -> None:
     assert payload["latest_state"]["coverage_flags"]["has_xbrl_support"] is True
     assert "opportunity:" in payload["latest_state"]["why_now"]
     assert "risk watch:" in payload["latest_state"]["why_now"]
+    assert "direct company evidence points to" in payload["latest_state"]["fusion_summary"].lower()
+    assert payload["latest_state"]["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
+    assert payload["latest_state"]["fusion"]["primary_opportunity"] is not None
+    assert payload["latest_state"]["fusion"]["context_alignment"] is not None
+    assert payload["latest_state"]["fusion"]["key_risk"] is not None
+    assert len(payload["latest_state"]["fusion"]["reasoning_steps"]) >= 3
+    assert payload["latest_state"]["fusion"]["reasoning_steps"][0]["step_key"] == "company_evidence"
+    assert len(payload["latest_state"]["fusion"]["opportunity_lenses"]) == 3
+    assert payload["latest_state"]["fusion"]["opportunity_lenses"][0]["lens_key"] in {
+        "acquisition",
+        "financing",
+        "cross_border",
+    }
+    assert payload["latest_state"]["product_fit"][0]["product_name"] == "cross-border payments"
+    assert payload["latest_state"]["product_fit"][0]["fit_score"] >= 80
+    assert payload["latest_state"]["recommended_entry_angles"][0].startswith("Lead with the company event:")
+    assert payload["latest_state"]["commercial_attractiveness_score"] > 0
+    assert payload["latest_state"]["immediacy_score"] > 0
+    assert payload["latest_state"]["product_fit_score"] > 0
+    assert payload["latest_state"]["risk_penalty_score"] > 0
+    assert payload["latest_state"]["evidence_confidence_score"] > 0
+    assert len(payload["latest_state"]["decision_answers"]) >= 4
+    assert payload["latest_state"]["decision_answers"][0]["question_key"] == "priority"
+    assert len(payload["latest_state"]["decision_features"]) >= 4
+    assert payload["latest_state"]["decision_features"][0]["feature_key"] is not None
     assert payload["latest_state"]["recommended_next_step"].startswith("review latest risk factors")
     assert payload["latest_state"]["evidence_summary"]["parsed_document_count"] == 1
     assert payload["latest_state"]["evidence_summary"]["ocr_hit_count"] == 1
@@ -476,8 +505,13 @@ def test_company_detail_returns_active_state_when_only_market_evidence_exists() 
     assert payload["latest_state"]["coverage_flags"]["has_recent_signals"] is True
     assert payload["latest_state"]["coverage_flags"]["has_parsed_reports"] is False
     assert payload["latest_state"]["opportunity_signals"][0]["signal_type"] == "market"
+    assert payload["latest_state"]["context_signals"][0]["signal_type"] == "market"
     assert payload["latest_state"]["risk_signals"] == []
-    assert payload["latest_state"]["recommended_next_step"] == "review linked evidence and prepare RM follow-up"
+    assert payload["latest_state"]["fusion"]["primary_lens_key"] == "acquisition"
+    assert payload["latest_state"]["product_fit"][0]["product_name"] == "capital markets"
+    assert payload["latest_state"]["recommended_next_step"].startswith(
+        "prepare acquisition outreach anchored on capital markets"
+    )
 
 
 def test_company_detail_returns_404_for_unknown_company() -> None:

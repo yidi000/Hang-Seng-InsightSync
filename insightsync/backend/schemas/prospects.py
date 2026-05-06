@@ -7,10 +7,14 @@ from pydantic import BaseModel, Field
 from insightsync.backend.schemas.companies import (
     CompanyBusinessEventOut,
     CompanyCoverageFlagsOut,
+    CompanyDecisionFeatureOut,
+    CompanyDecisionAnswerOut,
     CompanyEvidenceSummaryOut,
+    CompanyFusionOutputOut,
     CompanyInsightPreviewOut,
     CompanyLatestStateOut,
     CompanyMetricOut,
+    CompanyProductFitOut,
     CompanyProfileOut,
     CompanyRiskFactorOut,
     ParsedDocumentPreviewOut,
@@ -37,10 +41,20 @@ class ProspectSummaryOut(BaseModel):
     priority_score: int
     opportunity_score: int
     risk_score: int
+    evidence_confidence_score: int = 0
+    commercial_attractiveness_score: int = 0
+    immediacy_score: int = 0
+    product_fit_score: int = 0
+    risk_penalty_score: int = 0
     focus_tags: list[str] = Field(default_factory=list)
     why_prioritized: list[str] = Field(default_factory=list)
     recommended_next_step: str | None = None
     recommended_product_themes: list[str] = Field(default_factory=list)
+    product_fit: list[CompanyProductFitOut] = Field(default_factory=list)
+    recommended_entry_angles: list[str] = Field(default_factory=list)
+    decision_features: list[CompanyDecisionFeatureOut] = Field(default_factory=list)
+    decision_answers: list[CompanyDecisionAnswerOut] = Field(default_factory=list)
+    fusion: CompanyFusionOutputOut | None = None
     score_breakdown: "ProspectScoreBreakdownOut"
 
 
@@ -108,9 +122,12 @@ class ProspectBriefOut(BaseModel):
     priority_level: str
     recommended_next_step: str | None = None
     recommended_product_themes: list[str] = Field(default_factory=list)
+    recommended_entry_angles: list[str] = Field(default_factory=list)
     top_opportunities: list[str] = Field(default_factory=list)
     top_risks: list[str] = Field(default_factory=list)
     evidence_highlights: list[str] = Field(default_factory=list)
+    fusion_explanation: dict | None = None
+    decision_answers: list[CompanyDecisionAnswerOut] = Field(default_factory=list)
 
 
 class ProspectQuestionIn(BaseModel):
@@ -140,4 +157,5 @@ class ProspectCopilotOut(BaseModel):
     prospect: ProspectSummaryOut
     brief: ProspectBriefOut
     evidence: ProspectEvidenceOut
+    fusion_explanation: dict | None = None
     suggested_questions: list[str] = Field(default_factory=list)

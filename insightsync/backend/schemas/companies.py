@@ -102,9 +102,78 @@ class CompanyStateSignalOut(BaseModel):
     title: str
     detail: str | None = None
     source_type: str
+    source: str | None = None
     signal_type: str | None = None
     severity: str | None = None
     confidence: float | None = None
+    linkage_type: str | None = None
+    linkage_strength: str | None = None
+    linkage_rationale: str | None = None
+
+
+class CompanyProductFitOut(BaseModel):
+    """Recommended product fit derived from fused company and market evidence."""
+
+    product_name: str
+    fit_score: int
+    rationale: str
+    supporting_signals: list[str] = Field(default_factory=list)
+
+
+class CompanyDecisionFeatureOut(BaseModel):
+    """Documented feature item used in company- and prospect-level reasoning."""
+
+    feature_key: str
+    feature_group: str
+    value_num: float | None = None
+    score_contribution: int
+    rationale: str
+    evidence_items: list[str] = Field(default_factory=list)
+
+
+class CompanyFusionReasoningStepOut(BaseModel):
+    """Structured reasoning step produced by the fusion layer."""
+
+    step_key: str
+    title: str
+    summary: str
+    feature_keys: list[str] = Field(default_factory=list)
+    linkage_types: list[str] = Field(default_factory=list)
+    evidence_items: list[str] = Field(default_factory=list)
+
+
+class CompanyOpportunityLensOut(BaseModel):
+    """Business lens derived from structured fusion."""
+
+    lens_key: str
+    label: str
+    lens_score: int
+    rationale: str
+    supporting_evidence: list[str] = Field(default_factory=list)
+    recommended_products: list[str] = Field(default_factory=list)
+
+
+class CompanyDecisionAnswerOut(BaseModel):
+    """Plain-language answer to a core business question."""
+
+    question_key: str
+    question: str
+    answer: str
+    supporting_evidence: list[str] = Field(default_factory=list)
+
+
+class CompanyFusionOutputOut(BaseModel):
+    """Structured fusion output assembled from evidence, linkage, features, and scores."""
+
+    summary: str | None = None
+    why_now: str | None = None
+    primary_lens_key: str | None = None
+    primary_opportunity: str | None = None
+    context_alignment: str | None = None
+    key_risk: str | None = None
+    reasoning_steps: list[CompanyFusionReasoningStepOut] = Field(default_factory=list)
+    opportunity_lenses: list[CompanyOpportunityLensOut] = Field(default_factory=list)
+    decision_answers: list[CompanyDecisionAnswerOut] = Field(default_factory=list)
 
 
 class CompanyCoverageFlagsOut(BaseModel):
@@ -193,11 +262,23 @@ class CompanyLatestStateOut(BaseModel):
     status: str
     state_summary: str | None = None
     why_now: str | None = None
+    fusion_summary: str | None = None
+    fusion: CompanyFusionOutputOut | None = None
     recommended_next_step: str | None = None
+    commercial_attractiveness_score: int = 0
+    immediacy_score: int = 0
+    product_fit_score: int = 0
+    risk_penalty_score: int = 0
+    evidence_confidence_score: int = 0
     focus_tags: list[str] = Field(default_factory=list)
     signal_highlights: list[str] = Field(default_factory=list)
     opportunity_signals: list[CompanyStateSignalOut] = Field(default_factory=list)
     risk_signals: list[CompanyStateSignalOut] = Field(default_factory=list)
+    context_signals: list[CompanyStateSignalOut] = Field(default_factory=list)
+    product_fit: list[CompanyProductFitOut] = Field(default_factory=list)
+    recommended_entry_angles: list[str] = Field(default_factory=list)
+    decision_features: list[CompanyDecisionFeatureOut] = Field(default_factory=list)
+    decision_answers: list[CompanyDecisionAnswerOut] = Field(default_factory=list)
     coverage_flags: CompanyCoverageFlagsOut
     evidence_summary: CompanyEvidenceSummaryOut
 

@@ -102,7 +102,7 @@ def get_prospect_evidence(prospect_id: str, db: Session = Depends(get_db)) -> Pr
 def get_prospect_brief(prospect_id: str, db: Session = Depends(get_db)) -> ProspectBriefOut:
     """Return a banker-facing brief for a prospect."""
 
-    payload = ProspectService(db).get_prospect_brief(prospect_id)
+    payload = ProspectService(db, settings=get_settings()).get_prospect_brief(prospect_id)
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectBriefOut(**payload)
@@ -137,7 +137,7 @@ def ask_prospect_question(
 def get_prospect_copilot(prospect_id: str, db: Session = Depends(get_db)) -> ProspectCopilotOut:
     """Return a prospect-centered copilot workspace payload."""
 
-    payload = ProspectService(db).get_prospect_copilot(prospect_id)
+    payload = ProspectService(db, settings=get_settings()).get_prospect_copilot(prospect_id)
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectCopilotOut(**payload)

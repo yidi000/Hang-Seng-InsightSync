@@ -313,6 +313,16 @@ PR #10 里下面这些问题，没有被原样继承：
 5. 最后再继续扩更多 source
 这时再接新 source，才不会让系统重新变回“数据越多越乱”的状态。
 
+补充说明：
+
+在真正继续实现 score、fusion 和 product fit 之前，应先以 [decision_framework_and_scoring_principles_2026-05-07.md](d:/HKU/InsightSync/Hang-Seng-InsightSync/insightsync/docs/decision_framework_and_scoring_principles_2026-05-07.md) 作为原则基线。
+
+也就是说，后续实现应遵循：
+
+- 先定义事实层、信号层、关联层、feature 层、评分层、解释层
+- 再把现有规则整理为 feature dictionary，而不是继续零散加规则
+- 再把 GenAI 接入抽取、关联辅助和解释，而不是只做包装性摘要
+
 ## 11. 对协作者的推荐说法
 
 你可以这样描述当前路线：

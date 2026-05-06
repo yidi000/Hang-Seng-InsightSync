@@ -4,6 +4,7 @@ Project documentation for architecture, handover, runbooks, and frontend integra
 
 Available guides:
 
+- `decision_framework_and_scoring_principles_2026-05-07.md`: formal decision stack, signal/linkage taxonomy, feature dictionary, scoring principles, and recommended GenAI role
 - `frontend-api-guide.md`: current backend capabilities, frontend integration notes, and API examples
 - `project_assessment_2026-04-22.md`: critical assessment of the current solution, key gaps, and recommended next steps
 - `parsing_architecture_2026-04-22.md`: multi-source parsing architecture, best-practice research notes, current implementation scope, and next parsing priorities

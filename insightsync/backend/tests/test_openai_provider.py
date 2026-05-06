@@ -21,3 +21,16 @@ def test_fallback_generation_requires_evidence() -> None:
 
     assert output["status"] == "insufficient_evidence"
     assert output["citations"] == []
+
+
+def test_llm_enabled_uses_llm_credentials() -> None:
+    settings = Settings(
+        OPENAI_API_KEY="",
+        LLM_API_KEY="test-key",
+        LLM_BASE_URL="https://example.com/v1",
+        LLM_CHAT_MODEL="glm-4.7-flash",
+        ENABLE_LLM_GENERATION=True,
+    )
+
+    assert settings.llm_enabled is True
+    assert settings.llm_chat_model == "glm-4.7-flash"
