@@ -25,6 +25,9 @@ def test_list_prospects_returns_ranked_business_view() -> None:
     assert "cross-border payments" in top["recommended_product_themes"]
     assert top["recommended_next_step"].startswith("review latest risk factors")
     assert len(top["why_prioritized"]) >= 2
+    assert len(top["score_breakdown"]["opportunity_components"]) >= 1
+    assert len(top["score_breakdown"]["risk_components"]) >= 1
+    assert len(top["score_breakdown"]["priority_components"]) >= 2
 
 
 def test_list_prospects_supports_priority_filter() -> None:
@@ -46,6 +49,8 @@ def test_get_prospect_detail_returns_company_backed_detail() -> None:
     assert payload["prospect"]["prospect_id"] == "prospect:hkg-alpha-fintech"
     assert payload["prospect"]["priority_level"] == "high"
     assert payload["prospect"]["recommended_product_themes"][0] == "cross-border payments"
+    assert payload["prospect"]["score_breakdown"]["priority_components"][0]["name"] == "opportunity_weighted"
+    assert payload["prospect"]["score_breakdown"]["priority_components"][1]["name"] == "risk_buffer"
     assert payload["company"]["company_id"] == "hkg-alpha-fintech"
     assert payload["latest_state"]["status"] == "actionable"
     assert payload["recent_signals"][0]["signal_key"] == "signal-alpha-growth"

@@ -40,6 +40,7 @@ class ProspectSummaryOut(BaseModel):
     why_prioritized: list[str] = Field(default_factory=list)
     recommended_next_step: str | None = None
     recommended_product_themes: list[str] = Field(default_factory=list)
+    score_breakdown: "ProspectScoreBreakdownOut"
 
 
 class ProspectListOut(BaseModel):
@@ -77,3 +78,20 @@ class ProspectEvidenceOut(BaseModel):
     key_metrics: list[CompanyMetricOut] = Field(default_factory=list)
     key_risk_factors: list[CompanyRiskFactorOut] = Field(default_factory=list)
     key_business_events: list[CompanyBusinessEventOut] = Field(default_factory=list)
+
+
+class ProspectScoreComponentOut(BaseModel):
+    """Single scoring component used to explain a prospect score."""
+
+    name: str
+    category: str
+    points: int
+    detail: str
+
+
+class ProspectScoreBreakdownOut(BaseModel):
+    """Explainable score composition for prospect prioritization."""
+
+    opportunity_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
+    risk_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
+    priority_components: list[ProspectScoreComponentOut] = Field(default_factory=list)

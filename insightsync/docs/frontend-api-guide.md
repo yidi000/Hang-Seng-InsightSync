@@ -359,6 +359,7 @@ Current scope:
 
 - first-pass business-facing list derived from `company latest-state`
 - includes `priority_level`, `priority_score`, `opportunity_score`, `risk_score`
+- includes `score_breakdown` so the frontend can explain where the scores came from
 - includes `recommended_next_step` and `recommended_product_themes`
 - supports search and basic filters aligned to company fields
 
