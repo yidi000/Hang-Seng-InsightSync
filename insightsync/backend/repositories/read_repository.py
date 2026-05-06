@@ -38,6 +38,12 @@ class ReadRepository:
             return default
         return parsed
 
+    @staticmethod
+    def _int_field(value: Any) -> int:
+        if value is None:
+            return 0
+        return int(value)
+
     def _hydrate_company_row(self, row: dict[str, Any]) -> dict[str, Any]:
         return {
             **row,
@@ -195,6 +201,10 @@ class ReadRepository:
         signal_limit: int = 10,
         timeline_limit: int = 10,
         insight_limit: int = 5,
+        document_limit: int = 5,
+        metric_limit: int = 8,
+        risk_limit: int = 8,
+        business_event_limit: int = 8,
     ) -> dict[str, Any] | None:
         row = self.db.execute(
             text(
@@ -259,6 +269,27 @@ class ReadRepository:
             ),
             {"company_id": company_id},
         ).mappings().all()
+        evidence_summary = self.db.execute(
+            text(
+                """
+                SELECT
+                  COUNT(*) AS parsed_document_count,
+                  SUM(CASE WHEN LOWER(parse_status) = 'success' THEN 1 ELSE 0 END) AS parsed_document_success_count,
+                  SUM(CASE WHEN LOWER(parse_status) = 'partial' THEN 1 ELSE 0 END) AS parsed_document_partial_count,
+                  SUM(CASE WHEN LOWER(parse_status) = 'failed' THEN 1 ELSE 0 END) AS parsed_document_failed_count,
+                  SUM(CASE WHEN LOWER(COALESCE(ocr_status, '')) IN ('used', 'success', 'completed', 'hit') THEN 1 ELSE 0 END) AS ocr_hit_count,
+                  SUM(CASE WHEN LOWER(COALESCE(xbrl_status, '')) IN ('used', 'success', 'completed', 'hit') THEN 1 ELSE 0 END) AS xbrl_hit_count,
+                  SUM(CASE WHEN management_discussion_summary IS NOT NULL AND TRIM(management_discussion_summary) <> '' THEN 1 ELSE 0 END) AS management_discussion_count,
+                  COALESCE(SUM(metric_count), 0) AS metric_count,
+                  COALESCE(SUM(risk_factor_count), 0) AS risk_factor_count,
+                  COALESCE(SUM(business_event_count), 0) AS business_event_count,
+                  MAX(parsed_at) AS last_parsed_at
+                FROM parsed_documents
+                WHERE company_id = :company_id
+                """
+            ),
+            {"company_id": company_id},
+        ).mappings().first()
 
         recent_signals = self.list_signals(limit=signal_limit, offset=0, company_id=company_id)
         recent_timeline = self.list_timeline(limit=timeline_limit, offset=0, company_id=company_id)
@@ -275,6 +306,63 @@ class ReadRepository:
             ),
             {"company_id": company_id, "limit": insight_limit},
         ).mappings().all()
+        recent_documents = self.db.execute(
+            text(
+                """
+                SELECT id, source, dataset, title, summary, media_type, lang, parser_name, backend_name,
+                       parse_status, ocr_status, xbrl_status, management_discussion_summary,
+                       section_count, table_count, metric_count, risk_factor_count, business_event_count,
+                       evidence_url, parsed_at
+                FROM parsed_documents
+                WHERE company_id = :company_id
+                ORDER BY parsed_at DESC, id DESC
+                LIMIT :limit
+                """
+            ),
+            {"company_id": company_id, "limit": document_limit},
+        ).mappings().all()
+        key_metrics = self.db.execute(
+            text(
+                """
+                SELECT pm.document_id, pd.title, pm.name, pm.value, pm.unit, pm.period, pm.context,
+                       pm.confidence, pd.parsed_at
+                FROM parsed_metrics pm
+                JOIN parsed_documents pd ON pd.id = pm.document_id
+                WHERE pd.company_id = :company_id
+                ORDER BY pd.parsed_at DESC, COALESCE(pm.confidence, 0) DESC, pm.metric_index ASC
+                LIMIT :limit
+                """
+            ),
+            {"company_id": company_id, "limit": metric_limit},
+        ).mappings().all()
+        key_risk_factors = self.db.execute(
+            text(
+                """
+                SELECT pr.document_id, pd.title, pr.category, pr.description, pr.severity,
+                       pr.confidence, pd.parsed_at
+                FROM parsed_risk_factors pr
+                JOIN parsed_documents pd ON pd.id = pr.document_id
+                WHERE pd.company_id = :company_id
+                ORDER BY pd.parsed_at DESC, COALESCE(pr.confidence, 0) DESC, pr.risk_index ASC
+                LIMIT :limit
+                """
+            ),
+            {"company_id": company_id, "limit": risk_limit},
+        ).mappings().all()
+        key_business_events = self.db.execute(
+            text(
+                """
+                SELECT pbe.document_id, pd.title, pbe.event_type, pbe.summary, pbe.event_date,
+                       pbe.parties_json, pbe.confidence, pd.parsed_at
+                FROM parsed_business_events pbe
+                JOIN parsed_documents pd ON pd.id = pbe.document_id
+                WHERE pd.company_id = :company_id
+                ORDER BY pd.parsed_at DESC, COALESCE(pbe.confidence, 0) DESC, pbe.event_index ASC
+                LIMIT :limit
+                """
+            ),
+            {"company_id": company_id, "limit": business_event_limit},
+        ).mappings().all()
 
         return {
             "company": self._hydrate_company_row(dict(row)),
@@ -286,6 +374,33 @@ class ReadRepository:
                 "last_event_at": timeline_stats["last_event_at"] if timeline_stats else None,
                 "last_insight_at": insight_stats["last_insight_at"] if insight_stats else None,
                 "signal_type_distribution": [dict(item) for item in signal_distribution],
+            },
+            "evidence_summary": {
+                "parsed_document_count": self._int_field(
+                    evidence_summary["parsed_document_count"] if evidence_summary else 0
+                ),
+                "parsed_document_success_count": self._int_field(
+                    evidence_summary["parsed_document_success_count"] if evidence_summary else 0
+                ),
+                "parsed_document_partial_count": self._int_field(
+                    evidence_summary["parsed_document_partial_count"] if evidence_summary else 0
+                ),
+                "parsed_document_failed_count": self._int_field(
+                    evidence_summary["parsed_document_failed_count"] if evidence_summary else 0
+                ),
+                "ocr_hit_count": self._int_field(evidence_summary["ocr_hit_count"] if evidence_summary else 0),
+                "xbrl_hit_count": self._int_field(evidence_summary["xbrl_hit_count"] if evidence_summary else 0),
+                "management_discussion_count": self._int_field(
+                    evidence_summary["management_discussion_count"] if evidence_summary else 0
+                ),
+                "metric_count": self._int_field(evidence_summary["metric_count"] if evidence_summary else 0),
+                "risk_factor_count": self._int_field(
+                    evidence_summary["risk_factor_count"] if evidence_summary else 0
+                ),
+                "business_event_count": self._int_field(
+                    evidence_summary["business_event_count"] if evidence_summary else 0
+                ),
+                "last_parsed_at": evidence_summary["last_parsed_at"] if evidence_summary else None,
             },
             "recent_signals": [
                 {
@@ -303,6 +418,16 @@ class ReadRepository:
                 for item in recent_timeline
             ],
             "recent_insights": [dict(item) for item in recent_insights],
+            "recent_documents": [dict(item) for item in recent_documents],
+            "key_metrics": [dict(item) for item in key_metrics],
+            "key_risk_factors": [dict(item) for item in key_risk_factors],
+            "key_business_events": [
+                {
+                    **dict(item),
+                    "parties": self._json_field(item.get("parties_json"), []),
+                }
+                for item in key_business_events
+            ],
         }
 
     def list_timeline(

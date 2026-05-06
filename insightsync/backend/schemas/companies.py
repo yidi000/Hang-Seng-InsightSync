@@ -80,11 +80,138 @@ class CompanyInsightPreviewOut(BaseModel):
     generated_at: datetime
 
 
+class CompanyEvidenceSummaryOut(BaseModel):
+    """Coverage summary for parsed company evidence."""
+
+    parsed_document_count: int = 0
+    parsed_document_success_count: int = 0
+    parsed_document_partial_count: int = 0
+    parsed_document_failed_count: int = 0
+    ocr_hit_count: int = 0
+    xbrl_hit_count: int = 0
+    management_discussion_count: int = 0
+    metric_count: int = 0
+    risk_factor_count: int = 0
+    business_event_count: int = 0
+    last_parsed_at: datetime | None = None
+
+
+class CompanyStateSignalOut(BaseModel):
+    """Explainable company-state item derived from signals or parsed evidence."""
+
+    title: str
+    detail: str | None = None
+    source_type: str
+    signal_type: str | None = None
+    severity: str | None = None
+    confidence: float | None = None
+
+
+class CompanyCoverageFlagsOut(BaseModel):
+    """Boolean coverage flags for company evidence completeness."""
+
+    has_recent_signals: bool = False
+    has_recent_timeline: bool = False
+    has_generated_insights: bool = False
+    has_parsed_reports: bool = False
+    has_management_discussion: bool = False
+    has_structured_metrics: bool = False
+    has_risk_factors: bool = False
+    has_business_events: bool = False
+    has_ocr_support: bool = False
+    has_xbrl_support: bool = False
+
+
+class ParsedDocumentPreviewOut(BaseModel):
+    """Recent parsed document preview for company detail."""
+
+    id: int
+    source: str
+    dataset: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    media_type: str | None = None
+    lang: str | None = None
+    parser_name: str
+    backend_name: str | None = None
+    parse_status: str
+    ocr_status: str | None = None
+    xbrl_status: str | None = None
+    management_discussion_summary: str | None = None
+    section_count: int = 0
+    table_count: int = 0
+    metric_count: int = 0
+    risk_factor_count: int = 0
+    business_event_count: int = 0
+    evidence_url: str | None = None
+    parsed_at: datetime
+
+
+class CompanyMetricOut(BaseModel):
+    """Structured metric extracted from a parsed company document."""
+
+    document_id: int
+    title: str | None = None
+    name: str
+    value: str
+    unit: str | None = None
+    period: str | None = None
+    context: str | None = None
+    confidence: float | None = None
+    parsed_at: datetime
+
+
+class CompanyRiskFactorOut(BaseModel):
+    """Structured risk factor extracted from a parsed company document."""
+
+    document_id: int
+    title: str | None = None
+    category: str
+    description: str
+    severity: str
+    confidence: float | None = None
+    parsed_at: datetime
+
+
+class CompanyBusinessEventOut(BaseModel):
+    """Structured business event extracted from a parsed company document."""
+
+    document_id: int
+    title: str | None = None
+    event_type: str
+    summary: str
+    event_date: str | None = None
+    parties: list[Any] = Field(default_factory=list)
+    confidence: float | None = None
+    parsed_at: datetime
+
+
+class CompanyLatestStateOut(BaseModel):
+    """Latest explainable company state assembled from linked evidence."""
+
+    activity_at: datetime | None = None
+    status: str
+    state_summary: str | None = None
+    why_now: str | None = None
+    recommended_next_step: str | None = None
+    focus_tags: list[str] = Field(default_factory=list)
+    signal_highlights: list[str] = Field(default_factory=list)
+    opportunity_signals: list[CompanyStateSignalOut] = Field(default_factory=list)
+    risk_signals: list[CompanyStateSignalOut] = Field(default_factory=list)
+    coverage_flags: CompanyCoverageFlagsOut
+    evidence_summary: CompanyEvidenceSummaryOut
+
+
 class CompanyDetailOut(BaseModel):
     """Company-centric detail view."""
 
     company: CompanyProfileOut
     stats: CompanyStatsOut
+    latest_state: CompanyLatestStateOut
     recent_signals: list[SignalOut] = Field(default_factory=list)
     recent_timeline: list[TimelineEventOut] = Field(default_factory=list)
     recent_insights: list[CompanyInsightPreviewOut] = Field(default_factory=list)
+    recent_documents: list[ParsedDocumentPreviewOut] = Field(default_factory=list)
+    key_metrics: list[CompanyMetricOut] = Field(default_factory=list)
+    key_risk_factors: list[CompanyRiskFactorOut] = Field(default_factory=list)
+    key_business_events: list[CompanyBusinessEventOut] = Field(default_factory=list)
