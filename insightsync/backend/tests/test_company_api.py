@@ -438,8 +438,11 @@ def test_company_detail_returns_company_centric_view() -> None:
     assert payload["latest_state"]["opportunity_signals"][0]["source_type"] == "trigger_signal"
     assert payload["latest_state"]["context_signals"][0]["signal_type"] in {"growth", "cross_border"}
     assert payload["latest_state"]["context_signals"][0]["linkage_type"] == "direct_company_link"
+    assert payload["latest_state"]["context_signals"][0]["linkage_label"] == "Direct company link"
     assert payload["latest_state"]["context_signals"][0]["linkage_strength"] == "strong"
     assert payload["latest_state"]["context_signals"][0]["linkage_rationale"] is not None
+    assert payload["latest_state"]["context_signals"][0]["supports_company_scoring"] is True
+    assert payload["latest_state"]["context_signals"][0]["context_only"] is False
     assert payload["latest_state"]["risk_signals"][0]["signal_type"] == "regulatory"
     assert payload["latest_state"]["risk_signals"][0]["severity"] == "medium"
     assert payload["latest_state"]["coverage_flags"]["has_recent_signals"] is True
@@ -475,8 +478,14 @@ def test_company_detail_returns_company_centric_view() -> None:
     assert payload["latest_state"]["evidence_confidence_score"] > 0
     assert len(payload["latest_state"]["decision_answers"]) >= 4
     assert payload["latest_state"]["decision_answers"][0]["question_key"] == "priority"
+    assert payload["latest_state"]["decision_answers"][0]["question"] == "Is this company worth prioritizing now?"
     assert len(payload["latest_state"]["decision_features"]) >= 4
     assert payload["latest_state"]["decision_features"][0]["feature_key"] is not None
+    assert payload["latest_state"]["decision_features"][0]["feature_label"] is not None
+    assert payload["latest_state"]["decision_features"][0]["feature_description"] is not None
+    assert payload["latest_state"]["decision_features"][0]["business_question"] is not None
+    assert isinstance(payload["latest_state"]["decision_features"][0]["preferred_linkage_types"], list)
+    assert payload["latest_state"]["decision_features"][0]["max_score_contribution"] > 0
     assert payload["latest_state"]["recommended_next_step"].startswith("review latest risk factors")
     assert payload["latest_state"]["evidence_summary"]["parsed_document_count"] == 1
     assert payload["latest_state"]["evidence_summary"]["ocr_hit_count"] == 1
@@ -506,6 +515,9 @@ def test_company_detail_returns_active_state_when_only_market_evidence_exists() 
     assert payload["latest_state"]["coverage_flags"]["has_parsed_reports"] is False
     assert payload["latest_state"]["opportunity_signals"][0]["signal_type"] == "market"
     assert payload["latest_state"]["context_signals"][0]["signal_type"] == "market"
+    assert payload["latest_state"]["context_signals"][0]["linkage_type"] == "direct_company_link"
+    assert payload["latest_state"]["context_signals"][0]["supports_company_scoring"] is True
+    assert payload["latest_state"]["context_signals"][0]["context_only"] is False
     assert payload["latest_state"]["risk_signals"] == []
     assert payload["latest_state"]["fusion"]["primary_lens_key"] == "acquisition"
     assert payload["latest_state"]["product_fit"][0]["product_name"] == "capital markets"

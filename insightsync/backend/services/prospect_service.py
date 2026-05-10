@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from insightsync.backend.core.config import Settings
 from insightsync.backend.repositories.read_repository import ReadRepository
 from insightsync.backend.services.company_service import CompanyService
+from insightsync.backend.services.decision_framework import priority_score_policy
 from insightsync.backend.services.fusion_explainer import FusionExplainer
 from insightsync.backend.services.insight_generator import InsightGenerator
 
@@ -76,28 +77,29 @@ class ProspectService:
         evidence_confidence_score: int,
         status: str,
     ) -> tuple[int, list[dict[str, Any]]]:
-        opportunity_points = int(opportunity_score * 0.6)
-        confidence_points = int(evidence_confidence_score * 0.15)
-        risk_headroom = max(0, 40 - risk_score)
-        risk_buffer_points = int(risk_headroom * 0.25)
+        policy = priority_score_policy()
+        opportunity_points = int(opportunity_score * float(policy["opportunity_weight"]))
+        confidence_points = int(evidence_confidence_score * float(policy["evidence_confidence_weight"]))
+        risk_headroom = max(0, int(policy["risk_headroom_cap"]) - risk_score)
+        risk_buffer_points = int(risk_headroom * float(policy["risk_buffer_weight"]))
         components = [
             {
                 "name": "opportunity_weighted",
                 "category": "priority",
                 "points": opportunity_points,
-                "detail": f"60% weighting applied to opportunity score {opportunity_score}",
+                "detail": f"{int(float(policy['opportunity_weight']) * 100)}% weighting applied to opportunity score {opportunity_score}",
             },
             {
                 "name": "evidence_confidence_weighted",
                 "category": "priority",
                 "points": confidence_points,
-                "detail": f"15% weighting applied to evidence confidence score {evidence_confidence_score}",
+                "detail": f"{int(float(policy['evidence_confidence_weight']) * 100)}% weighting applied to evidence confidence score {evidence_confidence_score}",
             },
             {
                 "name": "risk_buffer",
                 "category": "priority",
                 "points": risk_buffer_points,
-                "detail": f"25% weighting applied to remaining risk headroom {risk_headroom}",
+                "detail": f"{int(float(policy['risk_buffer_weight']) * 100)}% weighting applied to remaining risk headroom {risk_headroom}",
             },
         ]
         if status == "actionable":
@@ -114,9 +116,10 @@ class ProspectService:
 
     @classmethod
     def _priority_level(cls, *, priority_score: int, status: str) -> str:
-        if status == "actionable" and priority_score >= 50:
+        policy = priority_score_policy()
+        if status == "actionable" and priority_score >= int(policy["high_priority_threshold"]):
             return "high"
-        if priority_score >= 38:
+        if priority_score >= int(policy["medium_priority_threshold"]):
             return "medium"
         return "monitor"
 

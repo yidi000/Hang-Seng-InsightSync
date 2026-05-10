@@ -95,17 +95,19 @@ class FusionExplainer:
         company: dict[str, Any],
         prospect: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        fallback = FusionExplainer._fallback(fusion=fusion, company=company, prospect=prospect)
         return {
             "status": payload.get("status", "ok"),
-            "headline": payload.get("headline") or payload.get("title") or payload.get("summary"),
-            "why_now": payload.get("why_now") or fusion.get("why_now"),
-            "lens_summary": payload.get("lens_summary") or payload.get("summary") or fusion.get("summary"),
-            "risk_note": payload.get("risk_note") or fusion.get("key_risk"),
-            "action_note": payload.get("action_note") or fusion.get("recommended_next_step"),
-            "primary_lens_key": payload.get("primary_lens_key") or fusion.get("primary_lens_key"),
-            "recommended_entry_angles": payload.get("recommended_entry_angles") or fusion.get("recommended_entry_angles", []),
+            "headline": payload.get("headline") or payload.get("title") or payload.get("summary") or fallback["headline"],
+            "why_now": payload.get("why_now") or fusion.get("why_now") or fallback["why_now"],
+            "lens_summary": payload.get("lens_summary") or payload.get("summary") or fusion.get("summary") or fallback["lens_summary"],
+            "risk_note": payload.get("risk_note") or fusion.get("key_risk") or fallback["risk_note"],
+            "action_note": payload.get("action_note") or fusion.get("recommended_next_step") or fallback["action_note"],
+            "primary_lens_key": payload.get("primary_lens_key") or fusion.get("primary_lens_key") or fallback["primary_lens_key"],
+            "recommended_entry_angles": payload.get("recommended_entry_angles") or fusion.get("recommended_entry_angles", []) or fallback["recommended_entry_angles"],
             "recommended_products": payload.get("recommended_products")
-            or (fusion.get("opportunity_lenses", [{}])[0].get("recommended_products", []) if fusion.get("opportunity_lenses") else []),
+            or (fusion.get("opportunity_lenses", [{}])[0].get("recommended_products", []) if fusion.get("opportunity_lenses") else [])
+            or fallback["recommended_products"],
             "company_id": company.get("company_id"),
             "prospect_priority": prospect.get("priority_level") if prospect else None,
         }

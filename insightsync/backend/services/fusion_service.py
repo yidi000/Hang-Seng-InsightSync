@@ -49,7 +49,7 @@ class FusionService:
 
     @staticmethod
     def _feature_keys(features: list[dict[str, Any]], group: str | None = None) -> list[str]:
-        keys = []
+        keys: list[str] = []
         for feature in features:
             if group and feature.get("feature_group") != group:
                 continue
@@ -136,7 +136,10 @@ class FusionService:
                 {
                     "step_key": "product_match",
                     "title": "Product Match",
-                    "summary": f"Current evidence most strongly aligns with {product_fit[0]['product_name']} as the first banking angle.",
+                    "summary": (
+                        f"Current evidence most strongly aligns with {product_fit[0]['product_name']} "
+                        "as the first banking angle."
+                    ),
                     "feature_keys": cls._feature_keys(decision_features, "product_fit"),
                     "linkage_types": [],
                     "evidence_items": cls._dedupe_texts(product_fit[0].get("supporting_signals", []))[:3],
@@ -321,31 +324,34 @@ class FusionService:
         answers: list[dict[str, Any]] = [
             {
                 "question_key": "priority",
-                "question": "这家公司值不值得优先跟进？",
-                "answer": f"{display_name} 目前是 {company_status or 'monitor'}，当前证据主要指向 {primary_lens_label.lower()}。",
+                "question": "Is this company worth prioritizing now?",
+                "answer": (
+                    f"{display_name} is currently in {company_status or 'monitor'} state, "
+                    f"and the strongest business case points to {primary_lens_label.lower()}."
+                ),
                 "supporting_evidence": cls._dedupe_texts([primary_opportunity] if primary_opportunity else []),
             },
             {
                 "question_key": "why_now",
-                "question": "为什么是现在？",
-                "answer": why_now or "当前证据还不够强，暂时不建议立即行动。",
+                "question": "Why now?",
+                "answer": why_now or "Current evidence is still limited, so immediate outreach is not yet strongly supported.",
                 "supporting_evidence": cls._dedupe_texts([why_now] if why_now else []),
             },
             {
                 "question_key": "entry_angle",
-                "question": "最适合从什么业务切入？",
+                "question": "What is the best business entry angle?",
                 "answer": recommended_next_step
                 or (
-                    f"先从 {top_product} 切入。"
+                    f"Start with {top_product} as the first business angle."
                     if top_product
-                    else "先从最强的证据切入，再验证商业需求。"
+                    else "Start from the strongest evidence path first, then validate the business need."
                 ),
                 "supporting_evidence": cls._dedupe_texts([top_product] if top_product else []),
             },
             {
                 "question_key": "risk_watch",
-                "question": "有哪些风险或不确定性要先知道？",
-                "answer": key_risk or "当前没有明显的高风险信号，但证据还不完整。",
+                "question": "What risks or uncertainties should be surfaced first?",
+                "answer": key_risk or "No major high-severity risk is visible yet, but evidence coverage is still incomplete.",
                 "supporting_evidence": cls._dedupe_texts([key_risk] if key_risk else []),
             },
         ]
@@ -353,7 +359,7 @@ class FusionService:
             answers.append(
                 {
                     "question_key": "context",
-                    "question": "外部环境提供了什么背景？",
+                    "question": "What external context supports this case?",
                     "answer": context_alignment,
                     "supporting_evidence": cls._dedupe_texts([context_alignment]),
                 }
@@ -361,8 +367,11 @@ class FusionService:
         answers.append(
             {
                 "question_key": "confidence",
-                "question": "这套判断有多可靠？",
-                "answer": f"当前证据可信度是 {evidence_confidence_score}/100，所以这更像一个起点，不是最终结论。",
+                "question": "How reliable is this current view?",
+                "answer": (
+                    f"The current evidence confidence score is {evidence_confidence_score}/100, "
+                    "so this should be treated as a strong starting point rather than a final conclusion."
+                ),
                 "supporting_evidence": [],
             }
         )
@@ -401,8 +410,13 @@ class FusionService:
         )
         primary_lens_key = opportunity_lenses[0]["lens_key"] if opportunity_lenses else None
         top_product = cls._top_product_name(product_fit)
+        recommended_next_step = cls._build_next_step(
+            primary_lens_key=primary_lens_key,
+            risk_signals=risk_signals,
+            product_fit=product_fit,
+        )
 
-        why_parts = []
+        why_parts: list[str] = []
         if primary_opportunity:
             why_parts.append(f"opportunity: {primary_opportunity}")
         if context_alignment:
@@ -411,7 +425,7 @@ class FusionService:
             why_parts.append(f"risk watch: {key_risk}")
         why_now = "; ".join(why_parts) if why_parts else None
 
-        summary_parts = []
+        summary_parts: list[str] = []
         if primary_opportunity:
             summary_parts.append(f"Direct company evidence points to {primary_opportunity}")
         if primary_lens_key:
@@ -448,11 +462,7 @@ class FusionService:
                 key_risk=key_risk,
                 product_fit=product_fit,
                 why_now=why_now,
-                recommended_next_step=cls._build_next_step(
-                    primary_lens_key=primary_lens_key,
-                    risk_signals=risk_signals,
-                    product_fit=product_fit,
-                ),
+                recommended_next_step=recommended_next_step,
                 evidence_confidence_score=evidence_confidence_score,
             ),
             "recommended_entry_angles": cls._build_entry_angles(
@@ -462,9 +472,5 @@ class FusionService:
                 key_risk=key_risk,
                 product_fit=product_fit,
             ),
-            "recommended_next_step": cls._build_next_step(
-                primary_lens_key=primary_lens_key,
-                risk_signals=risk_signals,
-                product_fit=product_fit,
-            ),
+            "recommended_next_step": recommended_next_step,
         }

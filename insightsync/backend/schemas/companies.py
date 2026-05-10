@@ -107,8 +107,11 @@ class CompanyStateSignalOut(BaseModel):
     severity: str | None = None
     confidence: float | None = None
     linkage_type: str | None = None
+    linkage_label: str | None = None
     linkage_strength: str | None = None
     linkage_rationale: str | None = None
+    supports_company_scoring: bool | None = None
+    context_only: bool | None = None
 
 
 class CompanyProductFitOut(BaseModel):
@@ -124,7 +127,12 @@ class CompanyDecisionFeatureOut(BaseModel):
     """Documented feature item used in company- and prospect-level reasoning."""
 
     feature_key: str
+    feature_label: str | None = None
     feature_group: str
+    feature_description: str | None = None
+    business_question: str | None = None
+    preferred_linkage_types: list[str] = Field(default_factory=list)
+    max_score_contribution: int | None = None
     value_num: float | None = None
     score_contribution: int
     rationale: str

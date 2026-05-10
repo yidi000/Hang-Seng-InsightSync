@@ -30,12 +30,15 @@ def test_list_prospects_returns_ranked_business_view() -> None:
     assert top["recommended_next_step"].startswith("review latest risk factors")
     assert len(top["decision_answers"]) >= 4
     assert top["decision_answers"][0]["question_key"] == "priority"
+    assert top["decision_answers"][0]["question"] == "Is this company worth prioritizing now?"
     assert top["evidence_confidence_score"] > 0
     assert top["commercial_attractiveness_score"] > 0
     assert top["immediacy_score"] > 0
     assert top["product_fit_score"] > 0
     assert top["risk_penalty_score"] > 0
     assert len(top["decision_features"]) >= 4
+    assert top["decision_features"][0]["feature_label"] is not None
+    assert top["decision_features"][0]["business_question"] is not None
     assert top["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
     assert len(top["fusion"]["opportunity_lenses"]) == 3
     assert len(top["why_prioritized"]) >= 2
@@ -191,8 +194,26 @@ def test_post_prospect_question_returns_evidence_grounded_answer() -> None:
 
 
 def test_get_prospect_copilot_returns_workspace_payload() -> None:
-    with _test_client() as client:
-        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/copilot")
+    fake_explanation = {
+        "status": "fallback",
+        "headline": "Alpha Fintech Holdings shows an acquisition-first opportunity",
+        "why_now": "Recent company-linked evidence supports timely outreach.",
+        "lens_summary": "Client acquisition is the main lens.",
+        "risk_note": "Cross-border licensing remains a watch point.",
+        "action_note": "Review latest risk factors alongside business signals before RM outreach.",
+        "primary_lens_key": "acquisition",
+        "recommended_entry_angles": ["Lead with the company event: Alpha Fintech expands into UAE"],
+        "recommended_products": ["cross-border payments"],
+        "company_id": "hkg-alpha-fintech",
+        "prospect_priority": "high",
+    }
+
+    with patch(
+        "insightsync.backend.services.prospect_service.FusionExplainer.explain",
+        return_value=fake_explanation,
+    ):
+        with _test_client() as client:
+            response = client.get("/api/prospects/prospect:hkg-alpha-fintech/copilot")
 
     assert response.status_code == 200
     payload = response.json()
