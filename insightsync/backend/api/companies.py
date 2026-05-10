@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from insightsync.backend.db.session import get_db
 from insightsync.backend.repositories.read_repository import ReadRepository
 from insightsync.backend.schemas.companies import CompanyDetailOut, CompanyListItemOut, CompanyListOut
+from insightsync.backend.services.company_service import CompanyService
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
@@ -38,7 +39,7 @@ def list_companies(
 def get_company_detail(company_id: str, db: Session = Depends(get_db)) -> CompanyDetailOut:
     """Return company profile, stats, and recent evidence."""
 
-    detail = ReadRepository(db).get_company_detail(company_id)
+    detail = CompanyService(db).get_company_detail(company_id)
     if not detail:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     return CompanyDetailOut(**detail)

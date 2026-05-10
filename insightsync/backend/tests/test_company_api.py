@@ -132,6 +132,73 @@ def _seed_test_db(db: Session) -> None:
             """
         )
     )
+    db.execute(
+        text(
+            """
+            INSERT INTO parsed_documents (
+              id, source_table, source_id, source_content_hash, source_record_key, source, dataset,
+              company_id, entity, title, summary, media_type, lang, file_path, evidence_url,
+              parser_name, backend_name, parse_version, parse_status, ocr_status, xbrl_status,
+              content_text, search_text, warnings_json, metadata_json, management_discussion_summary,
+              management_discussion_highlights_json, management_discussion_source_sections_json,
+              section_count, table_count, metric_count, risk_factor_count, business_event_count,
+              parsed_at, run_id
+            )
+            VALUES
+              (
+                41, 'intelligence_records', 101, 'hash-doc-1', 'hkex-annual-1', 'hkex_disclosure',
+                'annual_report_publication', 'hkg-alpha-fintech', 'HKG', 'Alpha Fintech Annual Report 2025',
+                'Annual report parsed', 'application/pdf', 'en', 'D:/tmp/alpha-annual-report.pdf',
+                'https://alpha.example.com/reports/annual-2025.pdf', 'document_parser', 'pymupdf',
+                'v1', 'success', 'used', 'completed', 'full text', 'search text', :doc_warnings,
+                :doc_metadata, 'Management highlights strong SME payment growth and GCC expansion.',
+                :doc_highlights, :doc_sections, 12, 3, 2, 1, 1, '2026-04-22T09:30:00Z', 'parse-run-1'
+              )
+            """
+        ),
+        {
+            "doc_warnings": json.dumps([], ensure_ascii=False),
+            "doc_metadata": json.dumps({"pages": 48}, ensure_ascii=False),
+            "doc_highlights": json.dumps(["SME growth", "GCC expansion"], ensure_ascii=False),
+            "doc_sections": json.dumps(["Management Discussion and Analysis"], ensure_ascii=False),
+        },
+    )
+    db.execute(
+        text(
+            """
+            INSERT INTO parsed_metrics (
+              id, document_id, metric_index, name, value, unit, period, context, confidence
+            )
+            VALUES
+              (51, 41, 0, 'revenue_growth', '18.5', '%', 'FY2025', 'management discussion', 0.91),
+              (52, 41, 1, 'customer_deposits', '398046.34', 'HKD million', 'FY2025', 'financial highlights', 0.88)
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            INSERT INTO parsed_risk_factors (
+              id, document_id, risk_index, category, description, severity, confidence
+            )
+            VALUES
+              (61, 41, 0, 'regulatory', 'Expansion depends on cross-border licensing progress.', 'medium', 0.84)
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            INSERT INTO parsed_business_events (
+              id, document_id, event_index, event_type, summary, event_date, parties_json, confidence
+            )
+            VALUES
+              (71, 41, 0, 'expansion', 'Alpha Fintech launched UAE operations.', '2026-03-15',
+               :business_event_parties, 0.89)
+            """
+        ),
+        {"business_event_parties": json.dumps(["Alpha Fintech", "UAE partners"], ensure_ascii=False)},
+    )
     db.commit()
 
 
@@ -226,6 +293,89 @@ def _test_client() -> Generator[TestClient, None, None]:
             )
             """
         )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE parsed_documents (
+              id INTEGER PRIMARY KEY,
+              source_table TEXT NOT NULL,
+              source_id INTEGER NOT NULL,
+              source_content_hash TEXT NOT NULL,
+              source_record_key TEXT,
+              source TEXT NOT NULL,
+              dataset TEXT,
+              company_id TEXT,
+              entity TEXT,
+              title TEXT,
+              summary TEXT,
+              media_type TEXT,
+              lang TEXT,
+              file_path TEXT,
+              evidence_url TEXT,
+              parser_name TEXT NOT NULL,
+              backend_name TEXT,
+              parse_version TEXT NOT NULL,
+              parse_status TEXT NOT NULL,
+              ocr_status TEXT,
+              xbrl_status TEXT,
+              content_text TEXT,
+              search_text TEXT,
+              warnings_json TEXT,
+              metadata_json TEXT,
+              management_discussion_summary TEXT,
+              management_discussion_highlights_json TEXT,
+              management_discussion_source_sections_json TEXT,
+              section_count INTEGER NOT NULL,
+              table_count INTEGER NOT NULL,
+              metric_count INTEGER NOT NULL,
+              risk_factor_count INTEGER NOT NULL,
+              business_event_count INTEGER NOT NULL,
+              parsed_at TEXT NOT NULL,
+              run_id TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE parsed_metrics (
+              id INTEGER PRIMARY KEY,
+              document_id INTEGER NOT NULL,
+              metric_index INTEGER NOT NULL,
+              name TEXT NOT NULL,
+              value TEXT NOT NULL,
+              unit TEXT,
+              period TEXT,
+              context TEXT,
+              confidence REAL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE parsed_risk_factors (
+              id INTEGER PRIMARY KEY,
+              document_id INTEGER NOT NULL,
+              risk_index INTEGER NOT NULL,
+              category TEXT NOT NULL,
+              description TEXT NOT NULL,
+              severity TEXT NOT NULL,
+              confidence REAL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE parsed_business_events (
+              id INTEGER PRIMARY KEY,
+              document_id INTEGER NOT NULL,
+              event_index INTEGER NOT NULL,
+              event_type TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              event_date TEXT,
+              parties_json TEXT,
+              confidence REAL
+            )
+            """
+        )
 
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     with SessionLocal() as db:
@@ -277,9 +427,91 @@ def test_company_detail_returns_company_centric_view() -> None:
     assert payload["stats"]["timeline_event_count"] == 1
     assert payload["stats"]["generated_insight_count"] == 1
     assert payload["stats"]["signal_type_distribution"][0]["name"] in {"growth", "cross_border"}
+    assert payload["latest_state"]["status"] == "actionable"
+    assert payload["latest_state"]["state_summary"].startswith(
+        "Company has enough linked evidence for immediate RM follow-up"
+    )
+    assert "growth" in payload["latest_state"]["focus_tags"]
+    assert "management_discussion" in payload["latest_state"]["focus_tags"]
+    assert payload["latest_state"]["signal_highlights"][0].startswith("2 recent signals linked")
+    assert payload["latest_state"]["opportunity_signals"][0]["signal_type"] in {"growth", "cross_border"}
+    assert payload["latest_state"]["opportunity_signals"][0]["source_type"] == "trigger_signal"
+    assert payload["latest_state"]["context_signals"][0]["signal_type"] in {"growth", "cross_border"}
+    assert payload["latest_state"]["context_signals"][0]["linkage_type"] == "direct_company_link"
+    assert payload["latest_state"]["context_signals"][0]["linkage_strength"] == "strong"
+    assert payload["latest_state"]["context_signals"][0]["linkage_rationale"] is not None
+    assert payload["latest_state"]["risk_signals"][0]["signal_type"] == "regulatory"
+    assert payload["latest_state"]["risk_signals"][0]["severity"] == "medium"
+    assert payload["latest_state"]["coverage_flags"]["has_recent_signals"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_parsed_reports"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_management_discussion"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_structured_metrics"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_risk_factors"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_business_events"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_ocr_support"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_xbrl_support"] is True
+    assert "opportunity:" in payload["latest_state"]["why_now"]
+    assert "risk watch:" in payload["latest_state"]["why_now"]
+    assert "direct company evidence points to" in payload["latest_state"]["fusion_summary"].lower()
+    assert payload["latest_state"]["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
+    assert payload["latest_state"]["fusion"]["primary_opportunity"] is not None
+    assert payload["latest_state"]["fusion"]["context_alignment"] is not None
+    assert payload["latest_state"]["fusion"]["key_risk"] is not None
+    assert len(payload["latest_state"]["fusion"]["reasoning_steps"]) >= 3
+    assert payload["latest_state"]["fusion"]["reasoning_steps"][0]["step_key"] == "company_evidence"
+    assert len(payload["latest_state"]["fusion"]["opportunity_lenses"]) == 3
+    assert payload["latest_state"]["fusion"]["opportunity_lenses"][0]["lens_key"] in {
+        "acquisition",
+        "financing",
+        "cross_border",
+    }
+    assert payload["latest_state"]["product_fit"][0]["product_name"] == "cross-border payments"
+    assert payload["latest_state"]["product_fit"][0]["fit_score"] >= 80
+    assert payload["latest_state"]["recommended_entry_angles"][0].startswith("Lead with the company event:")
+    assert payload["latest_state"]["commercial_attractiveness_score"] > 0
+    assert payload["latest_state"]["immediacy_score"] > 0
+    assert payload["latest_state"]["product_fit_score"] > 0
+    assert payload["latest_state"]["risk_penalty_score"] > 0
+    assert payload["latest_state"]["evidence_confidence_score"] > 0
+    assert len(payload["latest_state"]["decision_answers"]) >= 4
+    assert payload["latest_state"]["decision_answers"][0]["question_key"] == "priority"
+    assert len(payload["latest_state"]["decision_features"]) >= 4
+    assert payload["latest_state"]["decision_features"][0]["feature_key"] is not None
+    assert payload["latest_state"]["recommended_next_step"].startswith("review latest risk factors")
+    assert payload["latest_state"]["evidence_summary"]["parsed_document_count"] == 1
+    assert payload["latest_state"]["evidence_summary"]["ocr_hit_count"] == 1
+    assert payload["latest_state"]["evidence_summary"]["xbrl_hit_count"] == 1
+    assert payload["recent_documents"][0]["title"] == "Alpha Fintech Annual Report 2025"
+    assert payload["recent_documents"][0]["management_discussion_summary"].startswith("Management highlights")
+    assert payload["key_metrics"][0]["name"] == "revenue_growth"
+    assert payload["key_risk_factors"][0]["category"] == "regulatory"
+    assert payload["key_business_events"][0]["event_type"] == "expansion"
+    assert payload["key_business_events"][0]["parties"] == ["Alpha Fintech", "UAE partners"]
     assert payload["recent_signals"][0]["signal_key"] == "signal-alpha-growth"
     assert payload["recent_timeline"][0]["headline"] == "Alpha Fintech expands into UAE"
     assert payload["recent_insights"][0]["title"] == "Engage Alpha Fintech"
+
+
+def test_company_detail_returns_active_state_when_only_market_evidence_exists() -> None:
+    with _test_client() as client:
+        response = client.get("/api/companies/0005")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["company"]["company_id"] == "0005"
+    assert payload["stats"]["signal_count"] == 1
+    assert payload["stats"]["generated_insight_count"] == 0
+    assert payload["latest_state"]["status"] == "active"
+    assert payload["latest_state"]["coverage_flags"]["has_recent_signals"] is True
+    assert payload["latest_state"]["coverage_flags"]["has_parsed_reports"] is False
+    assert payload["latest_state"]["opportunity_signals"][0]["signal_type"] == "market"
+    assert payload["latest_state"]["context_signals"][0]["signal_type"] == "market"
+    assert payload["latest_state"]["risk_signals"] == []
+    assert payload["latest_state"]["fusion"]["primary_lens_key"] == "acquisition"
+    assert payload["latest_state"]["product_fit"][0]["product_name"] == "capital markets"
+    assert payload["latest_state"]["recommended_next_step"].startswith(
+        "prepare acquisition outreach anchored on capital markets"
+    )
 
 
 def test_company_detail_returns_404_for_unknown_company() -> None:
