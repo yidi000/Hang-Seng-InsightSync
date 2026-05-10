@@ -7,3 +7,16 @@ To reconstruct the dump:
 ```bash
 cat backups/insightsync_postgres_2026-05-06_curated_snapshot.dump.part-* > backups/insightsync_postgres_2026-05-06_curated_snapshot.dump
 ```
+
+Or run the helper script:
+
+```bash
+bash backups/restore_dump.sh
+```
+
+The script will:
+
+- detect the split files with prefix `backups/insightsync_postgres_2026-05-06_curated_snapshot.dump.part.`
+- concatenate them in lexical order
+- generate `backups/insightsync_postgres_2026-05-06_curated_snapshot.dump`
+- print the reconstructed file size
