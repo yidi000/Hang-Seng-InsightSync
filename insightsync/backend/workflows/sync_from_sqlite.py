@@ -44,6 +44,12 @@ def _sqlite_rows(sqlite_path: Path, table: str, since_run_id: str | None = None)
     params: tuple[Any, ...] = ()
     with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True) as conn:
         conn.row_factory = sqlite3.Row
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+            (table,),
+        ).fetchone()
+        if not exists:
+            return []
         if since_run_id:
             columns = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if "run_id" in columns:
@@ -58,19 +64,24 @@ def _upsert_rows(
     rows: list[dict[str, Any]],
     conflict_cols: list[str],
     update_cols: list[str] | None = None,
+    batch_size: int = 500,
 ) -> int:
     if not rows:
         return 0
-    stmt = insert(table).values(rows)
-    if update_cols:
-        stmt = stmt.on_conflict_do_update(
-            index_elements=conflict_cols,
-            set_={column: getattr(stmt.excluded, column) for column in update_cols},
-        )
-    else:
-        stmt = stmt.on_conflict_do_nothing(index_elements=conflict_cols)
-    result = db.execute(stmt)
-    return max(0, int(result.rowcount or 0))
+    total = 0
+    for idx in range(0, len(rows), batch_size):
+        batch = rows[idx : idx + batch_size]
+        stmt = insert(table).values(batch)
+        if update_cols:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=conflict_cols,
+                set_={column: getattr(stmt.excluded, column) for column in update_cols},
+            )
+        else:
+            stmt = stmt.on_conflict_do_nothing(index_elements=conflict_cols)
+        result = db.execute(stmt)
+        total += max(0, int(result.rowcount or 0))
+    return total
 
 
 def _map_ingestion_run(row: dict[str, Any]) -> dict[str, Any]:

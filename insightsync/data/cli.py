@@ -151,7 +151,7 @@ def main() -> None:
         investhk_request_timeout_seconds=args.investhk_request_timeout_seconds,
         investhk_article_delay_seconds=args.investhk_article_delay_seconds,
         hkgov_language=args.hkgov_language,
-        hkgov_since_months=args.hkgov_since_months,
+        hkgov_since_months=None if (args.hkgov_start_date or args.hkgov_end_date) else args.hkgov_since_months,
         hkgov_since_days=args.hkgov_since_days,
         hkgov_start_date=args.hkgov_start_date,
         hkgov_end_date=args.hkgov_end_date,
@@ -268,4 +268,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

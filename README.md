@@ -19,6 +19,7 @@ In another terminal, initialize the backend database and load the bundled demo S
 ```bash
 docker compose exec api alembic upgrade head
 docker compose exec api python -m insightsync.backend.workflows.sync_from_sqlite --full
+docker compose exec api python -m insightsync.backend.workflows.build_curated_prospects
 docker compose exec api python -m insightsync.backend.workflows.build_rag_index --full
 ```
 
@@ -53,6 +54,7 @@ Run migrations, sync data, build the RAG index, and start the API:
 ```bash
 alembic upgrade head
 python -m insightsync.backend.workflows.sync_from_sqlite --full
+python -m insightsync.backend.workflows.build_curated_prospects
 python -m insightsync.backend.workflows.build_rag_index --full
 uvicorn insightsync.backend.main:app --reload --port 8000
 ```
@@ -60,14 +62,28 @@ uvicorn insightsync.backend.main:app --reload --port 8000
 Useful backend endpoints:
 
 - `GET /healthz`
+- `GET /api/dashboard/summary`
+- `GET /api/dashboard/market-overview`
+- `GET /api/dashboard/priority-prospects`
+- `GET /api/dashboard/trigger-signals`
 - `GET /api/companies`
 - `GET /api/companies/{company_id}`
+- `GET /api/prospects`
+- `GET /api/prospects/{prospectId}`
+- `GET /api/metadata/filters`
 - `GET /api/signals`
 - `GET /api/timeline`
 - `GET /api/dashboard/overview`
 - `GET /api/rag/index/status`
 - `POST /api/rag/query`
 - `POST /api/insights/generate`
+- `POST /api/copilot/chat`
+
+Build the curated prospecting layer after syncing data:
+
+```bash
+python -m insightsync.backend.workflows.build_curated_prospects
+```
 
 
 ## Business Objective
