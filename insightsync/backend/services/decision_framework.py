@@ -167,6 +167,24 @@ PRIORITY_SCORE_POLICY: dict[str, float | int] = {
     "medium_priority_threshold": 38,
 }
 
+SCORECARD_CONTRACT: dict[str, Any] = {
+    "scorecard_version": "prospect-scorecard-v0.2",
+    "scoring_method": "explainable_rule_scorecard",
+    "calibration_status": "expert_defined_unvalidated_v0",
+    "llm_score_assignment": "not_used_for_final_score",
+    "priority_formula": (
+        "min(opportunity_score * opportunity_weight "
+        "+ evidence_confidence_score * evidence_confidence_weight "
+        "+ max(0, risk_headroom_cap - risk_score) * risk_buffer_weight, 100)"
+    ),
+    "score_interpretation": {
+        "priority_score": "Prospect ranking score for RM prioritization; not a credit approval, risk rating, or validated sales propensity model.",
+        "opportunity_score": "Business opportunity strength from commercial attractiveness, timing, and product-fit features.",
+        "risk_score": "Linked risk evidence that constrains outreach and reduces available risk headroom.",
+        "evidence_confidence_score": "Evidence and linkage quality score kept separate from business attractiveness.",
+    },
+}
+
 PRODUCT_FIT_CATALOG: dict[str, dict[str, Any]] = {
     "cross-border payments": {
         "fit_score": 88,
@@ -278,6 +296,13 @@ def feature_cap(feature_key: str) -> int:
 
 def priority_score_policy() -> dict[str, float | int]:
     return dict(PRIORITY_SCORE_POLICY)
+
+
+def scorecard_contract() -> dict[str, Any]:
+    return {
+        **SCORECARD_CONTRACT,
+        "priority_policy": priority_score_policy(),
+    }
 
 
 def score_feature_groups(features: list[dict[str, Any]]) -> dict[str, int]:

@@ -1,0 +1,50 @@
+[
+  {
+    "case_id": "en_report_management_discussion",
+    "language": "en",
+    "title": "Alpha Holdings Annual Report 2025",
+    "content": "Management discussion and analysis\n\nManagement reported strong SME payment growth. Revenue reached HK$12.5 billion in FY2025. On 2026-04-01 the company launched UAE operations. Regulatory risk remains significant because cross-border licensing requirements are tightening.",
+    "expected": {
+      "metrics": ["revenue"],
+      "risk_categories": ["regulatory"],
+      "business_events": ["expansion"],
+      "has_management_discussion": true
+    }
+  },
+  {
+    "case_id": "zh_hans_report_management_discussion",
+    "language": "zh-Hans",
+    "title": "华南科技集团2025年报",
+    "content": "管理层讨论与分析\n\n管理层表示，公司在大湾区扩展供应链金融服务，营业收入达到12.8亿元。公司于2026-03-15取得新的跨境服务许可。监管风险和流动性风险仍需持续关注。",
+    "expected": {
+      "metrics": ["revenue"],
+      "risk_categories": ["regulatory", "liquidity"],
+      "business_events": ["expansion", "regulatory"],
+      "has_management_discussion": true
+    }
+  },
+  {
+    "case_id": "zh_hant_report_management_discussion",
+    "language": "zh-Hant",
+    "title": "南方支付控股2025年報",
+    "content": "管理層討論與分析\n\n管理層指出，公司已在東南亞拓展商戶收單服務，營業收入達8.6億元。公司亦簽署合作協議以支持跨境結算。監管風險仍然顯著，牌照要求可能影響推出時間。",
+    "expected": {
+      "metrics": ["revenue"],
+      "risk_categories": ["regulatory"],
+      "business_events": ["expansion", "partnership"],
+      "has_management_discussion": true
+    }
+  },
+  {
+    "case_id": "yue_hant_market_update",
+    "language": "yue-Hant",
+    "title": "灣區金融科技公司業務更新",
+    "content": "管理層討論\n\n公司今年喺大灣區拓展支付服務，營收達HK$3.2 billion。管理層話商戶需求增長，但監管風險同現金流壓力都要留意。公司正準備新一輪融資去支持跨境業務。",
+    "expected": {
+      "metrics": ["revenue"],
+      "risk_categories": ["regulatory", "liquidity"],
+      "business_events": ["expansion", "financing"],
+      "has_management_discussion": true
+    }
+  }
+]

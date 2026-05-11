@@ -104,12 +104,45 @@ class ProspectScoreComponentOut(BaseModel):
     detail: str
 
 
+class ProspectLinkageQualityOut(BaseModel):
+    """Evidence-linkage quality metrics used to guard prospect scoring."""
+
+    linked_evidence_count: int = 0
+    scoreable_evidence_count: int = 0
+    direct_evidence_count: int = 0
+    strong_linkage_count: int = 0
+    context_only_count: int = 0
+    direct_evidence_ratio: float = 0.0
+    scoreable_evidence_ratio: float = 0.0
+    linkage_type_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class ProspectGovernanceFlagOut(BaseModel):
+    """Score governance flag for subjectivity, weak evidence, or linkage overreach."""
+
+    flag_key: str
+    severity: str
+    area: str
+    message: str
+    suggested_action: str
+
+
 class ProspectScoreBreakdownOut(BaseModel):
     """Explainable score composition for prospect prioritization."""
 
+    scorecard_version: str
+    scoring_method: str
+    calibration_status: str
+    llm_score_assignment: str
+    priority_formula: str
+    score_interpretation: dict[str, str] = Field(default_factory=dict)
+    priority_policy: dict[str, float | int] = Field(default_factory=dict)
+    score_inputs: dict[str, int] = Field(default_factory=dict)
     opportunity_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
     risk_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
     priority_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
+    linkage_quality: ProspectLinkageQualityOut
+    governance_flags: list[ProspectGovernanceFlagOut] = Field(default_factory=list)
 
 
 class ProspectBriefOut(BaseModel):
@@ -159,3 +192,52 @@ class ProspectCopilotOut(BaseModel):
     evidence: ProspectEvidenceOut
     fusion_explanation: dict | None = None
     suggested_questions: list[str] = Field(default_factory=list)
+
+
+class ProspectLinkageReviewOut(BaseModel):
+    """Review of whether a signal-to-company linkage is too strong, too weak, or reasonable."""
+
+    item_key: str
+    title: str | None = None
+    evidence_text: str | None = None
+    current_linkage_type: str | None = None
+    current_linkage_strength: str | None = None
+    suggested_linkage_type: str | None = None
+    suggested_linkage_strength: str | None = None
+    review_status: str
+    confidence: float | None = None
+    reason: str
+    should_affect_scoring: bool | None = None
+
+
+class ProspectAuditFindingOut(BaseModel):
+    """Review finding about subjectivity, overreach, or weak decision logic."""
+
+    finding_key: str
+    severity: str
+    area: str
+    issue: str
+    reason: str
+    affected_feature_keys: list[str] = Field(default_factory=list)
+    suggested_action: str
+
+
+class ProspectExtractionOpportunityOut(BaseModel):
+    """Suggested extraction gap that would improve the case quality."""
+
+    area: str
+    why: str
+    suggested_output: str
+
+
+class ProspectReviewOut(BaseModel):
+    """Prospect-level LLM review for linkage quality, subjectivity risk, and extraction gaps."""
+
+    prospect_id: str
+    company_id: str
+    status: str
+    review_summary: str
+    linkage_reviews: list[ProspectLinkageReviewOut] = Field(default_factory=list)
+    audit_findings: list[ProspectAuditFindingOut] = Field(default_factory=list)
+    extraction_opportunities: list[ProspectExtractionOpportunityOut] = Field(default_factory=list)
+    model_name: str | None = None

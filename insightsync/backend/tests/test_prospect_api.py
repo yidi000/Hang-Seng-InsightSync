@@ -45,6 +45,16 @@ def test_list_prospects_returns_ranked_business_view() -> None:
     assert len(top["score_breakdown"]["opportunity_components"]) >= 1
     assert len(top["score_breakdown"]["risk_components"]) >= 1
     assert len(top["score_breakdown"]["priority_components"]) >= 3
+    assert top["score_breakdown"]["scorecard_version"] == "prospect-scorecard-v0.2"
+    assert top["score_breakdown"]["calibration_status"] == "expert_defined_unvalidated_v0"
+    assert top["score_breakdown"]["llm_score_assignment"] == "not_used_for_final_score"
+    assert top["score_breakdown"]["score_inputs"]["priority_score"] == top["priority_score"]
+    assert top["score_breakdown"]["score_inputs"]["opportunity_score"] == top["opportunity_score"]
+    assert top["score_breakdown"]["score_inputs"]["risk_score"] == top["risk_score"]
+    assert top["score_breakdown"]["score_inputs"]["evidence_confidence_score"] == top["evidence_confidence_score"]
+    assert top["score_breakdown"]["linkage_quality"]["linked_evidence_count"] >= 1
+    assert top["score_breakdown"]["linkage_quality"]["direct_evidence_ratio"] >= 0.5
+    assert "priority_score" in top["score_breakdown"]["score_interpretation"]
 
 
 def test_list_prospects_supports_priority_filter() -> None:
@@ -76,6 +86,11 @@ def test_get_prospect_detail_returns_company_backed_detail() -> None:
     assert payload["prospect"]["score_breakdown"]["priority_components"][0]["name"] == "opportunity_weighted"
     assert payload["prospect"]["score_breakdown"]["priority_components"][1]["name"] == "evidence_confidence_weighted"
     assert payload["prospect"]["score_breakdown"]["priority_components"][2]["name"] == "risk_buffer"
+    assert payload["prospect"]["score_breakdown"]["priority_policy"]["opportunity_weight"] == 0.6
+    assert payload["prospect"]["score_breakdown"]["linkage_quality"]["scoreable_evidence_count"] >= 1
+    assert payload["prospect"]["score_breakdown"]["linkage_quality"]["context_only_count"] == 0
+    assert payload["prospect"]["score_breakdown"]["linkage_quality"]["linkage_type_counts"]["direct_company_link"] >= 1
+    assert isinstance(payload["prospect"]["score_breakdown"]["governance_flags"], list)
     assert payload["prospect"]["decision_features"][0]["feature_key"] is not None
     assert payload["prospect"]["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
     assert payload["company"]["company_id"] == "hkg-alpha-fintech"
@@ -225,3 +240,60 @@ def test_get_prospect_copilot_returns_workspace_payload() -> None:
     assert payload["fusion_explanation"]["headline"] is not None
     assert len(payload["suggested_questions"]) >= 2
     assert "Alpha Fintech Holdings" in payload["suggested_questions"][0]
+
+
+def test_get_prospect_review_returns_llm_review_payload() -> None:
+    fake_review = {
+        "status": "fallback",
+        "review_summary": "Alpha Fintech review generated in fallback mode.",
+        "linkage_reviews": [
+            {
+                "item_key": "signal_1",
+                "title": "Growth signal",
+                "evidence_text": "Alpha Fintech expands into UAE",
+                "current_linkage_type": "direct_company_link",
+                "current_linkage_strength": "strong",
+                "suggested_linkage_type": "direct_company_link",
+                "suggested_linkage_strength": "strong",
+                "review_status": "confirm",
+                "confidence": 0.6,
+                "reason": "Current linkage is reasonable based on the available structured evidence.",
+                "should_affect_scoring": True,
+            }
+        ],
+        "audit_findings": [
+            {
+                "finding_key": "cross_border_product_overreach",
+                "severity": "medium",
+                "area": "product_fit",
+                "issue": "Cross-border product hypothesis may be too eager.",
+                "reason": "Cross-border evidence should be checked carefully.",
+                "affected_feature_keys": ["top_product_fit_strength"],
+                "suggested_action": "Check direct cross-border evidence before outreach.",
+            }
+        ],
+        "extraction_opportunities": [
+            {
+                "area": "structured_metrics",
+                "why": "More metrics would improve confidence.",
+                "suggested_output": "Extract growth, capex, and debt metrics.",
+            }
+        ],
+        "model_name": None,
+    }
+
+    with patch(
+        "insightsync.backend.services.prospect_service.DecisionReviewService.review",
+        return_value=fake_review,
+    ):
+        with _test_client() as client:
+            response = client.get("/api/prospects/prospect:hkg-alpha-fintech/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["company_id"] == "hkg-alpha-fintech"
+    assert payload["review_summary"] == "Alpha Fintech review generated in fallback mode."
+    assert payload["linkage_reviews"][0]["review_status"] == "confirm"
+    assert payload["audit_findings"][0]["finding_key"] == "cross_border_product_overreach"
+    assert payload["extraction_opportunities"][0]["area"] == "structured_metrics"

@@ -13,6 +13,7 @@ from insightsync.backend.schemas.prospects import (
     ProspectListOut,
     ProspectQuestionIn,
     ProspectQuestionOut,
+    ProspectReviewOut,
 )
 from insightsync.backend.schemas.signals import SignalListOut
 from insightsync.backend.schemas.timeline import TimelineListOut
@@ -141,3 +142,13 @@ def get_prospect_copilot(prospect_id: str, db: Session = Depends(get_db)) -> Pro
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectCopilotOut(**payload)
+
+
+@router.get("/{prospect_id}/review", response_model=ProspectReviewOut)
+def get_prospect_review(prospect_id: str, db: Session = Depends(get_db)) -> ProspectReviewOut:
+    """Return an LLM-assisted review of linkage quality, decision subjectivity, and extraction gaps."""
+
+    payload = ProspectService(db, settings=get_settings()).get_prospect_review(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectReviewOut(**payload)
