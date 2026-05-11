@@ -185,6 +185,21 @@ company_mapping_audit = Table(
     ),
 )
 
+prospect_workflow_states = Table(
+    "prospect_workflow_states",
+    metadata,
+    Column("prospect_id", Text, primary_key=True),
+    Column("company_id", Text, nullable=False),
+    Column("owner", Text),
+    Column("stage", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("last_action", Text),
+    Column("next_action", Text),
+    Column("review_status", Text, nullable=False),
+    Column("notes", Text),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 parsing_runs = Table(
     "parsing_runs",
     metadata,

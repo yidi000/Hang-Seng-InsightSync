@@ -114,6 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--parse-force", action="store_true")
     parser.add_argument("--parse-limit", type=int, default=0)
     parser.add_argument("--parse-version", default=DEFAULT_PARSE_VERSION)
+    parser.add_argument("--parse-enable-genai-extraction", action="store_true")
+    parser.add_argument("--parse-genai-max-candidates", type=int, default=8)
     parser.add_argument("--skip-ingestion", action="store_true")
 
     parser.add_argument("--interval-minutes", type=float, default=0.0)
@@ -151,7 +153,7 @@ def main() -> None:
         investhk_request_timeout_seconds=args.investhk_request_timeout_seconds,
         investhk_article_delay_seconds=args.investhk_article_delay_seconds,
         hkgov_language=args.hkgov_language,
-        hkgov_since_months=args.hkgov_since_months,
+        hkgov_since_months=None if (args.hkgov_start_date or args.hkgov_end_date) else args.hkgov_since_months,
         hkgov_since_days=args.hkgov_since_days,
         hkgov_start_date=args.hkgov_start_date,
         hkgov_end_date=args.hkgov_end_date,
@@ -232,6 +234,8 @@ def main() -> None:
                     parse_version=args.parse_version,
                     limit=args.parse_limit,
                     force=args.parse_force,
+                    enable_genai_extraction=args.parse_enable_genai_extraction,
+                    genai_max_candidates=args.parse_genai_max_candidates,
                 )
             )
         print(json.dumps(output, ensure_ascii=False, indent=2))
@@ -244,11 +248,13 @@ def main() -> None:
             ParsingConfig(
                 db_path=Path(args.db_path),
                 raw_dir=Path(args.raw_dir),
-                parse_version=args.parse_version,
-                limit=args.parse_limit,
-                force=args.parse_force,
-            )
+            parse_version=args.parse_version,
+            limit=args.parse_limit,
+            force=args.parse_force,
+            enable_genai_extraction=args.parse_enable_genai_extraction,
+            genai_max_candidates=args.parse_genai_max_candidates,
         )
+    )
     if mapping_summary is not None:
         output = {
             "ingestion": summary,

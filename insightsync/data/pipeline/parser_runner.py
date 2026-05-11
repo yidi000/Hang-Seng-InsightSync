@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from insightsync.parsing import DEFAULT_PARSE_VERSION, parse_content
+from insightsync.parsing.genai_extractor import GenAIExtractionConfig, enhance_parsed_document_with_genai
 from insightsync.parsing.request_builders import build_parse_request_from_row
 
 from .storage import SQLiteRepository
@@ -19,6 +20,8 @@ class ParsingConfig:
     parse_version: str = DEFAULT_PARSE_VERSION
     limit: int = 0
     force: bool = False
+    enable_genai_extraction: bool = False
+    genai_max_candidates: int = 8
 
 
 def run_parsing_once(config: ParsingConfig) -> dict[str, Any]:
@@ -28,6 +31,8 @@ def run_parsing_once(config: ParsingConfig) -> dict[str, Any]:
         parse_version=config.parse_version,
         limit=max(0, int(config.limit)),
         force=bool(config.force),
+        enable_genai_extraction=bool(config.enable_genai_extraction),
+        genai_max_candidates=max(1, int(config.genai_max_candidates)),
     )
     run_id = datetime.now(timezone.utc).strftime("parse-%Y%m%dT%H%M%SZ")
     started_at = utc_now_iso()
@@ -42,11 +47,23 @@ def run_parsing_once(config: ParsingConfig) -> dict[str, Any]:
         inserted = 0
         skipped = 0
         errors: list[dict[str, Any]] = []
+        genai_provider = None
+        if cfg.enable_genai_extraction:
+            from insightsync.backend.ai.providers.openai_client import OpenAIProvider
+            from insightsync.backend.core.config import Settings
+
+            genai_provider = OpenAIProvider(Settings())
 
         for row in candidates:
             try:
                 request, request_warnings = build_parse_request_from_row(row, raw_root=cfg.raw_dir)
                 parsed = parse_content(request)
+                if genai_provider is not None:
+                    parsed = enhance_parsed_document_with_genai(
+                        parsed,
+                        chat_json=genai_provider.chat_json,
+                        config=GenAIExtractionConfig(max_candidates=cfg.genai_max_candidates),
+                    )
                 inserted += repo.persist_parsed_document(
                     source_row=row,
                     parsed=parsed,
@@ -78,6 +95,7 @@ def run_parsing_once(config: ParsingConfig) -> dict[str, Any]:
             "scanned": scanned,
             "inserted": inserted,
             "skipped": skipped,
+            "genai_extraction_enabled": cfg.enable_genai_extraction,
             "errors": errors,
             "finished_at": utc_now_iso(),
         }

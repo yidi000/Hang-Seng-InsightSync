@@ -1,7 +1,7 @@
 # Hang Seng InsightSync
 
 InsightSync is a GenAI-driven actionable intelligence platform for Hang Seng Bank commercial banking scenarios.
-It combines company-related signals and external market intelligence to support faster and more consistent RM decisions across prospecting, relationship deepening, and risk monitoring.
+It combines company reports, company-related signals, and external market intelligence to support faster and more consistent RM decisions across prospecting, relationship deepening, and risk monitoring.
 
 PRD framework UI demo: https://v0-hang-seng.vercel.app/
 
@@ -26,13 +26,61 @@ Verify the service:
 
 ```bash
 curl "http://127.0.0.1:8000/healthz"
+curl "http://127.0.0.1:8000/api/companies?limit=20"
+curl "http://127.0.0.1:8000/api/prospects?limit=20"
 curl "http://127.0.0.1:8000/api/signals?limit=20"
 curl "http://127.0.0.1:8000/api/timeline?limit=20"
 curl "http://127.0.0.1:8000/api/dashboard/overview"
 curl "http://127.0.0.1:8000/api/rag/index/status"
+curl "http://127.0.0.1:8000/api/metadata/filters"
 ```
 
-RAG insight generation is evidence-gated. Without `OPENAI_API_KEY`, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
+RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
+
+For real GLM 4.7 Flash generation, set:
+
+```bash
+ENABLE_LLM_GENERATION=true
+LLM_API_KEY=<your-bigmodel-api-key>
+LLM_BASE_URL=https://api.z.ai/api/paas/v4/
+LLM_CHAT_MODEL=glm-4.7-flash
+LLM_ENABLE_THINKING=false
+LLM_TIMEOUT_SECONDS=45
+```
+
+Then run a direct smoke check:
+
+```bash
+python -m insightsync.backend.workflows.glm_smoke_check
+```
+
+Run a multilingual GLM extraction demo against English, simplified Chinese, traditional Chinese, and Cantonese-style cases:
+
+```bash
+python -m insightsync.backend.workflows.glm_extraction_demo --include-raw --delay-seconds 10
+```
+
+Add `--api-preview` to include the same `recent_documents[].genai_extraction` audit shape returned by the company/prospect evidence APIs:
+
+```bash
+python -m insightsync.backend.workflows.glm_extraction_demo --mock --strict --api-preview
+```
+
+For deterministic local validation without calling GLM:
+
+```bash
+python -m insightsync.backend.workflows.glm_extraction_demo --mock --strict
+```
+
+The bundled demo SQLite snapshot is intentionally committed at `insightsync/data/storage/demo/insightsync_demo.db`. Current snapshot coverage:
+
+- 19 company profiles
+- 248 intelligence records
+- 1,394 trigger signals
+- 254 timeline events
+- 240 parsed documents
+- 4 parsed metrics, 22 parsed risk factors, and 8 parsed business events
+- 0 generated insights by default; generated insights are created after RAG/LLM calls with validated citations
 
 ## Local Development Without Docker
 
@@ -62,13 +110,23 @@ Useful backend endpoints:
 - `GET /healthz`
 - `GET /api/companies`
 - `GET /api/companies/{company_id}`
+- `GET /api/prospects`
+- `GET /api/prospects/{prospect_id}`
+- `GET /api/prospects/{prospect_id}/evidence`
+- `GET /api/prospects/{prospect_id}/brief`
+- `GET /api/prospects/{prospect_id}/copilot`
+- `GET /api/prospects/{prospect_id}/review`
+- `GET /api/prospects/{prospect_id}/insights`
+- `GET /api/prospects/{prospect_id}/workflow`
+- `PUT /api/prospects/{prospect_id}/workflow`
+- `POST /api/prospects/{prospect_id}/question`
 - `GET /api/signals`
 - `GET /api/timeline`
 - `GET /api/dashboard/overview`
 - `GET /api/rag/index/status`
 - `POST /api/rag/query`
 - `POST /api/insights/generate`
-
+- `GET /api/metadata/filters`
 
 ## Business Objective
 
@@ -80,12 +138,17 @@ The platform is designed to answer three core business questions:
 
 ## Current Scope and Status
 
-Current implementation focus is the data foundation.
+Current implementation focus is the data and backend intelligence foundation.
 
 - Implemented: multi-source ingestion, normalization, signal extraction, SQLite persistence, scheduler loop
-- Implemented: FastAPI backend skeleton, PostgreSQL sync, read-only APIs, RAG indexing, OpenAI-compatible AI provider
-- Partially implemented: generated insights workflow with evidence validation and fallback generation
-- Placeholder modules: frontend dashboard, infrastructure deployment, handover docs
+- Implemented: document parsing for PDF/text/HTML/JSON/CSV/XBRL paths, including structured metrics, risks, business events, and management discussion extraction
+- Implemented: SQLite to PostgreSQL sync, RAG indexing, OpenAI-compatible AI provider, evidence-gated RAG Q&A, and generated insight persistence when citations validate
+- Implemented: GLM 4.7 Flash-compatible LLM configuration and smoke-check workflow through the OpenAI-compatible provider path
+- Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history/workflow payloads, metadata filters, and frontend API handover guide
+- Implemented: prospect scorecard metadata, linkage-quality metrics, and governance flags to separate business score from evidence confidence
+- Implemented: bounded GLM-assisted prospect review for linkage quality, subjectivity risk, rule overreach, and extraction gaps; review is advisory and does not rewrite scores
+- Added: multilingual parsing evaluation samples covering English, simplified Chinese, traditional Chinese, and Cantonese-style traditional Chinese text
+- Still maturing: score calibration, company identity resolution, generated insight evaluation, frontend dashboard implementation, and production handover runbooks
 
 ## Data Sources Integrated
 
@@ -113,13 +176,15 @@ The pipeline follows four stages:
 - Generate candidate signals (growth, financing, cross-border, risk) from normalized facts
 
 4. Output Layer
-- Persist timeline, signals, and future insight artifacts for dashboard/API/copilot consumption
+- Persist timeline, signals, parsed evidence, RAG index artifacts, and generated insight artifacts for API/copilot consumption
 
 Data is organized into three logical layers:
 
 - Fact layer: `intelligence_records`
 - Candidate signal layer: `trigger_signals`
-- Insight layer: `generated_insights` (schema ready, generation workflow to be expanded)
+- Parsed evidence layer: `parsed_documents`, `parsed_metrics`, `parsed_risk_factors`, `parsed_business_events`
+- Company/prospect serving layer: `/api/companies`, `/api/prospects`, `/api/dashboard/*`
+- Insight layer: `generated_insights`
 
 ## Repository Structure
 
@@ -128,11 +193,11 @@ Hang-Seng-InsightSync/
 	README.md                  # Repository-level documentation
 	insightsync/
 		README.md                # Package/module-level notes
-		backend/                 # Backend API placeholder
-		frontend/                # Frontend app placeholder
-		docs/                    # Architecture and handover docs placeholder
-		infrastructure/          # IaC and deployment placeholder
-		data/                    # Implemented ingestion + signal pipeline
+		backend/                 # FastAPI backend, RAG, company/prospect services
+		frontend/                # Frontend application area
+		docs/                    # Architecture, scoring, and frontend API handover docs
+		infrastructure/          # Deployment placeholder
+		data/                    # Ingestion, parsing persistence, demo SQLite snapshot
 			cli.py
 			connectors/
 			pipeline/
@@ -178,6 +243,33 @@ Run SZSE/CNINFO announcement collection (default last 180 days):
 python -m insightsync.data --sources szse --once
 ```
 
+Run local-only company seed refresh and mapping without external network calls:
+
+```bash
+python -m insightsync.data --sources company --once
+python -m insightsync.data --skip-ingestion --sync-market-companies --backfill-company-ids
+```
+
+Run optional GLM-assisted semantic extraction during parsing:
+
+```bash
+python -m insightsync.data --skip-ingestion --run-parsing --parse-enable-genai-extraction --parse-genai-max-candidates 8
+```
+
+This is a bounded extraction adapter, not a scoring engine. It first selects candidate report sections, asks GLM to extract structured facts with located evidence spans, validates the quotes against the source paragraphs, and only then converts eligible facts into the existing parsed metric/risk/event objects. Management statements and opportunity candidates are kept as metadata unless later rules promote them.
+
+Run multilingual parsing evaluation:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ENABLE_LLM_GENERATION=false python -m pytest insightsync/backend/tests/test_multilingual_parsing_eval.py -q
+```
+
+Run company identity/linkage evaluation:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest insightsync/data/tests/test_company_identity_linkage_eval.py -q
+```
+
 ## Collaboration Workflow
 
 1. Sync main branch
@@ -207,11 +299,11 @@ git push
 
 ## Recommended Next Milestones
 
-1. Implement prospect scoring and ranking logic
-2. Implement generated insight reasoning with evidence linkage
-3. Build backend APIs for prospect list, timeline, and risk signals
-4. Build frontend dashboard and RM copilot interaction
-5. Add governance, evaluation, and handover documentation
+1. Calibrate prospect scoring and linkage rules with labeled examples and RM/product review
+2. Expand multilingual evaluation cases for annual reports, announcements, market news, and Cantonese-style business text
+3. Improve company identity resolution across English, simplified Chinese, traditional Chinese, stock codes, aliases, and subsidiaries
+4. Add prospect task/activity history beyond the latest workflow state
+5. Add governance, evaluation logs, model/prompt configuration records, and backend handover runbooks
 
 ## Notes
 

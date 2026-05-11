@@ -6,37 +6,37 @@ from .models import BusinessEvent, ExtractedMetric, ManagementDiscussion, Parsed
 from .utils import extract_date_candidates, normalize_text
 
 _METRIC_SPECS: tuple[tuple[str, str, bool], ...] = (
-    ("revenue", r"(?:\brevenue\b|\bsales\b|\bturnover\b|营业收入|营收|收入)", False),
-    ("net profit", r"(?:\bnet profit\b|\bprofit attributable\b|\bnet income\b|净利润|归母净利润)", False),
-    ("operating profit", r"(?:\boperating profit\b|\boperating income\b|\bebitda\b|营业利润)", False),
-    ("total assets", r"(?:\btotal assets\b|\bassets under management\b|总资产)", False),
-    ("loan book", r"(?:\bloan book\b|\bgross loans\b|\bcustomer loans\b|\bloan balance\b|贷款余额)", False),
-    ("customer deposits", r"(?:\bcustomer deposits\b|\bdeposit balance\b|\bdeposits\b|存款余额|客户存款)", False),
+    ("revenue", r"(?:\brevenue\b|\bsales\b|\bturnover\b|营业收入|營業收入|营收|營收|收入)", False),
+    ("net profit", r"(?:\bnet profit\b|\bprofit attributable\b|\bnet income\b|净利润|淨利潤|归母净利润|歸母淨利潤)", False),
+    ("operating profit", r"(?:\boperating profit\b|\boperating income\b|\bebitda\b|营业利润|營業利潤)", False),
+    ("total assets", r"(?:\btotal assets\b|\bassets under management\b|总资产|總資產)", False),
+    ("loan book", r"(?:\bloan book\b|\bgross loans\b|\bcustomer loans\b|\bloan balance\b|贷款余额|貸款餘額)", False),
+    ("customer deposits", r"(?:\bcustomer deposits\b|\bdeposit balance\b|\bdeposits\b|存款余额|存款餘額|客户存款|客戶存款)", False),
     (
         "npl ratio",
-        r"(?:\bnpl ratio\b|\bnon-performing loan ratio\b|\bnonperforming loan ratio\b|不良贷款率)",
+        r"(?:\bnpl ratio\b|\bnon-performing loan ratio\b|\bnonperforming loan ratio\b|不良贷款率|不良貸款率)",
         True,
     ),
     (
         "capital adequacy ratio",
-        r"(?:\bcapital adequacy ratio\b|\bcapital ratio\b|\bcet1\b|\btier 1 ratio\b|资本充足率|核心一级资本充足率|一级资本充足率)",
+        r"(?:\bcapital adequacy ratio\b|\bcapital ratio\b|\bcet1\b|\btier 1 ratio\b|资本充足率|資本充足率|核心一级资本充足率|核心一級資本充足率|一级资本充足率|一級資本充足率)",
         True,
     ),
     ("cost-to-income ratio", r"(?:\bcost-to-income ratio\b|\bcost income ratio\b|成本收入比)", True),
-    ("liquidity coverage ratio", r"(?:\bliquidity coverage ratio\b|\blcr\b|流动性覆盖率)", True),
+    ("liquidity coverage ratio", r"(?:\bliquidity coverage ratio\b|\blcr\b|流动性覆盖率|流動性覆蓋率)", True),
 )
 
 _VALUE_RE = re.compile(
     r"(?P<value>"
     r"(?:(?:HK\$|US\$|RMB|CNY|\$)\s*)?"
     r"(?:[+-]?(?:\d[\d,]*(?:\.\d+)?|\.\d+))"
-    r"(?:\s?(?:million|billion|trillion|bn|mn|m|%|亿港元|亿元|万元|百万元|万亿元|亿))?"
+    r"(?:\s?(?:million|billion|trillion|bn|mn|m|%|亿港元|億元|億港元|亿元|萬元|万元|百万元|百萬元|万亿元|萬億元|亿|億))?"
     r")",
     re.I,
 )
 _PERIOD_RE = re.compile(
     r"\b(?:FY\s?20\d{2}|20\d{2}|Q[1-4]\s?20\d{2}|H[12]\s?20\d{2}|[1-4]Q20\d{2}|[1-4]季度|1-2月|1-3月|1-6月|1-9月)\b"
-    r"|(?:20\d{2}年(?:上半年|下半年)?)"
+    r"|(?:20\d{2}年(?:上半年|下半年|上半年|下半年)?)"
 )
 _NOISE_MARKERS = (
     "all rights reserved",
@@ -52,12 +52,12 @@ _NOISE_MARKERS = (
     "https://",
 )
 _RISK_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("regulatory", ("regulatory", "compliance", "investigation", "penalty", "监管", "合规", "处罚")),
-    ("credit", ("credit risk", "default", "impairment", "bad debt", "non-performing", "违约", "减值", "坏账", "不良贷款")),
-    ("liquidity", ("liquidity", "funding", "cash flow", "refinancing", "流动性", "融资", "现金流")),
-    ("market", ("volatility", "foreign exchange", "fx", "exchange rate", "rate hike", "devaluation", "波动", "汇率", "利率风险")),
-    ("operational", ("cyber", "outage", "supply chain", "operational risk", "network security", "网络", "停摆", "运营风险", "信息安全")),
-    ("geopolitical", ("tariff", "geopolitical", "trade war", "出口管制", "地缘", "制裁", "关税")),
+    ("regulatory", ("regulatory", "compliance", "investigation", "penalty", "监管", "監管", "合规", "合規", "处罚", "處罰", "牌照")),
+    ("credit", ("credit risk", "default", "impairment", "bad debt", "non-performing", "违约", "違約", "减值", "減值", "坏账", "壞賬", "不良贷款", "不良貸款")),
+    ("liquidity", ("liquidity", "funding", "cash flow", "refinancing", "流动性", "流動性", "融资", "融資", "现金流", "現金流")),
+    ("market", ("volatility", "foreign exchange", "fx", "exchange rate", "rate hike", "devaluation", "波动", "波動", "汇率", "匯率", "利率风险", "利率風險")),
+    ("operational", ("cyber", "outage", "supply chain", "operational risk", "network security", "网络", "網絡", "停摆", "停擺", "运营风险", "營運風險", "信息安全")),
+    ("geopolitical", ("tariff", "geopolitical", "trade war", "出口管制", "地缘", "地緣", "制裁", "关税", "關稅")),
 )
 _RISK_ANCHORS = (
     "risk",
@@ -75,27 +75,34 @@ _RISK_ANCHORS = (
     "illiquidity",
     "opacity",
     "风险",
+    "風險",
     "压力",
+    "壓力",
     "不确定",
+    "不確定",
     "违约",
+    "違約",
     "减值",
+    "減值",
     "诉讼",
+    "訴訟",
     "处罚",
+    "處罰",
 )
-_HIGH_SEVERITY_HINTS = ("material", "significant", "severe", "critical", "重大", "显著", "严重")
+_HIGH_SEVERITY_HINTS = ("material", "significant", "severe", "critical", "重大", "显著", "顯著", "严重", "嚴重")
 _EVENT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "acquisition",
         (
             r"\b(?:acquired|acquire|acquisition|merged with|merger|takeover|agreed to acquire)\b",
-            r"(?:收购|并购|合并)",
+            r"(?:收购|收購|并购|併購|合并|合併)",
         ),
     ),
     (
         "expansion",
         (
             r"\b(?:opened|launched|expanded|established|set up|invested in|rolled out)\b",
-            r"(?:开设|设立|启动|投建|扩张|扩展|落地)",
+            r"(?:开设|開設|设立|設立|成立|启动|啟動|投建|扩张|擴張|扩展|擴展|拓展|推出|落地)",
         ),
     ),
     (
@@ -103,28 +110,28 @@ _EVENT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             r"\b(?:signed|entered into|announced|formed|agreed on)\b.{0,80}\b(?:partnership|agreement|collaboration|mou)\b",
             r"\b(?:partnership|agreement|collaboration|mou)\b.{0,80}\b(?:signed|entered into|announced|formed)\b",
-            r"(?:签署|签订|达成).{0,40}(?:合作协议|战略合作|合作备忘录|协议|合作)",
+            r"(?:签署|簽署|签订|簽訂|达成|達成).{0,40}(?:合作协议|合作協議|战略合作|戰略合作|合作备忘录|合作備忘錄|协议|協議|合作)",
         ),
     ),
     (
         "financing",
         (
             r"\b(?:raised|secured|obtained|issued|signed)\b.{0,80}\b(?:bond|facility|funding|financing|loan)\b",
-            r"(?:融资|授信|发债|发行债券|贷款安排)",
+            r"(?:融资|融資|授信|发债|發債|发行债券|發行債券|贷款安排|貸款安排)",
         ),
     ),
     (
         "regulatory",
         (
             r"\b(?:approved|received approval|licensed|granted a license|permit granted)\b",
-            r"(?:获批|取得牌照|批准|许可)",
+            r"(?:获批|獲批|取得牌照|批准|许可|許可)",
         ),
     ),
     (
         "risk_alert",
         (
             r"\b(?:warning|impairment|default|litigation|dispute|going concern)\b",
-            r"(?:风险提示|减值|诉讼|违约|纠纷)",
+            r"(?:风险提示|風險提示|减值|減值|诉讼|訴訟|违约|違約|纠纷|糾紛)",
         ),
     ),
 )
@@ -145,9 +152,13 @@ _MD_HEADINGS = (
     "management review",
     "management commentary",
     "管理层讨论",
+    "管理層討論",
     "管理层讨论与分析",
+    "管理層討論與分析",
     "主席报告",
+    "主席報告",
     "主席致辞",
+    "主席致辭",
 )
 _MD_HIGHLIGHT_HINTS = (
     "growth",
@@ -161,13 +172,20 @@ _MD_HIGHLIGHT_HINTS = (
     "regulatory",
     "liquidity",
     "增长",
+    "增長",
     "战略",
+    "戰略",
     "需求",
     "风险",
+    "風險",
     "机会",
+    "機會",
     "扩张",
+    "擴張",
     "监管",
+    "監管",
     "流动性",
+    "流動性",
 )
 _REPORT_TITLE_HINTS = (
     "annual report",
@@ -177,9 +195,13 @@ _REPORT_TITLE_HINTS = (
     "earnings",
     "report",
     "年报",
+    "年報",
     "半年报",
+    "半年報",
     "季报",
+    "季報",
     "报告",
+    "報告",
 )
 _MD_FALLBACK_SECTION_HINTS = (
     "overview",
@@ -195,9 +217,13 @@ _MD_FALLBACK_SECTION_HINTS = (
     "discussion",
     "analysis",
     "概览",
+    "概覽",
     "业务回顾",
+    "業務回顧",
     "经营情况",
+    "經營情況",
     "财务表现",
+    "財務表現",
     "展望",
 )
 _MD_METADATA_MARKERS = (
@@ -475,7 +501,6 @@ def extract_risk_factors(*, text: str) -> list[RiskFactor]:
                     confidence=0.6,
                 )
             )
-            break
 
     return risks[:12]
 
@@ -509,7 +534,6 @@ def extract_business_events(*, text: str, title: str | None = None) -> list[Busi
                     confidence=0.6,
                 )
             )
-            break
 
     return events[:12]
 

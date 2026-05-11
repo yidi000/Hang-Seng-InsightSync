@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import inspect
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+
+from insightsync.backend.services.genai_extraction_view import build_genai_extraction_view
 
 
 def _date_filter(column: str, date_from: str | None, date_to: str | None, params: dict[str, Any]) -> list[str]:
@@ -312,7 +317,7 @@ class ReadRepository:
                 SELECT id, source, dataset, title, summary, media_type, lang, parser_name, backend_name,
                        parse_status, ocr_status, xbrl_status, management_discussion_summary,
                        section_count, table_count, metric_count, risk_factor_count, business_event_count,
-                       evidence_url, parsed_at
+                       evidence_url, parsed_at, metadata_json
                 FROM parsed_documents
                 WHERE company_id = :company_id
                 ORDER BY parsed_at DESC, id DESC
@@ -418,7 +423,13 @@ class ReadRepository:
                 for item in recent_timeline
             ],
             "recent_insights": [dict(item) for item in recent_insights],
-            "recent_documents": [dict(item) for item in recent_documents],
+            "recent_documents": [
+                {
+                    **{key: value for key, value in dict(item).items() if key != "metadata_json"},
+                    "genai_extraction": build_genai_extraction_view(item.get("metadata_json")),
+                }
+                for item in recent_documents
+            ],
             "key_metrics": [dict(item) for item in key_metrics],
             "key_risk_factors": [dict(item) for item in key_risk_factors],
             "key_business_events": [
@@ -472,6 +483,214 @@ class ReadRepository:
             params,
         ).mappings()
         return [dict(row) for row in rows]
+
+    def list_generated_insights(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        company_id: str | None = None,
+        entity: str | None = None,
+        insight_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        clauses: list[str] = []
+        if company_id:
+            clauses.append("company_id = :company_id")
+            params["company_id"] = company_id
+        if entity:
+            clauses.append("entity = :entity")
+            params["entity"] = entity
+        if insight_type:
+            clauses.append("insight_type = :insight_type")
+            params["insight_type"] = insight_type
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self.db.execute(
+            text(
+                f"""
+                SELECT id, source, company_id, entity, insight_type, title, summary, confidence,
+                       model_name, prompt_version, generated_at
+                FROM generated_insights
+                {where_sql}
+                ORDER BY generated_at DESC, id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            params,
+        ).mappings()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def default_workflow_state(*, prospect_id: str, company_id: str) -> dict[str, Any]:
+        return {
+            "prospect_id": prospect_id,
+            "company_id": company_id,
+            "owner": None,
+            "stage": "new",
+            "status": "open",
+            "last_action": None,
+            "next_action": None,
+            "review_status": "not_reviewed",
+            "notes": None,
+            "updated_at": None,
+        }
+
+    def get_prospect_workflow_state(self, *, prospect_id: str, company_id: str) -> dict[str, Any]:
+        try:
+            row = self.db.execute(
+                text(
+                    """
+                    SELECT prospect_id, company_id, owner, stage, status, last_action, next_action,
+                           review_status, notes, updated_at
+                    FROM prospect_workflow_states
+                    WHERE prospect_id = :prospect_id
+                    """
+                ),
+                {"prospect_id": prospect_id},
+            ).mappings().first()
+        except OperationalError:
+            return self.default_workflow_state(prospect_id=prospect_id, company_id=company_id)
+        if not row:
+            return self.default_workflow_state(prospect_id=prospect_id, company_id=company_id)
+        return dict(row)
+
+    def upsert_prospect_workflow_state(
+        self,
+        *,
+        prospect_id: str,
+        company_id: str,
+        owner: str | None,
+        stage: str,
+        status: str,
+        last_action: str | None,
+        next_action: str | None,
+        review_status: str,
+        notes: str | None,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        self.db.execute(
+            text(
+                """
+                INSERT INTO prospect_workflow_states (
+                  prospect_id, company_id, owner, stage, status, last_action, next_action,
+                  review_status, notes, updated_at
+                )
+                VALUES (
+                  :prospect_id, :company_id, :owner, :stage, :status, :last_action, :next_action,
+                  :review_status, :notes, :updated_at
+                )
+                ON CONFLICT (prospect_id) DO UPDATE SET
+                  company_id = EXCLUDED.company_id,
+                  owner = EXCLUDED.owner,
+                  stage = EXCLUDED.stage,
+                  status = EXCLUDED.status,
+                  last_action = EXCLUDED.last_action,
+                  next_action = EXCLUDED.next_action,
+                  review_status = EXCLUDED.review_status,
+                  notes = EXCLUDED.notes,
+                  updated_at = EXCLUDED.updated_at
+                """
+            ),
+            {
+                "prospect_id": prospect_id,
+                "company_id": company_id,
+                "owner": owner,
+                "stage": stage,
+                "status": status,
+                "last_action": last_action,
+                "next_action": next_action,
+                "review_status": review_status,
+                "notes": notes,
+                "updated_at": now,
+            },
+        )
+        return self.get_prospect_workflow_state(prospect_id=prospect_id, company_id=company_id)
+
+    def metadata_filters(self) -> dict[str, list[dict[str, Any]]]:
+        def sorted_counts(values: list[str]) -> list[dict[str, Any]]:
+            counts: dict[str, int] = {}
+            for value in values:
+                if not value:
+                    continue
+                counts[value] = counts.get(value, 0) + 1
+            return [
+                {"name": name, "count": count}
+                for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+            ]
+
+        def count_query(sql: str) -> list[dict[str, Any]]:
+            rows = self.db.execute(text(sql)).mappings()
+            return [dict(row) for row in rows if row["name"]]
+
+        existing_tables = set(inspect(self.db.get_bind()).get_table_names())
+        companies = self.list_companies(limit=1000, offset=0)
+        source_values: list[str] = []
+        dataset_values: list[str] = []
+        if "trigger_signals" in existing_tables:
+            signal_sources = count_query(
+                """
+                SELECT source AS name, COUNT(*) AS count
+                FROM trigger_signals
+                WHERE source IS NOT NULL AND TRIM(source) <> ''
+                GROUP BY source
+                """
+            )
+            signal_datasets = count_query(
+                """
+                SELECT dataset AS name, COUNT(*) AS count
+                FROM trigger_signals
+                WHERE dataset IS NOT NULL AND TRIM(dataset) <> ''
+                GROUP BY dataset
+                """
+            )
+            for item in signal_sources:
+                source_values.extend([item["name"]] * int(item["count"]))
+            for item in signal_datasets:
+                dataset_values.extend([item["name"]] * int(item["count"]))
+        if "intelligence_records" in existing_tables:
+            record_sources = count_query(
+                """
+                SELECT source AS name, COUNT(*) AS count
+                FROM intelligence_records
+                WHERE source IS NOT NULL AND TRIM(source) <> ''
+                GROUP BY source
+                """
+            )
+            record_datasets = count_query(
+                """
+                SELECT dataset AS name, COUNT(*) AS count
+                FROM intelligence_records
+                WHERE dataset IS NOT NULL AND TRIM(dataset) <> ''
+                GROUP BY dataset
+                """
+            )
+            for item in record_sources:
+                source_values.extend([item["name"]] * int(item["count"]))
+            for item in record_datasets:
+                dataset_values.extend([item["name"]] * int(item["count"]))
+
+        return {
+            "regions": sorted_counts([item.get("region") for item in companies if item.get("region")]),
+            "segments": sorted_counts(
+                [segment for item in companies for segment in item.get("segments", []) if segment]
+            ),
+            "industries": sorted_counts(
+                [industry for item in companies for industry in item.get("industries", []) if industry]
+            ),
+            "signal_types": count_query(
+                """
+                SELECT signal_type AS name, COUNT(*) AS count
+                FROM trigger_signals
+                WHERE signal_type IS NOT NULL AND TRIM(signal_type) <> ''
+                GROUP BY signal_type
+                ORDER BY count DESC, signal_type ASC
+                """
+            )
+            if "trigger_signals" in existing_tables
+            else [],
+            "sources": sorted_counts(source_values),
+            "datasets": sorted_counts(dataset_values),
+        }
 
     def overview(self) -> dict[str, Any]:
         counts = {}

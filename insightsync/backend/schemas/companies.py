@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from insightsync.backend.schemas.dashboard import CountItem
 from insightsync.backend.schemas.signals import SignalOut
@@ -107,8 +107,11 @@ class CompanyStateSignalOut(BaseModel):
     severity: str | None = None
     confidence: float | None = None
     linkage_type: str | None = None
+    linkage_label: str | None = None
     linkage_strength: str | None = None
     linkage_rationale: str | None = None
+    supports_company_scoring: bool | None = None
+    context_only: bool | None = None
 
 
 class CompanyProductFitOut(BaseModel):
@@ -124,7 +127,12 @@ class CompanyDecisionFeatureOut(BaseModel):
     """Documented feature item used in company- and prospect-level reasoning."""
 
     feature_key: str
+    feature_label: str | None = None
     feature_group: str
+    feature_description: str | None = None
+    business_question: str | None = None
+    preferred_linkage_types: list[str] = Field(default_factory=list)
+    max_score_contribution: int | None = None
     value_num: float | None = None
     score_contribution: int
     rationale: str
@@ -191,6 +199,42 @@ class CompanyCoverageFlagsOut(BaseModel):
     has_xbrl_support: bool = False
 
 
+class GenAIExtractionFactOut(BaseModel):
+    """Normalized GenAI extraction fact with evidence and scoring gate metadata."""
+
+    model_config = ConfigDict(extra="allow")
+
+    fact_type: str
+    extraction_confidence: float | None = None
+    evidence_span: dict[str, Any] = Field(default_factory=dict)
+    scoring_eligibility: dict[str, Any] = Field(default_factory=dict)
+
+
+class GenAIRejectedFactOut(BaseModel):
+    """Rejected GenAI extraction fact with validation reasons."""
+
+    model_config = ConfigDict(extra="allow")
+
+    fact_type: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    normalized: dict[str, Any] | None = None
+
+
+class GenAIExtractionOut(BaseModel):
+    """Auditable GenAI extraction metadata attached to a parsed document."""
+
+    status: str | None = None
+    prompt_version: str | None = None
+    candidate_count: int = 0
+    accepted_count: int = 0
+    rejected_count: int = 0
+    scoring_eligible_counts: dict[str, int] = Field(default_factory=dict)
+    context_only_count: int = 0
+    rejected_reason_counts: dict[str, int] = Field(default_factory=dict)
+    accepted_facts: list[GenAIExtractionFactOut] = Field(default_factory=list)
+    rejected_facts: list[GenAIRejectedFactOut] = Field(default_factory=list)
+
+
 class ParsedDocumentPreviewOut(BaseModel):
     """Recent parsed document preview for company detail."""
 
@@ -213,6 +257,7 @@ class ParsedDocumentPreviewOut(BaseModel):
     risk_factor_count: int = 0
     business_event_count: int = 0
     evidence_url: str | None = None
+    genai_extraction: GenAIExtractionOut | None = None
     parsed_at: datetime
 
 

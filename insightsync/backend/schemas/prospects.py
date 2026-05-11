@@ -24,6 +24,33 @@ from insightsync.backend.schemas.signals import SignalOut
 from insightsync.backend.schemas.timeline import TimelineEventOut
 
 
+class ProspectWorkflowStateOut(BaseModel):
+    """Persisted banker workflow state for a prospect."""
+
+    prospect_id: str
+    company_id: str
+    owner: str | None = None
+    stage: str = "new"
+    status: str = "open"
+    last_action: str | None = None
+    next_action: str | None = None
+    review_status: str = "not_reviewed"
+    notes: str | None = None
+    updated_at: datetime | None = None
+
+
+class ProspectWorkflowUpdateIn(BaseModel):
+    """Update payload for banker workflow state."""
+
+    owner: str | None = Field(default=None, max_length=120)
+    stage: str = Field(default="new", max_length=50)
+    status: str = Field(default="open", max_length=50)
+    last_action: str | None = Field(default=None, max_length=500)
+    next_action: str | None = Field(default=None, max_length=500)
+    review_status: str = Field(default="not_reviewed", max_length=50)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 class ProspectSummaryOut(BaseModel):
     """Business-facing prospect summary derived from company state."""
 
@@ -56,6 +83,7 @@ class ProspectSummaryOut(BaseModel):
     decision_answers: list[CompanyDecisionAnswerOut] = Field(default_factory=list)
     fusion: CompanyFusionOutputOut | None = None
     score_breakdown: "ProspectScoreBreakdownOut"
+    workflow_state: ProspectWorkflowStateOut
 
 
 class ProspectListOut(BaseModel):
@@ -71,6 +99,7 @@ class ProspectDetailOut(BaseModel):
     """Prospect detail assembled from company state and linked evidence."""
 
     prospect: ProspectSummaryOut
+    workflow_state: ProspectWorkflowStateOut
     company: CompanyProfileOut
     latest_state: CompanyLatestStateOut
     recent_signals: list[SignalOut] = Field(default_factory=list)
@@ -80,6 +109,14 @@ class ProspectDetailOut(BaseModel):
     key_metrics: list[CompanyMetricOut] = Field(default_factory=list)
     key_risk_factors: list[CompanyRiskFactorOut] = Field(default_factory=list)
     key_business_events: list[CompanyBusinessEventOut] = Field(default_factory=list)
+
+
+class ProspectInsightListOut(BaseModel):
+    """Generated insight history for a prospect."""
+
+    items: list[CompanyInsightPreviewOut] = Field(default_factory=list)
+    limit: int
+    offset: int
 
 
 class ProspectEvidenceOut(BaseModel):
@@ -104,12 +141,45 @@ class ProspectScoreComponentOut(BaseModel):
     detail: str
 
 
+class ProspectLinkageQualityOut(BaseModel):
+    """Evidence-linkage quality metrics used to guard prospect scoring."""
+
+    linked_evidence_count: int = 0
+    scoreable_evidence_count: int = 0
+    direct_evidence_count: int = 0
+    strong_linkage_count: int = 0
+    context_only_count: int = 0
+    direct_evidence_ratio: float = 0.0
+    scoreable_evidence_ratio: float = 0.0
+    linkage_type_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class ProspectGovernanceFlagOut(BaseModel):
+    """Score governance flag for subjectivity, weak evidence, or linkage overreach."""
+
+    flag_key: str
+    severity: str
+    area: str
+    message: str
+    suggested_action: str
+
+
 class ProspectScoreBreakdownOut(BaseModel):
     """Explainable score composition for prospect prioritization."""
 
+    scorecard_version: str
+    scoring_method: str
+    calibration_status: str
+    llm_score_assignment: str
+    priority_formula: str
+    score_interpretation: dict[str, str] = Field(default_factory=dict)
+    priority_policy: dict[str, float | int] = Field(default_factory=dict)
+    score_inputs: dict[str, int] = Field(default_factory=dict)
     opportunity_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
     risk_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
     priority_components: list[ProspectScoreComponentOut] = Field(default_factory=list)
+    linkage_quality: ProspectLinkageQualityOut
+    governance_flags: list[ProspectGovernanceFlagOut] = Field(default_factory=list)
 
 
 class ProspectBriefOut(BaseModel):
@@ -159,3 +229,52 @@ class ProspectCopilotOut(BaseModel):
     evidence: ProspectEvidenceOut
     fusion_explanation: dict | None = None
     suggested_questions: list[str] = Field(default_factory=list)
+
+
+class ProspectLinkageReviewOut(BaseModel):
+    """Review of whether a signal-to-company linkage is too strong, too weak, or reasonable."""
+
+    item_key: str
+    title: str | None = None
+    evidence_text: str | None = None
+    current_linkage_type: str | None = None
+    current_linkage_strength: str | None = None
+    suggested_linkage_type: str | None = None
+    suggested_linkage_strength: str | None = None
+    review_status: str
+    confidence: float | None = None
+    reason: str
+    should_affect_scoring: bool | None = None
+
+
+class ProspectAuditFindingOut(BaseModel):
+    """Review finding about subjectivity, overreach, or weak decision logic."""
+
+    finding_key: str
+    severity: str
+    area: str
+    issue: str
+    reason: str
+    affected_feature_keys: list[str] = Field(default_factory=list)
+    suggested_action: str
+
+
+class ProspectExtractionOpportunityOut(BaseModel):
+    """Suggested extraction gap that would improve the case quality."""
+
+    area: str
+    why: str
+    suggested_output: str
+
+
+class ProspectReviewOut(BaseModel):
+    """Prospect-level LLM review for linkage quality, subjectivity risk, and extraction gaps."""
+
+    prospect_id: str
+    company_id: str
+    status: str
+    review_summary: str
+    linkage_reviews: list[ProspectLinkageReviewOut] = Field(default_factory=list)
+    audit_findings: list[ProspectAuditFindingOut] = Field(default_factory=list)
+    extraction_opportunities: list[ProspectExtractionOpportunityOut] = Field(default_factory=list)
+    model_name: str | None = None

@@ -61,7 +61,12 @@ class InsightGenerator:
         ]
         output = self.provider.generate_json(question=question, evidence=evidence_payload, insight_type=insight_type)
         citations = self._validate_citations(output, evidence)
-        status = "ok" if citations else "insufficient_evidence"
+        if output.get("status") == "llm_error_fallback":
+            status = "llm_error_fallback"
+        elif output.get("status") == "insufficient_evidence":
+            status = "insufficient_evidence"
+        else:
+            status = "ok" if citations else "insufficient_evidence"
         self._record_generation(
             retrieval_run_id=retrieval["retrieval_run_id"],
             status=status,
@@ -69,6 +74,14 @@ class InsightGenerator:
             evidence=evidence_payload,
             output=output,
         )
+        if status == "llm_error_fallback":
+            return {
+                "status": status,
+                "answer": "The LLM call failed; returning deterministic evidence-grounded fallback for review.",
+                "retrieval_run_id": retrieval["retrieval_run_id"],
+                "citations": citations,
+                "structured_insight": output,
+            }
         if status != "ok":
             return {
                 "status": status,

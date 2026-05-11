@@ -8,6 +8,136 @@ The goal is to answer three questions clearly:
 2. What is not available yet but can be added later
 3. What is not part of the current backend scope
 
+API payloads are intentionally page-ready where possible so the frontend team does not need to reproduce backend scoring or linkage logic.
+
+## Frontend Start Pack
+
+### Can frontend start now?
+
+Yes. The current backend contracts are ready for frontend implementation of the main application flows:
+
+- homepage/dashboard summary
+- prospect list and prospect detail
+- company explorer and company detail
+- parsed-evidence drill-down
+- prospect brief, copilot workspace, RAG question answering, and LLM review panels
+- workflow state update for owner/stage/status/notes
+
+The frontend should treat this guide plus `/openapi.json` as the integration contract. The backend will continue improving real-sample coverage, scoring calibration, and evaluation quality, but those improvements should be additive rather than blocking UI build-out.
+
+### Base URL and Docs
+
+Local Docker default:
+
+```text
+http://127.0.0.1:8000
+```
+
+Useful service URLs:
+
+```text
+GET http://127.0.0.1:8000/healthz
+GET http://127.0.0.1:8000/openapi.json
+GET http://127.0.0.1:8000/docs
+```
+
+### Auth, CORS, and Rate Limits
+
+Current local defaults:
+
+- auth is disabled when `API_KEYS` is empty
+- if `API_KEYS` is configured, frontend must send `X-API-Key: <key>`
+- CORS defaults to `*` through `CORS_ALLOW_ORIGINS=*`
+- rate limiting is disabled when `RATE_LIMIT_PER_MINUTE=0`
+
+Public paths even when API key auth is enabled:
+
+- `/healthz`
+- `/openapi.json`
+- `/docs`
+- `/redoc`
+
+### Naming Convention
+
+Backend responses use `snake_case`. The frontend can either use `snake_case` directly or map to `camelCase` in a thin API adapter. Do not ask the backend to emit both conventions for the same field.
+
+### Recommended Page-to-API Map
+
+| Frontend surface | Primary APIs |
+| --- | --- |
+| Home dashboard | `GET /api/dashboard/summary`, `GET /api/dashboard/market-overview`, `GET /api/dashboard/priority-prospects`, `GET /api/dashboard/trigger-signals` |
+| Prospect list | `GET /api/prospects`, `GET /api/metadata/filters` |
+| Prospect detail | `GET /api/prospects/{prospect_id}`, `GET /api/prospects/{prospect_id}/evidence`, `GET /api/prospects/{prospect_id}/brief` |
+| Prospect copilot | `GET /api/prospects/{prospect_id}/copilot`, `POST /api/prospects/{prospect_id}/question`, `GET /api/prospects/{prospect_id}/review` |
+| Prospect workflow | `GET /api/prospects/{prospect_id}/workflow`, `PUT /api/prospects/{prospect_id}/workflow` |
+| Company explorer | `GET /api/companies`, `GET /api/metadata/filters` |
+| Company detail | `GET /api/companies/{company_id}` |
+| Signal/timeline debug views | `GET /api/signals`, `GET /api/timeline` |
+| Admin/debug | `GET /api/dashboard/overview`, `GET /api/rag/index/status` |
+
+### First Integration Smoke Test
+
+After backend startup and SQLite sync, frontend can verify:
+
+```text
+GET /healthz
+GET /api/dashboard/summary
+GET /api/prospects?limit=20
+GET /api/prospects/prospect:hkg-alpha-fintech
+GET /api/prospects/prospect:hkg-alpha-fintech/evidence
+GET /api/prospects/prospect:hkg-alpha-fintech/review
+GET /api/metadata/filters
+```
+
+Expected local demo behavior:
+
+- `/healthz` returns `{"status":"ok", ...}`
+- demo prospect IDs follow `prospect:{company_id}`, for example `prospect:hkg-alpha-fintech`
+- `generated_insights` may be empty until generation flows are run
+- `company_size_breakdown` is currently `[]`
+- GLM/LLM endpoints return deterministic fallback states if LLM generation is disabled or the provider fails
+
+### Frontend Should Not Recompute
+
+The frontend should display these backend fields, not recompute them:
+
+- `priority_score`, `opportunity_score`, `risk_score`
+- `evidence_confidence_score`
+- `priority_level`
+- `score_breakdown`
+- `linkage_quality`
+- `governance_flags`
+- `scoring_eligibility`
+- LLM review `review_status`
+
+This matters because scoring and linkage rules are part of the auditable backend decision layer.
+
+### Status Handling Rules
+
+Treat these statuses as normal, renderable states:
+
+| Field/location | Values | Frontend handling |
+| --- | --- | --- |
+| `priority_level` | `high`, `medium`, `monitor` | use for badges and sorting; do not recompute from raw scores |
+| `workflow_state.status` | `open`, `in_progress`, `closed`, or custom saved value | render as banker workflow state |
+| `workflow_state.review_status` | `not_reviewed`, `reviewed`, or custom saved value | render as human workflow status, separate from LLM review |
+| `/review.status` | `ok`, `fallback`, `llm_error_fallback` | `ok` means live LLM review; fallback statuses are still usable advisory output |
+| `/question.status` and `/rag/query.status` | `ok`, `insufficient_evidence`, `llm_error_fallback` | show answer when present; for insufficient evidence, prompt user to refine question or inspect evidence |
+| `recent_documents[].genai_extraction.status` | `ok`, `skipped`, `model_error`, or `null` | show extraction audit when present; `null` means document was parsed before GLM extraction or extraction was not run |
+| `scoring_eligibility.eligible` | `true`, `false` | only render eligible facts as score inputs; render non-eligible facts as context/audit evidence |
+
+### Non-Blocking Backend Work Still Continuing
+
+Frontend can start while backend continues:
+
+- real-sample end-to-end validation on more reports and announcements
+- score/linkage calibration against labeled examples
+- multilingual extraction quality review across English, simplified Chinese, traditional Chinese, and Cantonese-style text
+- external market-intelligence fusion quality checks
+- production handover runbook hardening
+
+These should not require frontend contract rewrites unless new UI surfaces are requested.
+
 ## Status Legend
 
 - `Available now`: implemented and usable today
@@ -34,6 +164,7 @@ Current implemented endpoints provide stable IDs for database-backed or derived 
 - `chunk_id` and `document_id` on RAG citations
 - `retrieval_run_id` on RAG query responses
 - `prospect_id` on `/api/prospects*` and dashboard prospect blocks
+- review objects on `/api/prospects/{prospect_id}/review`
 
 The frontend request document asks for business IDs such as:
 
@@ -48,6 +179,11 @@ Current status:
 - `insightId`: not exposed yet as a dedicated field in frontend-ready APIs
 - `prospectId`: available now as `prospect:{company_id}`
 - `entityId`: not available now as a separate normalized business object ID; current APIs still mainly expose company IDs and string entity labels such as `HKG`
+
+Demo data note:
+
+- the bundled SQLite demo snapshot includes company profiles, parsed document outputs, structured risks/events/metrics, and current prospect APIs can be exercised after PostgreSQL sync
+- `generated_insights` is empty until `/api/insights/generate` or prospect/RAG generation flows persist citation-validated outputs
 
 ### Time format
 
@@ -354,13 +490,23 @@ Current scope:
 - business-facing list derived from `company latest-state`
 - includes `priority_level`, `priority_score`, `opportunity_score`, `risk_score`
 - includes `score_breakdown` so the frontend can explain where the scores came from
+- exposes `scorecard_version`, `calibration_status`, `priority_formula`, `score_inputs`, `linkage_quality`, and `governance_flags`
+- keeps `evidence_confidence_score` separate from `opportunity_score` so weak evidence is visible instead of hidden inside the business score
 - includes `recommended_next_step` and `recommended_product_themes`
+- includes `workflow_state` with owner/stage/status/action fields when workflow state has been saved
 - supports search and basic filters aligned to company fields
+
+Scoring contract:
+
+- current scorecard version is `prospect-scorecard-v0.2`
+- current calibration status is `expert_defined_unvalidated_v0`
+- final prospect scores are generated by deterministic scorecard logic; LLM output is not used for final score assignment
+- `linkage_quality` summarizes direct evidence ratio, scoreable evidence ratio, context-only evidence count, and linkage-type counts
+- `governance_flags` should be displayed as caution/review indicators, not as primary RM calls to action
 
 Current limitation:
 
 - no dedicated persisted prospect table yet
-- no RM ownership model yet
 - no revenue normalization or banker-assignment logic yet
 
 ### `GET /api/prospects/{prospect_id}`
@@ -377,11 +523,38 @@ Current scope:
 
 - returns a business-facing prospect object plus linked company evidence
 - detail is derived from the existing company-centric evidence layer
+- includes the current `workflow_state`
 
 Current limitation:
 
 - prospect identity is still derived from `company_id`
-- no separate persisted prospect lifecycle yet
+- identity/linkage matching is evaluated with a small local gold set, but subsidiary and alias coverage still needs expansion before production use
+
+### `GET /api/prospects/{prospect_id}/workflow`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- returns persisted banker workflow state for the prospect
+- returns a default open/new/not-reviewed state before the prospect has been updated
+
+### `PUT /api/prospects/{prospect_id}/workflow`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- updates owner, stage, status, last action, next action, review status, and notes
+- persists state by `prospect_id`
+
+Current limitation:
+
+- this is a lightweight workflow state, not a full CRM task model
 
 ### `GET /api/prospects/{prospect_id}/signals`
 
@@ -413,10 +586,60 @@ Current scope:
 
 - returns parsed-document evidence bundle for the linked company
 - includes coverage flags, evidence summary, parsed documents, metrics, risks, and business events
+- when GLM-assisted extraction has been run, `recent_documents[].genai_extraction` includes the model extraction audit trail: status, prompt version, accepted/rejected counts, scoring eligibility counts, rejected reason counts, normalized facts, and evidence spans
+- `management_statement` and `opportunity_signal_candidate` facts are context-only and should not be rendered as scoring inputs unless `scoring_eligibility.eligible=true`
+
+Example `recent_documents[].genai_extraction`:
+
+```json
+{
+  "status": "ok",
+  "prompt_version": "genai-section-extraction-v0.1",
+  "candidate_count": 1,
+  "accepted_count": 3,
+  "rejected_count": 1,
+  "scoring_eligible_counts": {
+    "risk_factor": 1,
+    "business_event": 1
+  },
+  "context_only_count": 1,
+  "rejected_reason_counts": {
+    "duplicate_existing_fact": 1
+  },
+  "accepted_facts": [
+    {
+      "fact_type": "risk_factor",
+      "category": "regulatory",
+      "description": "Cross-border licensing requirements are tightening.",
+      "extraction_confidence": 0.91,
+      "evidence_span": {
+        "document_id": "hkex-annual-1",
+        "section_id": 2,
+        "paragraph_id": 4,
+        "chunk_id": "s2:p4",
+        "page": 11,
+        "quoted_text": "cross-border licensing requirements are tightening",
+        "language": "en"
+      },
+      "scoring_eligibility": {
+        "eligible": true,
+        "reasons": ["valid_evidence_span", "allowed_candidate_section"]
+      }
+    }
+  ],
+  "rejected_facts": [
+    {
+      "fact_type": "metric",
+      "reasons": ["duplicate_existing_fact"]
+    }
+  ]
+}
+```
 
 Current limitation:
 
 - does not yet include curated banker notes or human review state
+- documents parsed before GLM extraction was enabled return `genai_extraction: null`
 
 ### `GET /api/prospects/{prospect_id}/brief`
 
@@ -455,34 +678,61 @@ Current scope:
 - returns a prospect-centered copilot workspace payload
 - intended to give the frontend a single entry payload for ask/brief/evidence context
 
+### `GET /api/prospects/{prospect_id}/review`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- returns linkage-quality review items
+- returns audit findings about subjective or over-eager decision logic
+- returns extraction opportunities that would improve evidence quality
+- uses GLM-assisted review when LLM generation is enabled and configured
+- uses deterministic fallback review when LLM generation is disabled
+
+Frontend use:
+
+- show this in an analyst/debug/governance panel, not as the primary RM call-to-action
+- useful labels include `review_status`, `severity`, `area`, and `suggested_action`
+- treat `status=ok` with `model_name=glm-4.7-flash` as live LLM review, and `status=fallback` or `status=llm_error_fallback` as deterministic fallback review
+
+Current limitation:
+
+- the review is advisory and does not rewrite scores
+- LLM-assisted review quality depends on `ENABLE_LLM_GENERATION`, `LLM_API_KEY`, `LLM_TIMEOUT_SECONDS`, and prompt/model configuration
+
 ### `GET /api/prospects/{prospect_id}/insights`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Current backend substitute:
+Current scope:
 
-- `POST /api/insights/generate`
-- `POST /api/prospects/{prospect_id}/question`
+- returns generated insight history linked to the prospect company
+- supports `limit`, `offset`, and optional `insight_type`
+- useful after `/api/insights/generate` has persisted citation-validated outputs
 
-Why not available yet:
+Current limitation:
 
-- insight generation exists, but not yet as a dedicated prospect-scoped historical list endpoint
+- demo snapshot may return an empty list when no generated insights have been persisted
 
 ### `GET /api/metadata/filters`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Why not available yet:
+Current scope:
 
-- filter metadata is derivable from data but not exposed yet as a dedicated endpoint
+- returns current filter options with counts for `regions`, `segments`, `industries`, `signal_types`, `sources`, and `datasets`
+- intended for filter controls and debugging
 
-Can it exist later:
+Current limitation:
 
-- yes
+- values are derived from current data coverage, so they are not a static business taxonomy
 
 ## APIs Available Now
 
@@ -661,6 +911,8 @@ Frontend can connect now:
 - `GET /api/prospects/{prospect_id}/copilot`
 - `GET /api/prospects/{prospect_id}/brief`
 - `POST /api/prospects/{prospect_id}/question`
+- `GET /api/prospects/{prospect_id}/review`
+- `GET /api/prospects/{prospect_id}/insights`
 
 ### Prospect List / Prospect Detail
 
@@ -670,15 +922,19 @@ Frontend can connect now:
 - `GET /api/prospects/{prospect_id}`
 - `GET /api/prospects/{prospect_id}/signals`
 - `GET /api/prospects/{prospect_id}/timeline`
+- `GET /api/prospects/{prospect_id}/workflow`
+- `PUT /api/prospects/{prospect_id}/workflow`
 - `GET /api/prospects/{prospect_id}/evidence`
 - `GET /api/prospects/{prospect_id}/brief`
 - `POST /api/prospects/{prospect_id}/question`
 - `GET /api/prospects/{prospect_id}/copilot`
+- `GET /api/prospects/{prospect_id}/review`
+- `GET /api/prospects/{prospect_id}/insights`
 
 Current limitation:
 
 - `prospect_id` is currently derived from `company_id`
-- there is not yet a separately persisted banker workflow state
+- workflow state is persisted, but there is not yet a full task/activity history model
 
 ## Filter Metadata
 
@@ -688,16 +944,9 @@ Requested endpoint:
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-For now, frontend can hardcode or derive temporary options from current API results.
-
-Current feasible temporary values:
-
-- `entity`: currently `HKG` is the most reliable option on low-level signal/timeline views
-- `signal_type`: `market`, `cross_border`, `financing`, `risk`, `growth`
-- `source`: depends on loaded source coverage
-- `priority_level`: `high`, `medium`, `low` on the prospect layer
+Frontend can use this endpoint for filter controls. Workflow state values are persisted through the prospect workflow endpoint rather than returned as global static taxonomy values.
 
 ## Empty Data Rules
 
@@ -720,11 +969,10 @@ Use these rules in frontend integration:
 
 If the frontend wants to match the target product more closely, the next backend additions should be:
 
-1. `GET /api/metadata/filters`
-2. persisted prospect workflow state such as owner, stage, and last-action
-3. prospect insight history endpoint
-4. company size segmentation once a reliable size/profile model exists
-5. standardized frontend error contract
+1. prospect task/activity history beyond the latest workflow state
+2. company size segmentation once a reliable size/profile model exists
+3. standardized frontend error contract
+4. richer generated-insight history with citations and reviewer feedback
 
 ## Development Checklist
 
@@ -742,4 +990,15 @@ Then open:
 ```text
 http://127.0.0.1:8000/docs
 http://127.0.0.1:8000/openapi.json
+```
+
+Recommended smoke checks:
+
+```text
+GET /healthz
+GET /api/companies?limit=20
+GET /api/prospects?limit=20
+GET /api/dashboard/summary
+GET /api/dashboard/priority-prospects
+GET /api/rag/index/status
 ```

@@ -10,9 +10,13 @@ from insightsync.backend.schemas.prospects import (
     ProspectCopilotOut,
     ProspectDetailOut,
     ProspectEvidenceOut,
+    ProspectInsightListOut,
     ProspectListOut,
     ProspectQuestionIn,
     ProspectQuestionOut,
+    ProspectReviewOut,
+    ProspectWorkflowStateOut,
+    ProspectWorkflowUpdateIn,
 )
 from insightsync.backend.schemas.signals import SignalListOut
 from insightsync.backend.schemas.timeline import TimelineListOut
@@ -88,6 +92,55 @@ def list_prospect_timeline(
     return TimelineListOut(**payload)
 
 
+@router.get("/{prospect_id}/insights", response_model=ProspectInsightListOut)
+def list_prospect_insights(
+    prospect_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    insight_type: str | None = None,
+    db: Session = Depends(get_db),
+) -> ProspectInsightListOut:
+    """Return generated insight history linked to a business-facing prospect."""
+
+    payload = ProspectService(db).list_prospect_insights(
+        prospect_id,
+        limit=limit,
+        offset=offset,
+        insight_type=insight_type,
+    )
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectInsightListOut(**payload)
+
+
+@router.get("/{prospect_id}/workflow", response_model=ProspectWorkflowStateOut)
+def get_prospect_workflow(prospect_id: str, db: Session = Depends(get_db)) -> ProspectWorkflowStateOut:
+    """Return persisted banker workflow state for a prospect."""
+
+    payload = ProspectService(db).get_prospect_workflow(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectWorkflowStateOut(**payload)
+
+
+@router.put("/{prospect_id}/workflow", response_model=ProspectWorkflowStateOut)
+def update_prospect_workflow(
+    prospect_id: str,
+    payload: ProspectWorkflowUpdateIn,
+    db: Session = Depends(get_db),
+) -> ProspectWorkflowStateOut:
+    """Update persisted banker workflow state for a prospect."""
+
+    result = ProspectService(db).update_prospect_workflow(
+        prospect_id,
+        payload.model_dump(),
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    db.commit()
+    return ProspectWorkflowStateOut(**result)
+
+
 @router.get("/{prospect_id}/evidence", response_model=ProspectEvidenceOut)
 def get_prospect_evidence(prospect_id: str, db: Session = Depends(get_db)) -> ProspectEvidenceOut:
     """Return parsed-document evidence linked to a business-facing prospect."""
@@ -141,3 +194,13 @@ def get_prospect_copilot(prospect_id: str, db: Session = Depends(get_db)) -> Pro
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectCopilotOut(**payload)
+
+
+@router.get("/{prospect_id}/review", response_model=ProspectReviewOut)
+def get_prospect_review(prospect_id: str, db: Session = Depends(get_db)) -> ProspectReviewOut:
+    """Return an LLM-assisted review of linkage quality, decision subjectivity, and extraction gaps."""
+
+    payload = ProspectService(db, settings=get_settings()).get_prospect_review(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectReviewOut(**payload)

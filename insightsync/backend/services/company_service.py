@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from insightsync.backend.repositories.read_repository import ReadRepository
 from insightsync.backend.services.decision_framework import (
-    FEATURE_GROUP_CAPS,
     PRODUCT_FIT_CATALOG,
     build_feature,
     build_linkage,
+    feature_cap,
+    linkage_supports_company_scoring,
+    score_feature_groups,
 )
 from insightsync.backend.services.fusion_service import FusionService
 
@@ -128,6 +130,11 @@ class CompanyService:
                 "direct_company_link",
                 linkage_rationale="Signal is directly mapped to the company.",
             )
+        if signal_type in {"market", "policy", "macro"}:
+            return build_linkage(
+                "macro_context_link",
+                linkage_rationale="Signal provides market background but is not company-specific.",
+            )
         if signal_type in {"cross_border", "trade"} and signal.get("entity"):
             return build_linkage(
                 "cross_border_exposure_link",
@@ -137,11 +144,6 @@ class CompanyService:
             return build_linkage(
                 "region_link",
                 linkage_rationale="Signal matches the company's regional market context.",
-            )
-        if signal_type in {"market", "policy", "macro"}:
-            return build_linkage(
-                "macro_context_link",
-                linkage_rationale="Signal provides market background but is not company-specific.",
             )
         return build_linkage(
             "industry_link",
@@ -412,31 +414,44 @@ class CompanyService:
     ) -> list[dict[str, Any]]:
         products: list[dict[str, Any]] = []
 
-        signal_texts = [
-            item.get("detail")
-            for item in [*opportunity_signals, *context_signals, *risk_signals]
-            if item.get("detail")
-        ]
+        all_items = [*opportunity_signals, *context_signals, *risk_signals]
 
         def append_product(product_name: str) -> None:
             definition = PRODUCT_FIT_CATALOG[product_name]
+            if definition.get("requires_risk"):
+                supporting_items = risk_signals[:3]
+            else:
+                trigger_signal_types = set(definition.get("trigger_signal_types", []))
+                trigger_linkage_types = set(definition.get("trigger_linkage_types", []))
+                supporting_items = [
+                    item
+                    for item in all_items
+                    if (
+                        item.get("signal_type") in trigger_signal_types
+                        or item.get("linkage_type") in trigger_linkage_types
+                    )
+                ][:3]
+            if not supporting_items and not definition.get("requires_risk"):
+                return
             products.append(
                 {
                     "product_name": product_name,
                     "fit_score": definition["fit_score"],
                     "rationale": definition["rationale"],
-                    "supporting_signals": signal_texts[:2],
+                    "supporting_signals": cls._evidence_items(supporting_items, max_items=2),
                 }
             )
 
-        if "cross_border" in focus_tags:
-            for key in ("cross-border payments", "trade finance", "treasury"):
-                append_product(key)
-        if "growth" in focus_tags or "expansion" in focus_tags or "financing" in focus_tags:
-            for key in ("working capital", "term loan", "cash management"):
-                append_product(key)
-        if "market" in focus_tags:
-            append_product("capital markets")
+        for key in (
+            "cross-border payments",
+            "trade finance",
+            "treasury",
+            "working capital",
+            "term loan",
+            "cash management",
+            "capital markets",
+        ):
+            append_product(key)
         if risk_signals:
             append_product("risk review")
 
@@ -507,7 +522,7 @@ class CompanyService:
                     feature_key="growth_activity_intensity",
                     feature_group="commercial_attractiveness",
                     value_num=float(len(growth_like)),
-                    score_contribution=min(len(growth_like) * 12, 24),
+                    score_contribution=min(len(growth_like) * 12, feature_cap("growth_activity_intensity")),
                     rationale="Company-linked growth or expansion evidence suggests commercial upside.",
                     evidence_items=cls._evidence_items(growth_like),
                 )
@@ -515,12 +530,17 @@ class CompanyService:
 
         signal_count = detail["stats"].get("signal_count", 0)
         if signal_count > 0:
+            scoreable_signal_count = sum(
+                1
+                for item in [*opportunity_signals, *context_signals]
+                if linkage_supports_company_scoring(item.get("linkage_type"))
+            )
             features.append(
                 cls._feature(
                     feature_key="market_visibility",
                     feature_group="commercial_attractiveness",
-                    value_num=float(signal_count),
-                    score_contribution=min(signal_count * 4, 12),
+                    value_num=float(scoreable_signal_count),
+                    score_contribution=min(scoreable_signal_count * 4, feature_cap("market_visibility")),
                     rationale="More linked signals increase the company’s observable market activity.",
                     evidence_items=cls._evidence_items(opportunity_signals or context_signals),
                 )
@@ -533,7 +553,7 @@ class CompanyService:
                     feature_key="business_event_specificity",
                     feature_group="commercial_attractiveness",
                     value_num=float(business_event_count),
-                    score_contribution=min(business_event_count * 10, 10),
+                    score_contribution=min(business_event_count * 10, feature_cap("business_event_specificity")),
                     rationale="Structured company events increase commercial specificity and outreach relevance.",
                     evidence_items=cls._evidence_items(detail["key_business_events"]),
                 )
@@ -546,7 +566,7 @@ class CompanyService:
                     feature_key="recent_activity_momentum",
                     feature_group="immediacy",
                     value_num=float(activity_momentum),
-                    score_contribution=min(activity_momentum * 4, 12),
+                    score_contribution=min(activity_momentum * 4, feature_cap("recent_activity_momentum")),
                     rationale="Recent company-linked activity suggests there is a timely reason to review now.",
                     evidence_items=cls._evidence_items(opportunity_signals or context_signals),
                 )
@@ -563,7 +583,7 @@ class CompanyService:
                     feature_key="management_update_availability",
                     feature_group="immediacy",
                     value_num=1.0,
-                    score_contribution=10,
+                    score_contribution=feature_cap("management_update_availability"),
                     rationale="Management commentary provides current strategic context for banker outreach.",
                     evidence_items=cls._evidence_items(mgmt_items),
                 )
@@ -576,7 +596,10 @@ class CompanyService:
                     feature_key="top_product_fit_strength",
                     feature_group="product_fit",
                     value_num=float(top_product.get("fit_score", 0)),
-                    score_contribution=min(max(int(top_product.get("fit_score", 0) / 10), 0), 15),
+                    score_contribution=min(
+                        max(int(top_product.get("fit_score", 0) / 10), 0),
+                        feature_cap("top_product_fit_strength"),
+                    ),
                     rationale=f"Top product fit is {top_product.get('product_name')}, indicating a plausible first banking angle.",
                     evidence_items=top_product.get("supporting_signals", [])[:3],
                 )
@@ -594,7 +617,10 @@ class CompanyService:
                     feature_key="cross_border_operating_exposure",
                     feature_group="product_fit",
                     value_num=float(len(cross_border_items)),
-                    score_contribution=min(len(cross_border_items) * 6, 18),
+                    score_contribution=min(
+                        len(cross_border_items) * 6,
+                        feature_cap("cross_border_operating_exposure"),
+                    ),
                     rationale="Cross-border or trade-linked evidence suggests transaction banking and corridor relevance.",
                     evidence_items=cls._evidence_items(cross_border_items),
                 )
@@ -610,7 +636,7 @@ class CompanyService:
                     feature_key="linked_risk_severity",
                     feature_group="risk_penalty",
                     value_num=float(len(risk_signals)),
-                    score_contribution=highest_penalty,
+                    score_contribution=min(highest_penalty, feature_cap("linked_risk_severity")),
                     rationale="Linked risk evidence should reduce or constrain outreach priority.",
                     evidence_items=cls._evidence_items(risk_signals),
                 )
@@ -622,7 +648,7 @@ class CompanyService:
                     feature_key="structured_risk_coverage",
                     feature_group="risk_penalty",
                     value_num=float(detail["evidence_summary"].get("risk_factor_count", 0)),
-                    score_contribution=10,
+                    score_contribution=feature_cap("structured_risk_coverage"),
                     rationale="Structured risk factor coverage indicates the recommendation should include explicit caution.",
                     evidence_items=cls._evidence_items(detail.get("key_risk_factors", [])),
                 )
@@ -665,7 +691,10 @@ class CompanyService:
                     feature_key="structured_evidence_coverage",
                     feature_group="evidence_confidence",
                     value_num=float(structured_coverage_count),
-                    score_contribution=min(structured_coverage_count * 5, 25),
+                    score_contribution=min(
+                        structured_coverage_count * 5,
+                        feature_cap("structured_evidence_coverage"),
+                    ),
                     rationale="Broader structured extraction coverage makes the company view more reliable.",
                     evidence_items=[
                         item
@@ -694,7 +723,7 @@ class CompanyService:
                     feature_key="source_diversity",
                     feature_group="evidence_confidence",
                     value_num=float(unique_sources),
-                    score_contribution=min(unique_sources * 5, 15),
+                    score_contribution=min(unique_sources * 5, feature_cap("source_diversity")),
                     rationale="Multiple independent sources reduce single-source bias in the recommendation.",
                     evidence_items=sorted(
                         {
@@ -710,20 +739,7 @@ class CompanyService:
 
     @staticmethod
     def _score_feature_groups(features: list[dict[str, Any]]) -> dict[str, int]:
-        caps = {
-            "commercial_attractiveness": 40,
-            "immediacy": 25,
-            "product_fit": 35,
-            "risk_penalty": 100,
-            "evidence_confidence": 100,
-        }
-        scores: dict[str, int] = {key: 0 for key in caps}
-        for feature in features:
-            group = feature["feature_group"]
-            if group not in scores:
-                continue
-            scores[group] += int(feature.get("score_contribution", 0))
-        return {key: min(value, caps[key]) for key, value in scores.items()}
+        return score_feature_groups(features)
 
     @classmethod
     def _derive_status(

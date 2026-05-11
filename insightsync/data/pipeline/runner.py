@@ -60,7 +60,7 @@ class PipelineConfig:
     investhk_article_delay_seconds: float = 0.3
 
     hkgov_language: str = "en"
-    hkgov_since_months: int = 3
+    hkgov_since_months: int | None = 3
     hkgov_since_days: int | None = None
     hkgov_start_date: str | None = None
     hkgov_end_date: str | None = None
@@ -289,13 +289,17 @@ def build_collectors(config: PipelineConfig) -> list[Any]:
     return collectors
 
 
+def _new_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%S%fZ")
+
+
 def run_ingestion_once(config: PipelineConfig) -> dict[str, Any]:
     cfg = replace(config)
     cfg.db_path = Path(cfg.db_path).expanduser().resolve()
     cfg.raw_dir = Path(cfg.raw_dir).expanduser().resolve()
     cfg.raw_dir.mkdir(parents=True, exist_ok=True)
 
-    run_id = datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ")
+    run_id = _new_run_id()
     started_at = utc_now_iso()
 
     with SQLiteRepository(cfg.db_path) as repo:

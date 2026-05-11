@@ -30,18 +30,34 @@ def test_list_prospects_returns_ranked_business_view() -> None:
     assert top["recommended_next_step"].startswith("review latest risk factors")
     assert len(top["decision_answers"]) >= 4
     assert top["decision_answers"][0]["question_key"] == "priority"
+    assert top["decision_answers"][0]["question"] == "Is this company worth prioritizing now?"
     assert top["evidence_confidence_score"] > 0
     assert top["commercial_attractiveness_score"] > 0
     assert top["immediacy_score"] > 0
     assert top["product_fit_score"] > 0
     assert top["risk_penalty_score"] > 0
     assert len(top["decision_features"]) >= 4
+    assert top["decision_features"][0]["feature_label"] is not None
+    assert top["decision_features"][0]["business_question"] is not None
     assert top["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
     assert len(top["fusion"]["opportunity_lenses"]) == 3
     assert len(top["why_prioritized"]) >= 2
     assert len(top["score_breakdown"]["opportunity_components"]) >= 1
     assert len(top["score_breakdown"]["risk_components"]) >= 1
     assert len(top["score_breakdown"]["priority_components"]) >= 3
+    assert top["score_breakdown"]["scorecard_version"] == "prospect-scorecard-v0.2"
+    assert top["score_breakdown"]["calibration_status"] == "expert_defined_unvalidated_v0"
+    assert top["score_breakdown"]["llm_score_assignment"] == "not_used_for_final_score"
+    assert top["score_breakdown"]["score_inputs"]["priority_score"] == top["priority_score"]
+    assert top["score_breakdown"]["score_inputs"]["opportunity_score"] == top["opportunity_score"]
+    assert top["score_breakdown"]["score_inputs"]["risk_score"] == top["risk_score"]
+    assert top["score_breakdown"]["score_inputs"]["evidence_confidence_score"] == top["evidence_confidence_score"]
+    assert top["score_breakdown"]["linkage_quality"]["linked_evidence_count"] >= 1
+    assert top["score_breakdown"]["linkage_quality"]["direct_evidence_ratio"] >= 0.5
+    assert "priority_score" in top["score_breakdown"]["score_interpretation"]
+    assert top["workflow_state"]["stage"] == "new"
+    assert top["workflow_state"]["status"] == "open"
+    assert top["workflow_state"]["review_status"] == "not_reviewed"
 
 
 def test_list_prospects_supports_priority_filter() -> None:
@@ -73,6 +89,13 @@ def test_get_prospect_detail_returns_company_backed_detail() -> None:
     assert payload["prospect"]["score_breakdown"]["priority_components"][0]["name"] == "opportunity_weighted"
     assert payload["prospect"]["score_breakdown"]["priority_components"][1]["name"] == "evidence_confidence_weighted"
     assert payload["prospect"]["score_breakdown"]["priority_components"][2]["name"] == "risk_buffer"
+    assert payload["prospect"]["score_breakdown"]["priority_policy"]["opportunity_weight"] == 0.6
+    assert payload["prospect"]["score_breakdown"]["linkage_quality"]["scoreable_evidence_count"] >= 1
+    assert payload["prospect"]["score_breakdown"]["linkage_quality"]["context_only_count"] == 0
+    assert payload["prospect"]["score_breakdown"]["linkage_quality"]["linkage_type_counts"]["direct_company_link"] >= 1
+    assert isinstance(payload["prospect"]["score_breakdown"]["governance_flags"], list)
+    assert payload["prospect"]["workflow_state"]["stage"] == "new"
+    assert payload["workflow_state"]["stage"] == "new"
     assert payload["prospect"]["decision_features"][0]["feature_key"] is not None
     assert payload["prospect"]["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
     assert payload["company"]["company_id"] == "hkg-alpha-fintech"
@@ -111,6 +134,73 @@ def test_get_prospect_timeline_returns_linked_events() -> None:
     assert payload["items"][0]["company_id"] == "hkg-alpha-fintech"
 
 
+def test_get_prospect_insights_returns_generated_history() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/insights")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 20
+    assert payload["offset"] == 0
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["title"] == "Engage Alpha Fintech"
+    assert payload["items"][0]["insight_type"] == "action"
+    assert payload["items"][0]["confidence"] == 0.81
+
+
+def test_get_prospect_insights_supports_type_filter() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/insights?insight_type=risk")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"] == []
+
+
+def test_get_prospect_workflow_returns_default_state() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/workflow")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["company_id"] == "hkg-alpha-fintech"
+    assert payload["owner"] is None
+    assert payload["stage"] == "new"
+    assert payload["status"] == "open"
+    assert payload["review_status"] == "not_reviewed"
+    assert payload["updated_at"] is None
+
+
+def test_put_prospect_workflow_persists_state_and_updates_summary() -> None:
+    update = {
+        "owner": "RM Team A",
+        "stage": "contacted",
+        "status": "in_progress",
+        "last_action": "Sent introductory email",
+        "next_action": "Schedule treasury discovery call",
+        "review_status": "reviewed",
+        "notes": "Prioritize cross-border payments discussion.",
+    }
+    with _test_client() as client:
+        response = client.put("/api/prospects/prospect:hkg-alpha-fintech/workflow", json=update)
+        detail_response = client.get("/api/prospects/prospect:hkg-alpha-fintech")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["owner"] == "RM Team A"
+    assert payload["stage"] == "contacted"
+    assert payload["status"] == "in_progress"
+    assert payload["next_action"] == "Schedule treasury discovery call"
+    assert payload["review_status"] == "reviewed"
+    assert payload["updated_at"] is not None
+
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["prospect"]["workflow_state"]["owner"] == "RM Team A"
+    assert detail["workflow_state"]["stage"] == "contacted"
+
+
 def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:
     with _test_client() as client:
         response = client.get("/api/prospects/prospect:hkg-alpha-fintech/evidence")
@@ -122,6 +212,10 @@ def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:
     assert payload["coverage_flags"]["has_parsed_reports"] is True
     assert payload["evidence_summary"]["parsed_document_count"] == 1
     assert payload["recent_documents"][0]["title"] == "Alpha Fintech Annual Report 2025"
+    assert payload["recent_documents"][0]["genai_extraction"]["prompt_version"] == "genai-section-extraction-v0.1"
+    assert payload["recent_documents"][0]["genai_extraction"]["rejected_reason_counts"] == {
+        "duplicate_existing_fact": 1
+    }
     assert payload["key_metrics"][0]["name"] == "revenue_growth"
     assert payload["key_risk_factors"][0]["category"] == "regulatory"
     assert payload["key_business_events"][0]["event_type"] == "expansion"
@@ -191,8 +285,26 @@ def test_post_prospect_question_returns_evidence_grounded_answer() -> None:
 
 
 def test_get_prospect_copilot_returns_workspace_payload() -> None:
-    with _test_client() as client:
-        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/copilot")
+    fake_explanation = {
+        "status": "fallback",
+        "headline": "Alpha Fintech Holdings shows an acquisition-first opportunity",
+        "why_now": "Recent company-linked evidence supports timely outreach.",
+        "lens_summary": "Client acquisition is the main lens.",
+        "risk_note": "Cross-border licensing remains a watch point.",
+        "action_note": "Review latest risk factors alongside business signals before RM outreach.",
+        "primary_lens_key": "acquisition",
+        "recommended_entry_angles": ["Lead with the company event: Alpha Fintech expands into UAE"],
+        "recommended_products": ["cross-border payments"],
+        "company_id": "hkg-alpha-fintech",
+        "prospect_priority": "high",
+    }
+
+    with patch(
+        "insightsync.backend.services.prospect_service.FusionExplainer.explain",
+        return_value=fake_explanation,
+    ):
+        with _test_client() as client:
+            response = client.get("/api/prospects/prospect:hkg-alpha-fintech/copilot")
 
     assert response.status_code == 200
     payload = response.json()
@@ -204,3 +316,60 @@ def test_get_prospect_copilot_returns_workspace_payload() -> None:
     assert payload["fusion_explanation"]["headline"] is not None
     assert len(payload["suggested_questions"]) >= 2
     assert "Alpha Fintech Holdings" in payload["suggested_questions"][0]
+
+
+def test_get_prospect_review_returns_llm_review_payload() -> None:
+    fake_review = {
+        "status": "fallback",
+        "review_summary": "Alpha Fintech review generated in fallback mode.",
+        "linkage_reviews": [
+            {
+                "item_key": "signal_1",
+                "title": "Growth signal",
+                "evidence_text": "Alpha Fintech expands into UAE",
+                "current_linkage_type": "direct_company_link",
+                "current_linkage_strength": "strong",
+                "suggested_linkage_type": "direct_company_link",
+                "suggested_linkage_strength": "strong",
+                "review_status": "confirm",
+                "confidence": 0.6,
+                "reason": "Current linkage is reasonable based on the available structured evidence.",
+                "should_affect_scoring": True,
+            }
+        ],
+        "audit_findings": [
+            {
+                "finding_key": "cross_border_product_overreach",
+                "severity": "medium",
+                "area": "product_fit",
+                "issue": "Cross-border product hypothesis may be too eager.",
+                "reason": "Cross-border evidence should be checked carefully.",
+                "affected_feature_keys": ["top_product_fit_strength"],
+                "suggested_action": "Check direct cross-border evidence before outreach.",
+            }
+        ],
+        "extraction_opportunities": [
+            {
+                "area": "structured_metrics",
+                "why": "More metrics would improve confidence.",
+                "suggested_output": "Extract growth, capex, and debt metrics.",
+            }
+        ],
+        "model_name": None,
+    }
+
+    with patch(
+        "insightsync.backend.services.prospect_service.DecisionReviewService.review",
+        return_value=fake_review,
+    ):
+        with _test_client() as client:
+            response = client.get("/api/prospects/prospect:hkg-alpha-fintech/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["company_id"] == "hkg-alpha-fintech"
+    assert payload["review_summary"] == "Alpha Fintech review generated in fallback mode."
+    assert payload["linkage_reviews"][0]["review_status"] == "confirm"
+    assert payload["audit_findings"][0]["finding_key"] == "cross_border_product_overreach"
+    assert payload["extraction_opportunities"][0]["area"] == "structured_metrics"

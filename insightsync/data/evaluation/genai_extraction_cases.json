@@ -1,0 +1,371 @@
+[
+  {
+    "case_id": "en_glm_expansion_risk_report",
+    "language": "en",
+    "title": "Alpha Fintech Annual Report 2025",
+    "source_name": "genai_extraction_eval",
+    "dataset": "company_reports",
+    "content": "Management discussion and analysis\n\nRevenue reached HK$12.5 billion in FY2025 as SME payment volume grew 28%. On 2026-04-01 Alpha launched UAE merchant acquiring operations with a local payment partner. Regulatory risk remains significant because cross-border licensing and KYC requirements are tightening. Management expects GCC expansion momentum to continue among e-commerce merchants.",
+    "expected": {
+      "fact_types": ["metric", "business_event", "risk_factor", "management_statement", "opportunity_signal_candidate"],
+      "metric_names": ["revenue"],
+      "business_event_types": ["expansion"],
+      "risk_categories": ["regulatory"],
+      "scoring_eligible_fact_types": ["metric", "business_event", "risk_factor"],
+      "context_only_fact_types": ["management_statement", "opportunity_signal_candidate"],
+      "quote_substrings": [
+        "Revenue reached HK$12.5 billion",
+        "launched UAE merchant acquiring operations",
+        "cross-border licensing and KYC requirements are tightening",
+        "Management expects GCC expansion momentum"
+      ]
+    },
+    "mock_model_output": {
+      "metrics": [
+        {
+          "name": "revenue",
+          "value": "HK$12.5 billion",
+          "unit": "HKD",
+          "period": "FY2025",
+          "confidence": 0.92,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "Revenue reached HK$12.5 billion in FY2025"
+          }
+        }
+      ],
+      "risk_factors": [
+        {
+          "category": "regulatory",
+          "description": "Cross-border licensing and KYC requirements are tightening.",
+          "severity": "high",
+          "confidence": 0.9,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "cross-border licensing and KYC requirements are tightening"
+          }
+        }
+      ],
+      "business_events": [
+        {
+          "event_type": "expansion",
+          "summary": "Alpha launched UAE merchant acquiring operations.",
+          "event_date": "2026-04-01",
+          "parties": ["Alpha", "local payment partner"],
+          "confidence": 0.9,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "Alpha launched UAE merchant acquiring operations with a local payment partner"
+          }
+        }
+      ],
+      "management_statements": [
+        {
+          "statement_type": "cross_border",
+          "summary": "Management expects GCC expansion momentum to continue among e-commerce merchants.",
+          "confidence": 0.86,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "Management expects GCC expansion momentum to continue among e-commerce merchants"
+          }
+        }
+      ],
+      "opportunity_signal_candidates": [
+        {
+          "signal_type": "cross_border",
+          "summary": "GCC e-commerce merchants may need cross-border payment and acquiring services.",
+          "confidence": 0.83,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "GCC expansion momentum to continue among e-commerce merchants"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "zh_hans_supply_chain_finance",
+    "language": "zh-Hans",
+    "title": "华南科技集团2025年报",
+    "source_name": "genai_extraction_eval",
+    "dataset": "company_reports",
+    "content": "管理层讨论与分析\n\n2025年营业收入达到人民币12.8亿元，供应链金融客户数同比增长22%。公司已在大湾区推出跨境供应链金融服务，并计划服务更多制造业出口客户。监管风险上升，因为跨境支付牌照和客户尽调要求趋严。管理层表示，制造业客户的营运资金需求正在增加。",
+    "expected": {
+      "fact_types": ["metric", "business_event", "risk_factor", "management_statement", "opportunity_signal_candidate"],
+      "metric_names": ["revenue"],
+      "business_event_types": ["expansion"],
+      "risk_categories": ["regulatory"],
+      "scoring_eligible_fact_types": ["metric", "business_event", "risk_factor"],
+      "context_only_fact_types": ["management_statement", "opportunity_signal_candidate"],
+      "quote_substrings": [
+        "营业收入达到人民币12.8亿元",
+        "在大湾区推出跨境供应链金融服务",
+        "跨境支付牌照和客户尽调要求趋严",
+        "营运资金需求正在增加"
+      ]
+    },
+    "mock_model_output": {
+      "metrics": [
+        {
+          "name": "revenue",
+          "value": "人民币12.8亿元",
+          "unit": "RMB",
+          "period": "2025",
+          "confidence": 0.91,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "2025年营业收入达到人民币12.8亿元"
+          }
+        }
+      ],
+      "risk_factors": [
+        {
+          "category": "regulatory",
+          "description": "跨境支付牌照和客户尽调要求趋严。",
+          "severity": "high",
+          "confidence": 0.9,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "跨境支付牌照和客户尽调要求趋严"
+          }
+        }
+      ],
+      "business_events": [
+        {
+          "event_type": "expansion",
+          "summary": "公司在大湾区推出跨境供应链金融服务。",
+          "event_date": null,
+          "parties": ["华南科技集团"],
+          "confidence": 0.88,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "公司已在大湾区推出跨境供应链金融服务"
+          }
+        }
+      ],
+      "management_statements": [
+        {
+          "statement_type": "liquidity",
+          "summary": "管理层表示制造业客户的营运资金需求正在增加。",
+          "confidence": 0.86,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "制造业客户的营运资金需求正在增加"
+          }
+        }
+      ],
+      "opportunity_signal_candidates": [
+        {
+          "signal_type": "financing",
+          "summary": "制造业出口客户可能存在供应链金融和营运资金服务需求。",
+          "confidence": 0.84,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "计划服务更多制造业出口客户"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "zh_hant_merchant_acquiring",
+    "language": "zh-Hant",
+    "title": "南方支付控股2025年報",
+    "source_name": "genai_extraction_eval",
+    "dataset": "company_reports",
+    "content": "管理層討論與分析\n\n2025年營業收入達港幣8.6億元，商戶收單交易量增長31%。公司已在東南亞拓展商戶收單服務，並簽署合作協議以支援跨境結算。監管風險仍然顯著，牌照要求可能延遲新市場推出。管理層認為跨境電商客戶需要更多外匯及結算服務。",
+    "expected": {
+      "fact_types": ["metric", "business_event", "risk_factor", "management_statement", "opportunity_signal_candidate"],
+      "metric_names": ["revenue"],
+      "business_event_types": ["expansion", "partnership"],
+      "risk_categories": ["regulatory"],
+      "scoring_eligible_fact_types": ["metric", "business_event", "risk_factor"],
+      "context_only_fact_types": ["management_statement", "opportunity_signal_candidate"],
+      "quote_substrings": [
+        "營業收入達港幣8.6億元",
+        "在東南亞拓展商戶收單服務",
+        "簽署合作協議以支援跨境結算",
+        "牌照要求可能延遲新市場推出",
+        "跨境電商客戶需要更多外匯及結算服務"
+      ]
+    },
+    "mock_model_output": {
+      "metrics": [
+        {
+          "name": "revenue",
+          "value": "港幣8.6億元",
+          "unit": "HKD",
+          "period": "2025",
+          "confidence": 0.91,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "2025年營業收入達港幣8.6億元"
+          }
+        }
+      ],
+      "risk_factors": [
+        {
+          "category": "regulatory",
+          "description": "牌照要求可能延遲新市場推出。",
+          "severity": "high",
+          "confidence": 0.88,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "牌照要求可能延遲新市場推出"
+          }
+        }
+      ],
+      "business_events": [
+        {
+          "event_type": "expansion",
+          "summary": "公司在東南亞拓展商戶收單服務。",
+          "event_date": null,
+          "parties": ["南方支付控股"],
+          "confidence": 0.89,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "公司已在東南亞拓展商戶收單服務"
+          }
+        },
+        {
+          "event_type": "partnership",
+          "summary": "公司簽署合作協議以支援跨境結算。",
+          "event_date": null,
+          "parties": ["南方支付控股"],
+          "confidence": 0.87,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "簽署合作協議以支援跨境結算"
+          }
+        }
+      ],
+      "management_statements": [
+        {
+          "statement_type": "cross_border",
+          "summary": "管理層認為跨境電商客戶需要更多外匯及結算服務。",
+          "confidence": 0.85,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "跨境電商客戶需要更多外匯及結算服務"
+          }
+        }
+      ],
+      "opportunity_signal_candidates": [
+        {
+          "signal_type": "cross_border",
+          "summary": "跨境電商客戶可能需要外匯及結算服務。",
+          "confidence": 0.84,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "跨境電商客戶需要更多外匯及結算服務"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "yue_hant_gba_payment_financing",
+    "language": "yue-Hant",
+    "title": "灣區金融科技公司業務更新",
+    "source_name": "genai_extraction_eval",
+    "dataset": "company_reports",
+    "content": "管理層討論\n\n公司今年喺大灣區拓展支付服務，營收達HK$3.2 billion。管理層話商戶需求增加，但監管風險同現金流壓力都要留意。公司正準備新一輪融資去支持跨境業務。",
+    "expected": {
+      "fact_types": ["metric", "business_event", "risk_factor", "management_statement", "opportunity_signal_candidate"],
+      "metric_names": ["revenue"],
+      "business_event_types": ["expansion", "financing"],
+      "risk_categories": ["regulatory", "liquidity"],
+      "scoring_eligible_fact_types": ["metric", "business_event", "risk_factor"],
+      "context_only_fact_types": ["management_statement", "opportunity_signal_candidate"],
+      "quote_substrings": [
+        "喺大灣區拓展支付服務",
+        "營收達HK$3.2 billion",
+        "監管風險同現金流壓力都要留意",
+        "準備新一輪融資去支持跨境業務"
+      ]
+    },
+    "mock_model_output": {
+      "metrics": [
+        {
+          "name": "revenue",
+          "value": "HK$3.2 billion",
+          "unit": "HKD",
+          "period": "今年",
+          "confidence": 0.9,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "營收達HK$3.2 billion"
+          }
+        }
+      ],
+      "risk_factors": [
+        {
+          "category": "regulatory",
+          "description": "監管風險需要留意。",
+          "severity": "medium",
+          "confidence": 0.86,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "監管風險同現金流壓力都要留意"
+          }
+        },
+        {
+          "category": "liquidity",
+          "description": "現金流壓力需要留意。",
+          "severity": "medium",
+          "confidence": 0.84,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "現金流壓力都要留意"
+          }
+        }
+      ],
+      "business_events": [
+        {
+          "event_type": "expansion",
+          "summary": "公司喺大灣區拓展支付服務。",
+          "event_date": null,
+          "parties": ["灣區金融科技公司"],
+          "confidence": 0.88,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "公司今年喺大灣區拓展支付服務"
+          }
+        },
+        {
+          "event_type": "financing",
+          "summary": "公司準備新一輪融資支持跨境業務。",
+          "event_date": null,
+          "parties": ["灣區金融科技公司"],
+          "confidence": 0.87,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "公司正準備新一輪融資去支持跨境業務"
+          }
+        }
+      ],
+      "management_statements": [
+        {
+          "statement_type": "strategy",
+          "summary": "管理層話商戶需求增加。",
+          "confidence": 0.83,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "管理層話商戶需求增加"
+          }
+        }
+      ],
+      "opportunity_signal_candidates": [
+        {
+          "signal_type": "cross_border",
+          "summary": "大灣區支付拓展和跨境業務融資可能形成銀行服務機會。",
+          "confidence": 0.82,
+          "evidence_span": {
+            "chunk_id": "$primary_chunk_id",
+            "quoted_text": "公司正準備新一輪融資去支持跨境業務"
+          }
+        }
+      ]
+    }
+  }
+]

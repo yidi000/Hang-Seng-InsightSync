@@ -86,6 +86,46 @@ class ParsingPersistenceTests(unittest.TestCase):
             self.assertGreaterEqual(risk_count, 1)
             self.assertGreaterEqual(event_count, 1)
 
+    def test_run_parsing_once_reports_genai_disabled_by_default(self) -> None:
+        root = Path(".tmp_parsing_default_runtime").resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        db_path = root / "insightsync.db"
+        raw_dir = root / "raw"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        if db_path.exists():
+            db_path.unlink()
+
+        with SQLiteRepository(db_path) as repo:
+            repo.start_run("run-1", started_at="2026-04-22T00:00:00Z")
+            batch = CollectionBatch(
+                source="news",
+                intelligence_records=[
+                    IntelligenceRecord(
+                        source="news",
+                        dataset="article",
+                        record_key="alpha-news",
+                        record_type="event",
+                        event_time="2026-04-01",
+                        company_id="alpha",
+                        entity="Alpha Holdings",
+                        title="Alpha update",
+                        summary="Alpha update",
+                        region="Hong Kong",
+                        industry="Financials",
+                        tags=["news"],
+                        payload={"body": "Alpha launched UAE operations and faces licensing risk."},
+                        evidence_url="https://example.com/news",
+                        lang="en",
+                        raw=None,
+                    )
+                ],
+            )
+            repo.persist_batch("run-1", batch, fetched_at="2026-04-22T00:00:00Z")
+
+        summary = run_parsing_once(ParsingConfig(db_path=db_path, raw_dir=raw_dir))
+
+        self.assertFalse(summary["genai_extraction_enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()

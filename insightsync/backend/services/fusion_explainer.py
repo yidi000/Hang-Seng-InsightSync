@@ -46,22 +46,19 @@ class FusionExplainer:
             ],
         }
         if self.settings.llm_enabled:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=self.settings.llm_api_key, base_url=self.settings.llm_base_url)
-            response = client.chat.completions.create(
-                model=self.settings.llm_chat_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You explain structured commercial banking fusion outputs as strict JSON.",
-                    },
-                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-                ],
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content or "{}"
-            return self._normalize(json.loads(content), fusion=fusion, company=company, prospect=prospect)
+            try:
+                payload = self.provider.chat_json(
+                    system_prompt="You explain structured commercial banking fusion outputs as strict JSON.",
+                    messages=[
+                        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                    ],
+                )
+                return self._normalize(payload, fusion=fusion, company=company, prospect=prospect)
+            except Exception as exc:  # noqa: BLE001
+                fallback = self._fallback(fusion=fusion, company=company, prospect=prospect)
+                fallback["status"] = "llm_error_fallback"
+                fallback["llm_error"] = str(exc)
+                return fallback
 
         return self._fallback(fusion=fusion, company=company, prospect=prospect)
 
@@ -95,17 +92,19 @@ class FusionExplainer:
         company: dict[str, Any],
         prospect: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        fallback = FusionExplainer._fallback(fusion=fusion, company=company, prospect=prospect)
         return {
             "status": payload.get("status", "ok"),
-            "headline": payload.get("headline") or payload.get("title") or payload.get("summary"),
-            "why_now": payload.get("why_now") or fusion.get("why_now"),
-            "lens_summary": payload.get("lens_summary") or payload.get("summary") or fusion.get("summary"),
-            "risk_note": payload.get("risk_note") or fusion.get("key_risk"),
-            "action_note": payload.get("action_note") or fusion.get("recommended_next_step"),
-            "primary_lens_key": payload.get("primary_lens_key") or fusion.get("primary_lens_key"),
-            "recommended_entry_angles": payload.get("recommended_entry_angles") or fusion.get("recommended_entry_angles", []),
+            "headline": payload.get("headline") or payload.get("title") or payload.get("summary") or fallback["headline"],
+            "why_now": payload.get("why_now") or fusion.get("why_now") or fallback["why_now"],
+            "lens_summary": payload.get("lens_summary") or payload.get("summary") or fusion.get("summary") or fallback["lens_summary"],
+            "risk_note": payload.get("risk_note") or fusion.get("key_risk") or fallback["risk_note"],
+            "action_note": payload.get("action_note") or fusion.get("recommended_next_step") or fallback["action_note"],
+            "primary_lens_key": payload.get("primary_lens_key") or fusion.get("primary_lens_key") or fallback["primary_lens_key"],
+            "recommended_entry_angles": payload.get("recommended_entry_angles") or fusion.get("recommended_entry_angles", []) or fallback["recommended_entry_angles"],
             "recommended_products": payload.get("recommended_products")
-            or (fusion.get("opportunity_lenses", [{}])[0].get("recommended_products", []) if fusion.get("opportunity_lenses") else []),
+            or (fusion.get("opportunity_lenses", [{}])[0].get("recommended_products", []) if fusion.get("opportunity_lenses") else [])
+            or fallback["recommended_products"],
             "company_id": company.get("company_id"),
             "prospect_priority": prospect.get("priority_level") if prospect else None,
         }

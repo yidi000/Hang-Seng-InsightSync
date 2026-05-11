@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,12 +27,17 @@ _GENERIC_ALIAS_STOPWORDS = {
     "有限公司",
     "股份有限公司",
     "集团",
+    "集團",
+    "公司",
+    "有限公司",
+    "股份有限公司",
+    "集团",
     "公司",
 }
 
 
 def _normalize_alias(value: Any) -> str:
-    text = normalize_text(value).lower()
+    text = unicodedata.normalize("NFKC", normalize_text(value)).lower()
     if not text:
         return ""
     return re.sub(r"\s+", " ", text)
@@ -63,7 +69,7 @@ def _contains_alias(text: str, alias: str) -> bool:
         return False
 
     if alias.isdigit():
-        return re.search(rf"(?<!\\d){re.escape(alias)}(?!\\d)", text) is not None
+        return re.search(rf"(?<!\d){re.escape(alias)}(?!\d)", text) is not None
 
     if _is_ascii_text(alias) and re.search(r"[a-z]", alias):
         pattern = rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])"
@@ -84,6 +90,13 @@ def _safe_load_json(raw: Any) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _extra_aliases(extra: dict[str, Any]) -> list[str]:
+    aliases = extra.get("aliases")
+    if not isinstance(aliases, list):
+        return []
+    return [normalize_text(item) for item in aliases if normalize_text(item)]
 
 
 def _extract_market_company_name(source: str, payload: dict[str, Any], title: str | None) -> str:
@@ -200,17 +213,19 @@ def _build_alias_index(repo: SQLiteRepository) -> list[tuple[str, str]]:
 
     company_rows = repo.conn.execute(
         """
-        SELECT company_id, canonical_name, display_name
+        SELECT company_id, canonical_name, display_name, extra_json
         FROM companies
         ORDER BY id DESC
         """
     ).fetchall()
     for row in company_rows:
         company_id = normalize_text(row["company_id"])
+        extra = _safe_load_json(row["extra_json"])
         aliases = [
             normalize_text(row["canonical_name"]),
             normalize_text(row["display_name"]),
             company_id,
+            *_extra_aliases(extra),
         ]
         for alias_raw in aliases:
             alias = _normalize_alias(alias_raw)
