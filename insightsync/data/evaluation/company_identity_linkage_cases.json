@@ -1,0 +1,58 @@
+[
+  {
+    "case_id": "identity_en_display_name",
+    "text": "Alpha Fintech Holdings announced a UAE expansion and new treasury needs.",
+    "expected_company_id": "hkg-alpha-fintech",
+    "expected_alias": "alpha fintech holdings",
+    "should_match": true,
+    "rationale": "English display name should resolve to the canonical company."
+  },
+  {
+    "case_id": "identity_traditional_alias",
+    "text": "阿爾法金融科技喺大灣區推出跨境收款服務，管理層話現金流需求增加。",
+    "expected_company_id": "hkg-alpha-fintech",
+    "expected_alias": "阿爾法金融科技",
+    "should_match": true,
+    "rationale": "Traditional Chinese/Cantonese-style alias should resolve when explicitly configured."
+  },
+  {
+    "case_id": "identity_simplified_alias",
+    "text": "阿尔法金融科技在深圳设立新办公室，支持跨境支付客户。",
+    "expected_company_id": "hkg-alpha-fintech",
+    "expected_alias": "阿尔法金融科技",
+    "should_match": true,
+    "rationale": "Simplified Chinese alias should resolve when explicitly configured."
+  },
+  {
+    "case_id": "identity_stock_code_exact_boundary",
+    "text": "0005 published its annual report on HKEX.",
+    "expected_company_id": "0005",
+    "expected_alias": "0005",
+    "should_match": true,
+    "rationale": "Listed stock code should match when it appears as a separate numeric token."
+  },
+  {
+    "case_id": "identity_stock_code_inside_long_number_negative",
+    "text": "The invoice reference 10005001 was mentioned in the filing.",
+    "expected_company_id": null,
+    "expected_alias": null,
+    "should_match": false,
+    "rationale": "Stock code must not match inside a longer number."
+  },
+  {
+    "case_id": "identity_ambiguous_short_alias_negative",
+    "text": "Alpha Group signed a broad industry memorandum.",
+    "expected_company_id": null,
+    "expected_alias": null,
+    "should_match": false,
+    "rationale": "Ambiguous short names shared by multiple companies should not be force-linked."
+  },
+  {
+    "case_id": "identity_generic_company_negative",
+    "text": "The company announced expansion in Hong Kong.",
+    "expected_company_id": null,
+    "expected_alias": null,
+    "should_match": false,
+    "rationale": "Generic company words must not produce a match."
+  }
+]

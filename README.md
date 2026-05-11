@@ -214,6 +214,12 @@ Run multilingual parsing evaluation:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ENABLE_LLM_GENERATION=false python -m pytest insightsync/backend/tests/test_multilingual_parsing_eval.py -q
 ```
 
+Run company identity/linkage evaluation:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest insightsync/data/tests/test_company_identity_linkage_eval.py -q
+```
+
 ## Collaboration Workflow
 
 1. Sync main branch

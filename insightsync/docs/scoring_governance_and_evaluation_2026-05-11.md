@@ -190,14 +190,20 @@ Current multilingual parsing evaluation set:
 
 - `insightsync/data/evaluation/multilingual_parsing_cases.json`
 
-Current test:
+Current identity/linkage evaluation set:
+
+- `insightsync/data/evaluation/company_identity_linkage_cases.json`
+
+Current tests:
 
 - `insightsync/backend/tests/test_multilingual_parsing_eval.py`
+- `insightsync/data/tests/test_company_identity_linkage_eval.py`
 
 Run:
 
 ```bash
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ENABLE_LLM_GENERATION=false python -m pytest insightsync/backend/tests/test_multilingual_parsing_eval.py -q
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest insightsync/data/tests/test_company_identity_linkage_eval.py -q
 ```
 
 Current coverage:
@@ -210,6 +216,10 @@ Current coverage:
 - risk extraction
 - business event extraction
 - management discussion detection
+- English display-name identity matching
+- simplified Chinese and traditional Chinese alias identity matching
+- numeric stock-code boundary matching
+- ambiguous alias and generic-company negative cases
 
 This is a starting point, not a full benchmark.
 

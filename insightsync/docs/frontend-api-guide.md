@@ -400,6 +400,7 @@ Current limitation:
 
 - prospect identity is still derived from `company_id`
 - no separate persisted prospect lifecycle yet
+- identity/linkage matching is evaluated with a small local gold set, but subsidiary and alias coverage still needs expansion before production use
 
 ### `GET /api/prospects/{prospect_id}/signals`
 
