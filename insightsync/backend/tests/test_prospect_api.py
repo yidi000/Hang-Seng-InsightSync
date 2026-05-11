@@ -212,6 +212,10 @@ def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:
     assert payload["coverage_flags"]["has_parsed_reports"] is True
     assert payload["evidence_summary"]["parsed_document_count"] == 1
     assert payload["recent_documents"][0]["title"] == "Alpha Fintech Annual Report 2025"
+    assert payload["recent_documents"][0]["genai_extraction"]["prompt_version"] == "genai-section-extraction-v0.1"
+    assert payload["recent_documents"][0]["genai_extraction"]["rejected_reason_counts"] == {
+        "duplicate_existing_fact": 1
+    }
     assert payload["key_metrics"][0]["name"] == "revenue_growth"
     assert payload["key_risk_factors"][0]["category"] == "regulatory"
     assert payload["key_business_events"][0]["event_type"] == "expansion"

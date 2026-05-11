@@ -458,10 +458,60 @@ Current scope:
 
 - returns parsed-document evidence bundle for the linked company
 - includes coverage flags, evidence summary, parsed documents, metrics, risks, and business events
+- when GLM-assisted extraction has been run, `recent_documents[].genai_extraction` includes the model extraction audit trail: status, prompt version, accepted/rejected counts, scoring eligibility counts, rejected reason counts, normalized facts, and evidence spans
+- `management_statement` and `opportunity_signal_candidate` facts are context-only and should not be rendered as scoring inputs unless `scoring_eligibility.eligible=true`
+
+Example `recent_documents[].genai_extraction`:
+
+```json
+{
+  "status": "ok",
+  "prompt_version": "genai-section-extraction-v0.1",
+  "candidate_count": 1,
+  "accepted_count": 3,
+  "rejected_count": 1,
+  "scoring_eligible_counts": {
+    "risk_factor": 1,
+    "business_event": 1
+  },
+  "context_only_count": 1,
+  "rejected_reason_counts": {
+    "duplicate_existing_fact": 1
+  },
+  "accepted_facts": [
+    {
+      "fact_type": "risk_factor",
+      "category": "regulatory",
+      "description": "Cross-border licensing requirements are tightening.",
+      "extraction_confidence": 0.91,
+      "evidence_span": {
+        "document_id": "hkex-annual-1",
+        "section_id": 2,
+        "paragraph_id": 4,
+        "chunk_id": "s2:p4",
+        "page": 11,
+        "quoted_text": "cross-border licensing requirements are tightening",
+        "language": "en"
+      },
+      "scoring_eligibility": {
+        "eligible": true,
+        "reasons": ["valid_evidence_span", "allowed_candidate_section"]
+      }
+    }
+  ],
+  "rejected_facts": [
+    {
+      "fact_type": "metric",
+      "reasons": ["duplicate_existing_fact"]
+    }
+  ]
+}
+```
 
 Current limitation:
 
 - does not yet include curated banker notes or human review state
+- documents parsed before GLM extraction was enabled return `genai_extraction: null`
 
 ### `GET /api/prospects/{prospect_id}/brief`
 

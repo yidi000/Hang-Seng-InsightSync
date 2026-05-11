@@ -158,7 +158,94 @@ def _seed_test_db(db: Session) -> None:
         ),
         {
             "doc_warnings": json.dumps([], ensure_ascii=False),
-            "doc_metadata": json.dumps({"pages": 48}, ensure_ascii=False),
+            "doc_metadata": json.dumps(
+                {
+                    "pages": 48,
+                    "genai_extraction": {
+                        "status": "ok",
+                        "prompt_version": "genai-section-extraction-v0.1",
+                        "candidate_count": 1,
+                        "accepted_count": 3,
+                        "rejected_count": 1,
+                        "accepted_facts": [
+                            {
+                                "fact_type": "risk_factor",
+                                "category": "regulatory",
+                                "description": "Cross-border licensing requirements are tightening.",
+                                "severity": "medium",
+                                "extraction_confidence": 0.91,
+                                "evidence_span": {
+                                    "document_id": "hkex-annual-1",
+                                    "section_id": 2,
+                                    "paragraph_id": 4,
+                                    "chunk_id": "s2:p4",
+                                    "page": 11,
+                                    "quoted_text": "cross-border licensing requirements are tightening",
+                                    "language": "en",
+                                },
+                                "scoring_eligibility": {
+                                    "eligible": True,
+                                    "reasons": ["valid_evidence_span", "allowed_candidate_section"],
+                                },
+                            },
+                            {
+                                "fact_type": "business_event",
+                                "event_type": "expansion",
+                                "summary": "Alpha Fintech launched UAE operations.",
+                                "extraction_confidence": 0.89,
+                                "evidence_span": {
+                                    "document_id": "hkex-annual-1",
+                                    "section_id": 2,
+                                    "paragraph_id": 3,
+                                    "chunk_id": "s2:p3",
+                                    "page": 10,
+                                    "quoted_text": "launched UAE operations",
+                                    "language": "en",
+                                },
+                                "scoring_eligibility": {
+                                    "eligible": True,
+                                    "reasons": ["valid_evidence_span", "allowed_candidate_section"],
+                                },
+                            },
+                            {
+                                "fact_type": "management_statement",
+                                "statement_type": "cross_border",
+                                "summary": "Management sees GCC expansion momentum.",
+                                "extraction_confidence": 0.86,
+                                "evidence_span": {
+                                    "document_id": "hkex-annual-1",
+                                    "section_id": 2,
+                                    "paragraph_id": 5,
+                                    "chunk_id": "s2:p5",
+                                    "page": 12,
+                                    "quoted_text": "GCC expansion momentum",
+                                    "language": "en",
+                                },
+                                "scoring_eligibility": {
+                                    "eligible": False,
+                                    "reasons": ["context_only_not_scoring_input"],
+                                },
+                            },
+                        ],
+                        "rejected_facts": [
+                            {
+                                "fact_type": "metric",
+                                "reasons": ["duplicate_existing_fact"],
+                                "normalized": {
+                                    "fact_type": "metric",
+                                    "name": "revenue_growth",
+                                    "value": "18.5",
+                                    "scoring_eligibility": {
+                                        "eligible": False,
+                                        "reasons": ["duplicate_existing_fact"],
+                                    },
+                                },
+                            }
+                        ],
+                    },
+                },
+                ensure_ascii=False,
+            ),
             "doc_highlights": json.dumps(["SME growth", "GCC expansion"], ensure_ascii=False),
             "doc_sections": json.dumps(["Management Discussion and Analysis"], ensure_ascii=False),
         },
@@ -508,6 +595,14 @@ def test_company_detail_returns_company_centric_view() -> None:
     assert payload["latest_state"]["evidence_summary"]["xbrl_hit_count"] == 1
     assert payload["recent_documents"][0]["title"] == "Alpha Fintech Annual Report 2025"
     assert payload["recent_documents"][0]["management_discussion_summary"].startswith("Management highlights")
+    assert payload["recent_documents"][0]["genai_extraction"]["status"] == "ok"
+    assert payload["recent_documents"][0]["genai_extraction"]["accepted_count"] == 3
+    assert payload["recent_documents"][0]["genai_extraction"]["scoring_eligible_counts"] == {
+        "risk_factor": 1,
+        "business_event": 1,
+    }
+    assert payload["recent_documents"][0]["genai_extraction"]["context_only_count"] == 1
+    assert payload["recent_documents"][0]["genai_extraction"]["accepted_facts"][0]["evidence_span"]["chunk_id"] == "s2:p4"
     assert payload["key_metrics"][0]["name"] == "revenue_growth"
     assert payload["key_risk_factors"][0]["category"] == "regulatory"
     assert payload["key_business_events"][0]["event_type"] == "expansion"

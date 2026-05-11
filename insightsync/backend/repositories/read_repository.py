@@ -55,6 +55,47 @@ class ReadRepository:
             "extra": self._json_field(row.get("extra_json"), {}),
         }
 
+    def _genai_extraction_field(self, metadata_json: Any) -> dict[str, Any] | None:
+        metadata = self._json_field(metadata_json, {})
+        if not isinstance(metadata, dict):
+            return None
+        raw = metadata.get("genai_extraction")
+        if not isinstance(raw, dict):
+            return None
+        accepted_facts = raw.get("accepted_facts") if isinstance(raw.get("accepted_facts"), list) else []
+        rejected_facts = raw.get("rejected_facts") if isinstance(raw.get("rejected_facts"), list) else []
+        eligible_counts: dict[str, int] = {}
+        context_only_count = 0
+        for fact in accepted_facts:
+            if not isinstance(fact, dict):
+                continue
+            fact_type = str(fact.get("fact_type") or "unknown")
+            eligibility = fact.get("scoring_eligibility") if isinstance(fact.get("scoring_eligibility"), dict) else {}
+            if eligibility.get("eligible") is True:
+                eligible_counts[fact_type] = eligible_counts.get(fact_type, 0) + 1
+            else:
+                context_only_count += 1
+        rejected_reason_counts: dict[str, int] = {}
+        for fact in rejected_facts:
+            if not isinstance(fact, dict):
+                continue
+            reasons = fact.get("reasons") if isinstance(fact.get("reasons"), list) else []
+            for reason in reasons:
+                reason_key = str(reason)
+                rejected_reason_counts[reason_key] = rejected_reason_counts.get(reason_key, 0) + 1
+        return {
+            "status": raw.get("status"),
+            "prompt_version": raw.get("prompt_version"),
+            "candidate_count": self._int_field(raw.get("candidate_count")),
+            "accepted_count": self._int_field(raw.get("accepted_count")),
+            "rejected_count": self._int_field(raw.get("rejected_count")),
+            "scoring_eligible_counts": eligible_counts,
+            "context_only_count": context_only_count,
+            "rejected_reason_counts": rejected_reason_counts,
+            "accepted_facts": [fact for fact in accepted_facts if isinstance(fact, dict)],
+            "rejected_facts": [fact for fact in rejected_facts if isinstance(fact, dict)],
+        }
+
     def list_signals(
         self,
         *,
@@ -315,7 +356,7 @@ class ReadRepository:
                 SELECT id, source, dataset, title, summary, media_type, lang, parser_name, backend_name,
                        parse_status, ocr_status, xbrl_status, management_discussion_summary,
                        section_count, table_count, metric_count, risk_factor_count, business_event_count,
-                       evidence_url, parsed_at
+                       evidence_url, parsed_at, metadata_json
                 FROM parsed_documents
                 WHERE company_id = :company_id
                 ORDER BY parsed_at DESC, id DESC
@@ -421,7 +462,13 @@ class ReadRepository:
                 for item in recent_timeline
             ],
             "recent_insights": [dict(item) for item in recent_insights],
-            "recent_documents": [dict(item) for item in recent_documents],
+            "recent_documents": [
+                {
+                    **{key: value for key, value in dict(item).items() if key != "metadata_json"},
+                    "genai_extraction": self._genai_extraction_field(item.get("metadata_json")),
+                }
+                for item in recent_documents
+            ],
             "key_metrics": [dict(item) for item in key_metrics],
             "key_risk_factors": [dict(item) for item in key_risk_factors],
             "key_business_events": [
