@@ -10,6 +10,134 @@ The goal is to answer three questions clearly:
 
 API payloads are intentionally page-ready where possible so the frontend team does not need to reproduce backend scoring or linkage logic.
 
+## Frontend Start Pack
+
+### Can frontend start now?
+
+Yes. The current backend contracts are ready for frontend implementation of the main application flows:
+
+- homepage/dashboard summary
+- prospect list and prospect detail
+- company explorer and company detail
+- parsed-evidence drill-down
+- prospect brief, copilot workspace, RAG question answering, and LLM review panels
+- workflow state update for owner/stage/status/notes
+
+The frontend should treat this guide plus `/openapi.json` as the integration contract. The backend will continue improving real-sample coverage, scoring calibration, and evaluation quality, but those improvements should be additive rather than blocking UI build-out.
+
+### Base URL and Docs
+
+Local Docker default:
+
+```text
+http://127.0.0.1:8000
+```
+
+Useful service URLs:
+
+```text
+GET http://127.0.0.1:8000/healthz
+GET http://127.0.0.1:8000/openapi.json
+GET http://127.0.0.1:8000/docs
+```
+
+### Auth, CORS, and Rate Limits
+
+Current local defaults:
+
+- auth is disabled when `API_KEYS` is empty
+- if `API_KEYS` is configured, frontend must send `X-API-Key: <key>`
+- CORS defaults to `*` through `CORS_ALLOW_ORIGINS=*`
+- rate limiting is disabled when `RATE_LIMIT_PER_MINUTE=0`
+
+Public paths even when API key auth is enabled:
+
+- `/healthz`
+- `/openapi.json`
+- `/docs`
+- `/redoc`
+
+### Naming Convention
+
+Backend responses use `snake_case`. The frontend can either use `snake_case` directly or map to `camelCase` in a thin API adapter. Do not ask the backend to emit both conventions for the same field.
+
+### Recommended Page-to-API Map
+
+| Frontend surface | Primary APIs |
+| --- | --- |
+| Home dashboard | `GET /api/dashboard/summary`, `GET /api/dashboard/market-overview`, `GET /api/dashboard/priority-prospects`, `GET /api/dashboard/trigger-signals` |
+| Prospect list | `GET /api/prospects`, `GET /api/metadata/filters` |
+| Prospect detail | `GET /api/prospects/{prospect_id}`, `GET /api/prospects/{prospect_id}/evidence`, `GET /api/prospects/{prospect_id}/brief` |
+| Prospect copilot | `GET /api/prospects/{prospect_id}/copilot`, `POST /api/prospects/{prospect_id}/question`, `GET /api/prospects/{prospect_id}/review` |
+| Prospect workflow | `GET /api/prospects/{prospect_id}/workflow`, `PUT /api/prospects/{prospect_id}/workflow` |
+| Company explorer | `GET /api/companies`, `GET /api/metadata/filters` |
+| Company detail | `GET /api/companies/{company_id}` |
+| Signal/timeline debug views | `GET /api/signals`, `GET /api/timeline` |
+| Admin/debug | `GET /api/dashboard/overview`, `GET /api/rag/index/status` |
+
+### First Integration Smoke Test
+
+After backend startup and SQLite sync, frontend can verify:
+
+```text
+GET /healthz
+GET /api/dashboard/summary
+GET /api/prospects?limit=20
+GET /api/prospects/prospect:hkg-alpha-fintech
+GET /api/prospects/prospect:hkg-alpha-fintech/evidence
+GET /api/prospects/prospect:hkg-alpha-fintech/review
+GET /api/metadata/filters
+```
+
+Expected local demo behavior:
+
+- `/healthz` returns `{"status":"ok", ...}`
+- demo prospect IDs follow `prospect:{company_id}`, for example `prospect:hkg-alpha-fintech`
+- `generated_insights` may be empty until generation flows are run
+- `company_size_breakdown` is currently `[]`
+- GLM/LLM endpoints return deterministic fallback states if LLM generation is disabled or the provider fails
+
+### Frontend Should Not Recompute
+
+The frontend should display these backend fields, not recompute them:
+
+- `priority_score`, `opportunity_score`, `risk_score`
+- `evidence_confidence_score`
+- `priority_level`
+- `score_breakdown`
+- `linkage_quality`
+- `governance_flags`
+- `scoring_eligibility`
+- LLM review `review_status`
+
+This matters because scoring and linkage rules are part of the auditable backend decision layer.
+
+### Status Handling Rules
+
+Treat these statuses as normal, renderable states:
+
+| Field/location | Values | Frontend handling |
+| --- | --- | --- |
+| `priority_level` | `high`, `medium`, `monitor` | use for badges and sorting; do not recompute from raw scores |
+| `workflow_state.status` | `open`, `in_progress`, `closed`, or custom saved value | render as banker workflow state |
+| `workflow_state.review_status` | `not_reviewed`, `reviewed`, or custom saved value | render as human workflow status, separate from LLM review |
+| `/review.status` | `ok`, `fallback`, `llm_error_fallback` | `ok` means live LLM review; fallback statuses are still usable advisory output |
+| `/question.status` and `/rag/query.status` | `ok`, `insufficient_evidence`, `llm_error_fallback` | show answer when present; for insufficient evidence, prompt user to refine question or inspect evidence |
+| `recent_documents[].genai_extraction.status` | `ok`, `skipped`, `model_error`, or `null` | show extraction audit when present; `null` means document was parsed before GLM extraction or extraction was not run |
+| `scoring_eligibility.eligible` | `true`, `false` | only render eligible facts as score inputs; render non-eligible facts as context/audit evidence |
+
+### Non-Blocking Backend Work Still Continuing
+
+Frontend can start while backend continues:
+
+- real-sample end-to-end validation on more reports and announcements
+- score/linkage calibration against labeled examples
+- multilingual extraction quality review across English, simplified Chinese, traditional Chinese, and Cantonese-style text
+- external market-intelligence fusion quality checks
+- production handover runbook hardening
+
+These should not require frontend contract rewrites unless new UI surfaces are requested.
+
 ## Status Legend
 
 - `Available now`: implemented and usable today
