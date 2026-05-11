@@ -1,5 +1,11 @@
 from .constants import DEFAULT_PARSE_VERSION
-from .genai_extractor import GenAIExtractionConfig, enhance_parsed_document_with_genai, select_candidate_paragraphs
+from .genai_extractor import (
+    GenAIExtractionConfig,
+    GenAIExtractionRun,
+    enhance_parsed_document_with_genai,
+    run_genai_extraction,
+    select_candidate_paragraphs,
+)
 from .models import (
     BusinessEvent,
     ExtractedMetric,
@@ -17,6 +23,7 @@ __all__ = [
     "DEFAULT_PARSE_VERSION",
     "ExtractedMetric",
     "GenAIExtractionConfig",
+    "GenAIExtractionRun",
     "ManagementDiscussion",
     "ParseRequest",
     "ParsedDocument",
@@ -27,5 +34,6 @@ __all__ = [
     "enhance_parsed_document_with_genai",
     "get_default_registry",
     "parse_content",
+    "run_genai_extraction",
     "select_candidate_paragraphs",
 ]

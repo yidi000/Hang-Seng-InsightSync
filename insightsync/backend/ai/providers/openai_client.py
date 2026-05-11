@@ -119,6 +119,8 @@ class OpenAIProvider:
         extra_body: dict[str, Any] = {}
         if self.settings.llm_enable_thinking:
             extra_body["thinking"] = {"type": "enabled"}
+        elif self._uses_glm_thinking_control():
+            extra_body["thinking"] = {"type": "disabled"}
         request = {
             "model": self.settings.llm_chat_model,
             "messages": [
@@ -185,6 +187,11 @@ class OpenAIProvider:
         if isinstance(exc, json.JSONDecodeError):
             return LLMProviderError("LLM_JSON_PARSE_ERROR", message)
         return LLMProviderError("LLM_PROVIDER_ERROR", message)
+
+    def _uses_glm_thinking_control(self) -> bool:
+        base_url = (self.settings.llm_base_url or "").lower()
+        model = (self.settings.llm_chat_model or "").lower()
+        return "z.ai" in base_url or model.startswith("glm-")
 
     @staticmethod
     def _compact_evidence_for_generation(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:

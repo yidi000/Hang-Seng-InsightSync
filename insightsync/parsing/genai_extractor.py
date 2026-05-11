@@ -89,6 +89,29 @@ _GENERIC_PHRASES = (
     "\u826f\u597d\u673a\u9047",
     "\u826f\u597d\u6a5f\u9047",
 )
+_METRIC_NAME_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "revenue",
+        (
+            "revenue",
+            "sales",
+            "turnover",
+            "\u8425\u4e1a\u6536\u5165",
+            "\u71df\u696d\u6536\u5165",
+            "\u8425\u6536",
+            "\u71df\u6536",
+        ),
+    ),
+    (
+        "net profit",
+        (
+            "net profit",
+            "net income",
+            "\u51c0\u5229\u6da6",
+            "\u6de8\u5229\u6f64",
+        ),
+    ),
+)
 
 
 @dataclass(slots=True)
@@ -136,7 +159,38 @@ class GenAIExtractionConfig:
     max_candidate_chars: int = 1200
     min_confidence: float = 0.6
     merge_management_discussion: bool = False
+    include_raw_response: bool = False
     prompt_version: str = PROMPT_VERSION
+
+
+@dataclass(slots=True)
+class GenAIExtractionRun:
+    status: str
+    prompt_version: str
+    candidates: list[CandidateParagraph]
+    raw_response: dict[str, Any] | None = None
+    accepted_facts: list[dict[str, Any]] = field(default_factory=list)
+    rejected_facts: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    reason: str | None = None
+
+    def as_metadata(self, *, include_raw_response: bool = False) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "status": self.status,
+            "prompt_version": self.prompt_version,
+            "candidate_count": len(self.candidates),
+            "accepted_count": len(self.accepted_facts),
+            "rejected_count": len(self.rejected_facts),
+            "accepted_facts": self.accepted_facts,
+            "rejected_facts": self.rejected_facts,
+        }
+        if self.reason:
+            payload["reason"] = self.reason
+        if self.error:
+            payload["error"] = self.error
+        if include_raw_response:
+            payload["raw_response"] = self.raw_response
+        return payload
 
 
 def enhance_parsed_document_with_genai(
@@ -154,14 +208,37 @@ def enhance_parsed_document_with_genai(
     """
 
     cfg = config or GenAIExtractionConfig()
+    run = run_genai_extraction(parsed, chat_json=chat_json, config=cfg)
+    if run.status == "skipped":
+        parsed.metadata["genai_extraction"] = run.as_metadata(include_raw_response=cfg.include_raw_response)
+        return parsed
+    if run.status == "model_error":
+        parsed.warnings.append(f"GenAI extraction skipped after model error: {run.error}")
+        parsed.metadata["genai_extraction"] = run.as_metadata(include_raw_response=cfg.include_raw_response)
+        return parsed
+
+    _merge_eligible_facts(parsed, run.accepted_facts, config=cfg)
+    parsed.metadata["genai_extraction"] = run.as_metadata(include_raw_response=cfg.include_raw_response)
+    return parsed
+
+
+def run_genai_extraction(
+    parsed: ParsedDocument,
+    *,
+    chat_json: ChatJSONCallable,
+    config: GenAIExtractionConfig | None = None,
+) -> GenAIExtractionRun:
+    """Run bounded GenAI extraction without mutating the parsed document."""
+
+    cfg = config or GenAIExtractionConfig()
     candidates = select_candidate_paragraphs(parsed, config=cfg)
     if not candidates:
-        parsed.metadata["genai_extraction"] = {
-            "status": "skipped",
-            "reason": "no_candidate_sections",
-            "prompt_version": cfg.prompt_version,
-        }
-        return parsed
+        return GenAIExtractionRun(
+            status="skipped",
+            prompt_version=cfg.prompt_version,
+            candidates=[],
+            reason="no_candidate_sections",
+        )
 
     payload = _build_prompt_payload(parsed, candidates=candidates, config=cfg)
     try:
@@ -170,27 +247,22 @@ def enhance_parsed_document_with_genai(
             messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
         )
     except Exception as exc:  # noqa: BLE001
-        parsed.warnings.append(f"GenAI extraction skipped after model error: {exc}")
-        parsed.metadata["genai_extraction"] = {
-            "status": "model_error",
-            "prompt_version": cfg.prompt_version,
-            "error": str(exc),
-            "candidate_count": len(candidates),
-        }
-        return parsed
+        return GenAIExtractionRun(
+            status="model_error",
+            prompt_version=cfg.prompt_version,
+            candidates=candidates,
+            error=str(exc),
+        )
 
     accepted, rejected = normalize_genai_extraction(raw, candidates=candidates, parsed=parsed, config=cfg)
-    _merge_eligible_facts(parsed, accepted, config=cfg)
-    parsed.metadata["genai_extraction"] = {
-        "status": "ok",
-        "prompt_version": cfg.prompt_version,
-        "candidate_count": len(candidates),
-        "accepted_count": len(accepted),
-        "rejected_count": len(rejected),
-        "accepted_facts": accepted,
-        "rejected_facts": rejected,
-    }
-    return parsed
+    return GenAIExtractionRun(
+        status="ok",
+        prompt_version=cfg.prompt_version,
+        candidates=candidates,
+        raw_response=raw,
+        accepted_facts=accepted,
+        rejected_facts=rejected,
+    )
 
 
 def select_candidate_paragraphs(
@@ -287,8 +359,9 @@ def normalize_genai_extraction(
 def _system_prompt() -> str:
     return (
         "You extract structured commercial-banking facts from supplied candidate paragraphs. "
+        "Handle English, Simplified Chinese, Traditional Chinese, and Cantonese business text. "
         "Use only the supplied evidence. Do not assign scores or priorities. "
-        "Every item must cite one allowed evidence span and quote exact text from that span. "
+        "Every item must cite one allowed evidence span and copy quoted_text exactly from that span. "
         "Return strict JSON only."
     )
 
@@ -361,6 +434,10 @@ def _build_prompt_payload(
         "rules": [
             "Do not infer facts not present in the candidate paragraphs.",
             "Do not convert management optimism directly into a score.",
+            "If one sentence contains multiple distinct business events, return separate business_events.",
+            "For example, if a sentence says a company expanded and signed a cooperation agreement, return one expansion event and one partnership event.",
+            "Use canonical English metric names when obvious, for example revenue for \u8425\u4e1a\u6536\u5165 or \u71df\u696d\u6536\u5165.",
+            "For Chinese or Cantonese text, quoted_text may be a short exact phrase when it is the minimal evidence.",
             "Use opportunity_signal_candidates only for possible downstream rule review.",
             "Return empty lists when evidence is insufficient.",
             f"Only include items with extraction confidence >= {config.min_confidence}.",
@@ -370,6 +447,7 @@ def _build_prompt_payload(
 
 def _iter_raw_facts(raw: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     out: list[tuple[str, dict[str, Any]]] = []
+    source = raw.get("answer") if isinstance(raw.get("answer"), dict) else raw
     key_map = {
         "metrics": "metric",
         "risk_factors": "risk_factor",
@@ -381,7 +459,7 @@ def _iter_raw_facts(raw: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
         "opportunity_signals": "opportunity_signal_candidate",
     }
     for key, fact_type in key_map.items():
-        values = raw.get(key)
+        values = source.get(key)
         if not isinstance(values, list):
             continue
         for item in values:
@@ -410,11 +488,6 @@ def _normalize_fact(
     if _is_generic_fact(normalized):
         reasons.append("too_generic")
 
-    if span is not None and normalized is not None:
-        fact_key = _fact_key(normalized)
-        if fact_key in seen_keys:
-            reasons.append("duplicate_existing_fact")
-
     if reasons or normalized is None or span is None:
         return None, reasons or ["invalid_fact"]
 
@@ -442,7 +515,7 @@ def _base_normalized_fact(
 ) -> dict[str, Any] | None:
     quote = span.quoted_text if span else normalize_text((item.get("evidence_span") or {}).get("quoted_text"))
     if fact_type == "metric":
-        name = normalize_text(item.get("name"))
+        name = _normalize_metric_name(item.get("name"))
         value = normalize_text(item.get("value"))
         if not name or not value:
             return None
@@ -514,7 +587,7 @@ def _validate_evidence_span(
     if candidate is None:
         return None, ["unknown_chunk_id"]
     quote = normalize_text(raw_span.get("quoted_text"))
-    if len(quote) < 8:
+    if len(quote) < _minimum_quote_length(quote):
         return None, ["missing_or_short_quote"]
     if not _contains_quote(candidate.text, quote):
         return None, ["quote_not_found_in_candidate"]
@@ -662,10 +735,26 @@ def _contains_quote(text: str, quote: str) -> bool:
 def _is_generic_fact(fact: dict[str, Any] | None) -> bool:
     if fact is None:
         return False
+    if fact.get("fact_type") == "metric":
+        return False
     text = normalize_text(fact.get("summary") or fact.get("description") or fact.get("context")).lower()
-    if len(text) < 20:
+    min_len = 4 if re.search(r"[\u4e00-\u9fff]", text) else 20
+    if len(text) < min_len:
         return True
     return any(phrase in text for phrase in _GENERIC_PHRASES)
+
+
+def _normalize_metric_name(value: Any) -> str:
+    raw = normalize_text(value)
+    lowered = raw.lower()
+    for canonical, aliases in _METRIC_NAME_ALIASES:
+        if any(alias.lower() in lowered for alias in aliases):
+            return canonical
+    return raw[:120]
+
+
+def _minimum_quote_length(value: str) -> int:
+    return 4 if re.search(r"[\u4e00-\u9fff]", value) else 8
 
 
 def _existing_fact_keys(parsed: ParsedDocument) -> set[tuple[str, str, str]]:

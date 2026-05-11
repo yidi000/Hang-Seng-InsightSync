@@ -53,6 +53,18 @@ Then run a direct smoke check:
 python -m insightsync.backend.workflows.glm_smoke_check
 ```
 
+Run a multilingual GLM extraction demo against English, simplified Chinese, traditional Chinese, and Cantonese-style cases:
+
+```bash
+python -m insightsync.backend.workflows.glm_extraction_demo --include-raw --delay-seconds 10
+```
+
+For deterministic local validation without calling GLM:
+
+```bash
+python -m insightsync.backend.workflows.glm_extraction_demo --mock --strict
+```
+
 The bundled demo SQLite snapshot is intentionally committed at `insightsync/data/storage/demo/insightsync_demo.db`. Current snapshot coverage:
 
 - 19 company profiles

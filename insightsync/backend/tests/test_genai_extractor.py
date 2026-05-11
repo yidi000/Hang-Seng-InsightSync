@@ -87,6 +87,31 @@ def test_normalization_rejects_unknown_or_unquoted_evidence() -> None:
     assert rejected[1]["reasons"] == ["quote_not_found_in_candidate"]
 
 
+def test_normalization_accepts_answer_wrapped_model_payloads() -> None:
+    parsed = _parsed_report()
+    candidates = select_candidate_paragraphs(parsed)
+    raw = {
+        "answer": {
+            "business_events": [
+                {
+                    "event_type": "expansion",
+                    "summary": "Alpha entered the UAE market.",
+                    "confidence": 0.91,
+                    "evidence_span": {
+                        "chunk_id": candidates[0].evidence.chunk_id,
+                        "quoted_text": "entering the UAE market",
+                    },
+                }
+            ]
+        }
+    }
+
+    accepted, rejected = normalize_genai_extraction(raw, candidates=candidates, parsed=parsed)
+
+    assert rejected == []
+    assert accepted[0]["fact_type"] == "business_event"
+
+
 def test_management_statement_is_normalized_but_not_scoring_eligible() -> None:
     parsed = _parsed_report()
     candidates = select_candidate_paragraphs(parsed)
@@ -110,6 +135,53 @@ def test_management_statement_is_normalized_but_not_scoring_eligible() -> None:
     assert accepted[0]["fact_type"] == "management_statement"
     assert accepted[0]["scoring_eligibility"]["eligible"] is False
     assert "context_only_not_scoring_input" in accepted[0]["scoring_eligibility"]["reasons"]
+
+
+def test_chinese_metric_names_and_short_evidence_are_normalized() -> None:
+    parsed = ParsedDocument(
+        parser_name="text",
+        backend_name="native",
+        title="湾区金融科技公司业务更新",
+        sections=[
+            ParsedSection(
+                heading="管理层讨论",
+                text="公司今年在大湾区拓展支付服务，营收达HK$3.2 billion。管理层表示，监管风险同现金流压力都要留意。",
+            )
+        ],
+        metadata={"source_id": "cn-case", "language": "zh-Hans"},
+    )
+    candidates = select_candidate_paragraphs(parsed)
+    raw = {
+        "metrics": [
+            {
+                "name": "营收",
+                "value": "HK$3.2 billion",
+                "confidence": 0.9,
+                "evidence_span": {
+                    "chunk_id": candidates[0].evidence.chunk_id,
+                    "quoted_text": "营收达HK$3.2 billion",
+                },
+            }
+        ],
+        "risk_factors": [
+            {
+                "category": "regulatory",
+                "description": "监管风险",
+                "severity": "medium",
+                "confidence": 0.86,
+                "evidence_span": {
+                    "chunk_id": candidates[0].evidence.chunk_id,
+                    "quoted_text": "监管风险",
+                },
+            }
+        ],
+    }
+
+    accepted, rejected = normalize_genai_extraction(raw, candidates=candidates, parsed=parsed)
+
+    assert rejected == []
+    assert accepted[0]["name"] == "revenue"
+    assert accepted[1]["category"] == "regulatory"
 
 
 def test_enhancement_merges_only_eligible_existing_parser_objects() -> None:

@@ -38,6 +38,24 @@ def test_llm_enabled_uses_llm_credentials() -> None:
     assert settings.llm_enable_thinking is False
 
 
+def test_glm_provider_uses_explicit_thinking_control() -> None:
+    glm_provider = OpenAIProvider(
+        Settings(
+            LLM_BASE_URL="https://api.z.ai/api/paas/v4/",
+            LLM_CHAT_MODEL="glm-4.7-flash",
+        )
+    )
+    generic_provider = OpenAIProvider(
+        Settings(
+            LLM_BASE_URL="https://api.openai.com/v1",
+            LLM_CHAT_MODEL="gpt-4o-mini",
+        )
+    )
+
+    assert glm_provider._uses_glm_thinking_control() is True
+    assert generic_provider._uses_glm_thinking_control() is False
+
+
 def test_parse_json_content_extracts_json_from_wrapped_text() -> None:
     parsed = OpenAIProvider._parse_json_content('Here is JSON: {"status": "ok", "answer": "done"}')
 
