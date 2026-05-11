@@ -46,22 +46,19 @@ class FusionExplainer:
             ],
         }
         if self.settings.llm_enabled:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=self.settings.llm_api_key, base_url=self.settings.llm_base_url)
-            response = client.chat.completions.create(
-                model=self.settings.llm_chat_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You explain structured commercial banking fusion outputs as strict JSON.",
-                    },
-                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-                ],
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content or "{}"
-            return self._normalize(json.loads(content), fusion=fusion, company=company, prospect=prospect)
+            try:
+                payload = self.provider.chat_json(
+                    system_prompt="You explain structured commercial banking fusion outputs as strict JSON.",
+                    messages=[
+                        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                    ],
+                )
+                return self._normalize(payload, fusion=fusion, company=company, prospect=prospect)
+            except Exception as exc:  # noqa: BLE001
+                fallback = self._fallback(fusion=fusion, company=company, prospect=prospect)
+                fallback["status"] = "llm_error_fallback"
+                fallback["llm_error"] = str(exc)
+                return fallback
 
         return self._fallback(fusion=fusion, company=company, prospect=prospect)
 

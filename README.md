@@ -35,7 +35,23 @@ curl "http://127.0.0.1:8000/api/rag/index/status"
 curl "http://127.0.0.1:8000/api/metadata/filters"
 ```
 
-RAG insight generation is evidence-gated. Without `OPENAI_API_KEY`, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
+RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
+
+For real GLM 4.7 Flash generation, set:
+
+```bash
+ENABLE_LLM_GENERATION=true
+LLM_API_KEY=<your-bigmodel-api-key>
+LLM_BASE_URL=https://api.z.ai/api/paas/v4/
+LLM_CHAT_MODEL=glm-4.7-flash
+LLM_ENABLE_THINKING=false
+```
+
+Then run a direct smoke check:
+
+```bash
+python -m insightsync.backend.workflows.glm_smoke_check
+```
 
 The bundled demo SQLite snapshot is intentionally committed at `insightsync/data/storage/demo/insightsync_demo.db`. Current snapshot coverage:
 
@@ -108,6 +124,7 @@ Current implementation focus is the data and backend intelligence foundation.
 - Implemented: multi-source ingestion, normalization, signal extraction, SQLite persistence, scheduler loop
 - Implemented: document parsing for PDF/text/HTML/JSON/CSV/XBRL paths, including structured metrics, risks, business events, and management discussion extraction
 - Implemented: SQLite to PostgreSQL sync, RAG indexing, OpenAI-compatible AI provider, evidence-gated RAG Q&A, and generated insight persistence when citations validate
+- Implemented: GLM 4.7 Flash-compatible LLM configuration and smoke-check workflow through the OpenAI-compatible provider path
 - Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history/workflow payloads, metadata filters, and frontend API handover guide
 - Implemented: prospect scorecard metadata, linkage-quality metrics, and governance flags to separate business score from evidence confidence
 - Added: multilingual parsing evaluation samples covering English, simplified Chinese, traditional Chinese, and Cantonese-style traditional Chinese text

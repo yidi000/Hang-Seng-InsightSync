@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=1536, alias="EMBEDDING_DIMENSIONS")
 
     llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
-    llm_base_url: str | None = Field(default=None, alias="LLM_BASE_URL")
-    llm_chat_model: str = Field(default="gpt-4o-mini", alias="LLM_CHAT_MODEL")
+    llm_base_url: str | None = Field(default="https://api.z.ai/api/paas/v4/", alias="LLM_BASE_URL")
+    llm_chat_model: str = Field(default="glm-4.7-flash", alias="LLM_CHAT_MODEL")
+    llm_temperature: float = Field(default=0.2, alias="LLM_TEMPERATURE")
+    llm_max_tokens: int = Field(default=2048, alias="LLM_MAX_TOKENS")
+    llm_enable_thinking: bool = Field(default=False, alias="LLM_ENABLE_THINKING")
 
     rag_top_k: int = Field(default=6, alias="RAG_TOP_K")
     rag_min_score: float = Field(default=0.15, alias="RAG_MIN_SCORE")

@@ -27,10 +27,12 @@ def test_llm_enabled_uses_llm_credentials() -> None:
     settings = Settings(
         OPENAI_API_KEY="",
         LLM_API_KEY="test-key",
-        LLM_BASE_URL="https://example.com/v1",
+        LLM_BASE_URL="https://api.z.ai/api/paas/v4/",
         LLM_CHAT_MODEL="glm-4.7-flash",
         ENABLE_LLM_GENERATION=True,
     )
 
     assert settings.llm_enabled is True
+    assert settings.llm_base_url == "https://api.z.ai/api/paas/v4/"
     assert settings.llm_chat_model == "glm-4.7-flash"
+    assert settings.llm_enable_thinking is False

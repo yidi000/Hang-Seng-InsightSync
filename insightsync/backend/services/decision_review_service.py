@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from insightsync.backend.ai.providers.openai_client import OpenAIProvider
 from insightsync.backend.core.config import Settings
 
 
@@ -11,6 +12,7 @@ class DecisionReviewService:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.provider = OpenAIProvider(settings)
 
     def review(
         self,
@@ -25,29 +27,19 @@ class DecisionReviewService:
         if not self.settings.llm_enabled:
             return fallback
 
-        from openai import OpenAI
-
-        client = OpenAI(api_key=self.settings.llm_api_key, base_url=self.settings.llm_base_url)
-        response = client.chat.completions.create(
-            model=self.settings.llm_chat_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You review commercial banking decision logic as strict JSON. "
-                        "You are not allowed to rescore the company. "
-                        "You only review linkage quality, subjectivity risks, rule overreach, "
-                        "and extraction gaps based on the supplied evidence."
-                    ),
-                },
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-            ],
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or "{}"
         try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
+            parsed = self.provider.chat_json(
+                system_prompt=(
+                    "You review commercial banking decision logic as strict JSON. "
+                    "You are not allowed to rescore the company. "
+                    "You only review linkage quality, subjectivity risks, rule overreach, "
+                    "and extraction gaps based on the supplied evidence."
+                ),
+                messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+            )
+        except Exception as exc:  # noqa: BLE001
+            fallback["status"] = "llm_error_fallback"
+            fallback["llm_error"] = str(exc)
             return fallback
         return self._normalize(parsed, fallback=fallback)
 
@@ -282,6 +274,7 @@ class DecisionReviewService:
             "audit_findings": audit_findings,
             "extraction_opportunities": extraction_opportunities,
             "model_name": None,
+            "llm_error": None,
         }
 
     def _normalize(self, payload: dict[str, Any], *, fallback: dict[str, Any]) -> dict[str, Any]:
@@ -292,4 +285,5 @@ class DecisionReviewService:
             "audit_findings": payload.get("audit_findings") or fallback["audit_findings"],
             "extraction_opportunities": payload.get("extraction_opportunities") or fallback["extraction_opportunities"],
             "model_name": self.settings.llm_chat_model if self.settings.llm_enabled else None,
+            "llm_error": payload.get("llm_error"),
         }
