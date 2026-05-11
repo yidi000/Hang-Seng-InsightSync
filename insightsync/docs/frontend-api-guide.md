@@ -501,30 +501,32 @@ Current limitation:
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Current backend substitute:
+Current scope:
 
-- `POST /api/insights/generate`
-- `POST /api/prospects/{prospect_id}/question`
+- returns generated insight history linked to the prospect company
+- supports `limit`, `offset`, and optional `insight_type`
+- useful after `/api/insights/generate` has persisted citation-validated outputs
 
-Why not available yet:
+Current limitation:
 
-- insight generation exists, but not yet as a dedicated prospect-scoped historical list endpoint
+- demo snapshot may return an empty list when no generated insights have been persisted
 
 ### `GET /api/metadata/filters`
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-Why not available yet:
+Current scope:
 
-- filter metadata is derivable from data but not exposed yet as a dedicated endpoint
+- returns current filter options with counts for `regions`, `segments`, `industries`, `signal_types`, `sources`, and `datasets`
+- intended for filter controls and debugging
 
-Can it exist later:
+Current limitation:
 
-- yes
+- values are derived from current data coverage, so they are not a static business taxonomy
 
 ## APIs Available Now
 
@@ -704,6 +706,7 @@ Frontend can connect now:
 - `GET /api/prospects/{prospect_id}/brief`
 - `POST /api/prospects/{prospect_id}/question`
 - `GET /api/prospects/{prospect_id}/review`
+- `GET /api/prospects/{prospect_id}/insights`
 
 ### Prospect List / Prospect Detail
 
@@ -718,6 +721,7 @@ Frontend can connect now:
 - `POST /api/prospects/{prospect_id}/question`
 - `GET /api/prospects/{prospect_id}/copilot`
 - `GET /api/prospects/{prospect_id}/review`
+- `GET /api/prospects/{prospect_id}/insights`
 
 Current limitation:
 
@@ -732,16 +736,9 @@ Requested endpoint:
 
 Status:
 
-- `Planned later`
+- `Available now`
 
-For now, frontend can hardcode or derive temporary options from current API results.
-
-Current feasible temporary values:
-
-- `entity`: currently `HKG` is the most reliable option on low-level signal/timeline views
-- `signal_type`: `market`, `cross_border`, `financing`, `risk`, `growth`
-- `source`: depends on loaded source coverage
-- `priority_level`: `high`, `medium`, `low` on the prospect layer
+Frontend can use this endpoint for filter controls, while keeping static UI options only for business workflow states that are not yet persisted.
 
 ## Empty Data Rules
 
@@ -764,11 +761,10 @@ Use these rules in frontend integration:
 
 If the frontend wants to match the target product more closely, the next backend additions should be:
 
-1. `GET /api/metadata/filters`
-2. persisted prospect workflow state such as owner, stage, and last-action
-3. prospect insight history endpoint
-4. company size segmentation once a reliable size/profile model exists
-5. standardized frontend error contract
+1. persisted prospect workflow state such as owner, stage, and last-action
+2. company size segmentation once a reliable size/profile model exists
+3. standardized frontend error contract
+4. richer generated-insight history with citations and reviewer feedback
 
 ## Development Checklist
 

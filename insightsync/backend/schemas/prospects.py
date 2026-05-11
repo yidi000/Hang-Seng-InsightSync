@@ -82,6 +82,14 @@ class ProspectDetailOut(BaseModel):
     key_business_events: list[CompanyBusinessEventOut] = Field(default_factory=list)
 
 
+class ProspectInsightListOut(BaseModel):
+    """Generated insight history for a prospect."""
+
+    items: list[CompanyInsightPreviewOut] = Field(default_factory=list)
+    limit: int
+    offset: int
+
+
 class ProspectEvidenceOut(BaseModel):
     """Evidence bundle linked to a business-facing prospect."""
 

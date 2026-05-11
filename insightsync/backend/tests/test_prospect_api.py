@@ -129,6 +129,29 @@ def test_get_prospect_timeline_returns_linked_events() -> None:
     assert payload["items"][0]["company_id"] == "hkg-alpha-fintech"
 
 
+def test_get_prospect_insights_returns_generated_history() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/insights")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 20
+    assert payload["offset"] == 0
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["title"] == "Engage Alpha Fintech"
+    assert payload["items"][0]["insight_type"] == "action"
+    assert payload["items"][0]["confidence"] == 0.81
+
+
+def test_get_prospect_insights_supports_type_filter() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/insights?insight_type=risk")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"] == []
+
+
 def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:
     with _test_client() as client:
         response = client.get("/api/prospects/prospect:hkg-alpha-fintech/evidence")

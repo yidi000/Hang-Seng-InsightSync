@@ -396,6 +396,30 @@ class ProspectService:
             "offset": offset,
         }
 
+    def list_prospect_insights(
+        self,
+        prospect_id: str,
+        *,
+        limit: int,
+        offset: int,
+        insight_type: str | None = None,
+    ) -> dict[str, Any] | None:
+        company_id = self._company_id_from_prospect_id(prospect_id)
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+        items = self.repo.list_generated_insights(
+            limit=limit,
+            offset=offset,
+            company_id=company_id,
+            insight_type=insight_type,
+        )
+        return {
+            "items": items,
+            "limit": limit,
+            "offset": offset,
+        }
+
     def get_prospect_evidence(self, prospect_id: str) -> dict[str, Any] | None:
         company_id = self._company_id_from_prospect_id(prospect_id)
         detail = self.company_service.get_company_detail(company_id)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -472,6 +473,128 @@ class ReadRepository:
             params,
         ).mappings()
         return [dict(row) for row in rows]
+
+    def list_generated_insights(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        company_id: str | None = None,
+        entity: str | None = None,
+        insight_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        clauses: list[str] = []
+        if company_id:
+            clauses.append("company_id = :company_id")
+            params["company_id"] = company_id
+        if entity:
+            clauses.append("entity = :entity")
+            params["entity"] = entity
+        if insight_type:
+            clauses.append("insight_type = :insight_type")
+            params["insight_type"] = insight_type
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self.db.execute(
+            text(
+                f"""
+                SELECT id, source, company_id, entity, insight_type, title, summary, confidence,
+                       model_name, prompt_version, generated_at
+                FROM generated_insights
+                {where_sql}
+                ORDER BY generated_at DESC, id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            params,
+        ).mappings()
+        return [dict(row) for row in rows]
+
+    def metadata_filters(self) -> dict[str, list[dict[str, Any]]]:
+        def sorted_counts(values: list[str]) -> list[dict[str, Any]]:
+            counts: dict[str, int] = {}
+            for value in values:
+                if not value:
+                    continue
+                counts[value] = counts.get(value, 0) + 1
+            return [
+                {"name": name, "count": count}
+                for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+            ]
+
+        def count_query(sql: str) -> list[dict[str, Any]]:
+            rows = self.db.execute(text(sql)).mappings()
+            return [dict(row) for row in rows if row["name"]]
+
+        existing_tables = set(inspect(self.db.get_bind()).get_table_names())
+        companies = self.list_companies(limit=1000, offset=0)
+        source_values: list[str] = []
+        dataset_values: list[str] = []
+        if "trigger_signals" in existing_tables:
+            signal_sources = count_query(
+                """
+                SELECT source AS name, COUNT(*) AS count
+                FROM trigger_signals
+                WHERE source IS NOT NULL AND TRIM(source) <> ''
+                GROUP BY source
+                """
+            )
+            signal_datasets = count_query(
+                """
+                SELECT dataset AS name, COUNT(*) AS count
+                FROM trigger_signals
+                WHERE dataset IS NOT NULL AND TRIM(dataset) <> ''
+                GROUP BY dataset
+                """
+            )
+            for item in signal_sources:
+                source_values.extend([item["name"]] * int(item["count"]))
+            for item in signal_datasets:
+                dataset_values.extend([item["name"]] * int(item["count"]))
+        if "intelligence_records" in existing_tables:
+            record_sources = count_query(
+                """
+                SELECT source AS name, COUNT(*) AS count
+                FROM intelligence_records
+                WHERE source IS NOT NULL AND TRIM(source) <> ''
+                GROUP BY source
+                """
+            )
+            record_datasets = count_query(
+                """
+                SELECT dataset AS name, COUNT(*) AS count
+                FROM intelligence_records
+                WHERE dataset IS NOT NULL AND TRIM(dataset) <> ''
+                GROUP BY dataset
+                """
+            )
+            for item in record_sources:
+                source_values.extend([item["name"]] * int(item["count"]))
+            for item in record_datasets:
+                dataset_values.extend([item["name"]] * int(item["count"]))
+
+        return {
+            "regions": sorted_counts([item.get("region") for item in companies if item.get("region")]),
+            "segments": sorted_counts(
+                [segment for item in companies for segment in item.get("segments", []) if segment]
+            ),
+            "industries": sorted_counts(
+                [industry for item in companies for industry in item.get("industries", []) if industry]
+            ),
+            "signal_types": count_query(
+                """
+                SELECT signal_type AS name, COUNT(*) AS count
+                FROM trigger_signals
+                WHERE signal_type IS NOT NULL AND TRIM(signal_type) <> ''
+                GROUP BY signal_type
+                ORDER BY count DESC, signal_type ASC
+                """
+            )
+            if "trigger_signals" in existing_tables
+            else [],
+            "sources": sorted_counts(source_values),
+            "datasets": sorted_counts(dataset_values),
+        }
 
     def overview(self) -> dict[str, Any]:
         counts = {}

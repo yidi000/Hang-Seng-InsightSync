@@ -10,6 +10,7 @@ from insightsync.backend.schemas.prospects import (
     ProspectCopilotOut,
     ProspectDetailOut,
     ProspectEvidenceOut,
+    ProspectInsightListOut,
     ProspectListOut,
     ProspectQuestionIn,
     ProspectQuestionOut,
@@ -87,6 +88,27 @@ def list_prospect_timeline(
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return TimelineListOut(**payload)
+
+
+@router.get("/{prospect_id}/insights", response_model=ProspectInsightListOut)
+def list_prospect_insights(
+    prospect_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    insight_type: str | None = None,
+    db: Session = Depends(get_db),
+) -> ProspectInsightListOut:
+    """Return generated insight history linked to a business-facing prospect."""
+
+    payload = ProspectService(db).list_prospect_insights(
+        prospect_id,
+        limit=limit,
+        offset=offset,
+        insight_type=insight_type,
+    )
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectInsightListOut(**payload)
 
 
 @router.get("/{prospect_id}/evidence", response_model=ProspectEvidenceOut)

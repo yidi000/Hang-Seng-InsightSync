@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from insightsync.backend.api import companies, dashboard, insights, prospects, rag, signals, timeline
+from insightsync.backend.api import companies, dashboard, insights, metadata, prospects, rag, signals, timeline
 from insightsync.backend.core.config import get_settings
 from insightsync.backend.core.security import ApiKeyAuthMiddleware, RateLimitMiddleware
 from insightsync.backend.schemas.common import HealthResponse
@@ -31,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(rag.router)
     app.include_router(insights.router)
+    app.include_router(metadata.router)
 
     @app.get("/healthz", response_model=HealthResponse)
     def healthz() -> HealthResponse:
