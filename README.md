@@ -82,6 +82,8 @@ Useful backend endpoints:
 - `GET /api/prospects/{prospect_id}/copilot`
 - `GET /api/prospects/{prospect_id}/review`
 - `GET /api/prospects/{prospect_id}/insights`
+- `GET /api/prospects/{prospect_id}/workflow`
+- `PUT /api/prospects/{prospect_id}/workflow`
 - `POST /api/prospects/{prospect_id}/question`
 - `GET /api/signals`
 - `GET /api/timeline`
@@ -106,7 +108,7 @@ Current implementation focus is the data and backend intelligence foundation.
 - Implemented: multi-source ingestion, normalization, signal extraction, SQLite persistence, scheduler loop
 - Implemented: document parsing for PDF/text/HTML/JSON/CSV/XBRL paths, including structured metrics, risks, business events, and management discussion extraction
 - Implemented: SQLite to PostgreSQL sync, RAG indexing, OpenAI-compatible AI provider, evidence-gated RAG Q&A, and generated insight persistence when citations validate
-- Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history payloads, metadata filters, and frontend API handover guide
+- Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history/workflow payloads, metadata filters, and frontend API handover guide
 - Implemented: prospect scorecard metadata, linkage-quality metrics, and governance flags to separate business score from evidence confidence
 - Added: multilingual parsing evaluation samples covering English, simplified Chinese, traditional Chinese, and Cantonese-style traditional Chinese text
 - Still maturing: score calibration, company identity resolution, generated insight evaluation, frontend dashboard implementation, and production handover runbooks
@@ -255,7 +257,7 @@ git push
 1. Calibrate prospect scoring and linkage rules with labeled examples and RM/product review
 2. Expand multilingual evaluation cases for annual reports, announcements, market news, and Cantonese-style business text
 3. Improve company identity resolution across English, simplified Chinese, traditional Chinese, stock codes, aliases, and subsidiaries
-4. Add persisted prospect workflow state such as owner, stage, last action, and review status
+4. Add prospect task/activity history beyond the latest workflow state
 5. Add governance, evaluation logs, model/prompt configuration records, and backend handover runbooks
 
 ## Notes

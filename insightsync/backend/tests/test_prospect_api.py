@@ -55,6 +55,9 @@ def test_list_prospects_returns_ranked_business_view() -> None:
     assert top["score_breakdown"]["linkage_quality"]["linked_evidence_count"] >= 1
     assert top["score_breakdown"]["linkage_quality"]["direct_evidence_ratio"] >= 0.5
     assert "priority_score" in top["score_breakdown"]["score_interpretation"]
+    assert top["workflow_state"]["stage"] == "new"
+    assert top["workflow_state"]["status"] == "open"
+    assert top["workflow_state"]["review_status"] == "not_reviewed"
 
 
 def test_list_prospects_supports_priority_filter() -> None:
@@ -91,6 +94,8 @@ def test_get_prospect_detail_returns_company_backed_detail() -> None:
     assert payload["prospect"]["score_breakdown"]["linkage_quality"]["context_only_count"] == 0
     assert payload["prospect"]["score_breakdown"]["linkage_quality"]["linkage_type_counts"]["direct_company_link"] >= 1
     assert isinstance(payload["prospect"]["score_breakdown"]["governance_flags"], list)
+    assert payload["prospect"]["workflow_state"]["stage"] == "new"
+    assert payload["workflow_state"]["stage"] == "new"
     assert payload["prospect"]["decision_features"][0]["feature_key"] is not None
     assert payload["prospect"]["fusion"]["primary_lens_key"] in {"acquisition", "financing", "cross_border"}
     assert payload["company"]["company_id"] == "hkg-alpha-fintech"
@@ -150,6 +155,50 @@ def test_get_prospect_insights_supports_type_filter() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["items"] == []
+
+
+def test_get_prospect_workflow_returns_default_state() -> None:
+    with _test_client() as client:
+        response = client.get("/api/prospects/prospect:hkg-alpha-fintech/workflow")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prospect_id"] == "prospect:hkg-alpha-fintech"
+    assert payload["company_id"] == "hkg-alpha-fintech"
+    assert payload["owner"] is None
+    assert payload["stage"] == "new"
+    assert payload["status"] == "open"
+    assert payload["review_status"] == "not_reviewed"
+    assert payload["updated_at"] is None
+
+
+def test_put_prospect_workflow_persists_state_and_updates_summary() -> None:
+    update = {
+        "owner": "RM Team A",
+        "stage": "contacted",
+        "status": "in_progress",
+        "last_action": "Sent introductory email",
+        "next_action": "Schedule treasury discovery call",
+        "review_status": "reviewed",
+        "notes": "Prioritize cross-border payments discussion.",
+    }
+    with _test_client() as client:
+        response = client.put("/api/prospects/prospect:hkg-alpha-fintech/workflow", json=update)
+        detail_response = client.get("/api/prospects/prospect:hkg-alpha-fintech")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["owner"] == "RM Team A"
+    assert payload["stage"] == "contacted"
+    assert payload["status"] == "in_progress"
+    assert payload["next_action"] == "Schedule treasury discovery call"
+    assert payload["review_status"] == "reviewed"
+    assert payload["updated_at"] is not None
+
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["prospect"]["workflow_state"]["owner"] == "RM Team A"
+    assert detail["workflow_state"]["stage"] == "contacted"
 
 
 def test_get_prospect_evidence_returns_parsed_evidence_bundle() -> None:

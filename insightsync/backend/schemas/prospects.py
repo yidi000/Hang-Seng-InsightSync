@@ -24,6 +24,33 @@ from insightsync.backend.schemas.signals import SignalOut
 from insightsync.backend.schemas.timeline import TimelineEventOut
 
 
+class ProspectWorkflowStateOut(BaseModel):
+    """Persisted banker workflow state for a prospect."""
+
+    prospect_id: str
+    company_id: str
+    owner: str | None = None
+    stage: str = "new"
+    status: str = "open"
+    last_action: str | None = None
+    next_action: str | None = None
+    review_status: str = "not_reviewed"
+    notes: str | None = None
+    updated_at: datetime | None = None
+
+
+class ProspectWorkflowUpdateIn(BaseModel):
+    """Update payload for banker workflow state."""
+
+    owner: str | None = Field(default=None, max_length=120)
+    stage: str = Field(default="new", max_length=50)
+    status: str = Field(default="open", max_length=50)
+    last_action: str | None = Field(default=None, max_length=500)
+    next_action: str | None = Field(default=None, max_length=500)
+    review_status: str = Field(default="not_reviewed", max_length=50)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 class ProspectSummaryOut(BaseModel):
     """Business-facing prospect summary derived from company state."""
 
@@ -56,6 +83,7 @@ class ProspectSummaryOut(BaseModel):
     decision_answers: list[CompanyDecisionAnswerOut] = Field(default_factory=list)
     fusion: CompanyFusionOutputOut | None = None
     score_breakdown: "ProspectScoreBreakdownOut"
+    workflow_state: ProspectWorkflowStateOut
 
 
 class ProspectListOut(BaseModel):
@@ -71,6 +99,7 @@ class ProspectDetailOut(BaseModel):
     """Prospect detail assembled from company state and linked evidence."""
 
     prospect: ProspectSummaryOut
+    workflow_state: ProspectWorkflowStateOut
     company: CompanyProfileOut
     latest_state: CompanyLatestStateOut
     recent_signals: list[SignalOut] = Field(default_factory=list)

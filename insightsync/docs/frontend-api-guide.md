@@ -365,6 +365,7 @@ Current scope:
 - exposes `scorecard_version`, `calibration_status`, `priority_formula`, `score_inputs`, `linkage_quality`, and `governance_flags`
 - keeps `evidence_confidence_score` separate from `opportunity_score` so weak evidence is visible instead of hidden inside the business score
 - includes `recommended_next_step` and `recommended_product_themes`
+- includes `workflow_state` with owner/stage/status/action fields when workflow state has been saved
 - supports search and basic filters aligned to company fields
 
 Scoring contract:
@@ -378,7 +379,6 @@ Scoring contract:
 Current limitation:
 
 - no dedicated persisted prospect table yet
-- no RM ownership model yet
 - no revenue normalization or banker-assignment logic yet
 
 ### `GET /api/prospects/{prospect_id}`
@@ -395,12 +395,38 @@ Current scope:
 
 - returns a business-facing prospect object plus linked company evidence
 - detail is derived from the existing company-centric evidence layer
+- includes the current `workflow_state`
 
 Current limitation:
 
 - prospect identity is still derived from `company_id`
-- no separate persisted prospect lifecycle yet
 - identity/linkage matching is evaluated with a small local gold set, but subsidiary and alias coverage still needs expansion before production use
+
+### `GET /api/prospects/{prospect_id}/workflow`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- returns persisted banker workflow state for the prospect
+- returns a default open/new/not-reviewed state before the prospect has been updated
+
+### `PUT /api/prospects/{prospect_id}/workflow`
+
+Status:
+
+- `Available now`
+
+Current scope:
+
+- updates owner, stage, status, last action, next action, review status, and notes
+- persists state by `prospect_id`
+
+Current limitation:
+
+- this is a lightweight workflow state, not a full CRM task model
 
 ### `GET /api/prospects/{prospect_id}/signals`
 
@@ -716,6 +742,8 @@ Frontend can connect now:
 - `GET /api/prospects/{prospect_id}`
 - `GET /api/prospects/{prospect_id}/signals`
 - `GET /api/prospects/{prospect_id}/timeline`
+- `GET /api/prospects/{prospect_id}/workflow`
+- `PUT /api/prospects/{prospect_id}/workflow`
 - `GET /api/prospects/{prospect_id}/evidence`
 - `GET /api/prospects/{prospect_id}/brief`
 - `POST /api/prospects/{prospect_id}/question`
@@ -726,7 +754,7 @@ Frontend can connect now:
 Current limitation:
 
 - `prospect_id` is currently derived from `company_id`
-- there is not yet a separately persisted banker workflow state
+- workflow state is persisted, but there is not yet a full task/activity history model
 
 ## Filter Metadata
 
@@ -738,7 +766,7 @@ Status:
 
 - `Available now`
 
-Frontend can use this endpoint for filter controls, while keeping static UI options only for business workflow states that are not yet persisted.
+Frontend can use this endpoint for filter controls. Workflow state values are persisted through the prospect workflow endpoint rather than returned as global static taxonomy values.
 
 ## Empty Data Rules
 
@@ -761,7 +789,7 @@ Use these rules in frontend integration:
 
 If the frontend wants to match the target product more closely, the next backend additions should be:
 
-1. persisted prospect workflow state such as owner, stage, and last-action
+1. prospect task/activity history beyond the latest workflow state
 2. company size segmentation once a reliable size/profile model exists
 3. standardized frontend error contract
 4. richer generated-insight history with citations and reviewer feedback

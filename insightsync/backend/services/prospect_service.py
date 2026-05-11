@@ -235,6 +235,7 @@ class ProspectService:
     def _build_prospect_summary(self, detail: dict[str, Any]) -> dict[str, Any]:
         company = detail["company"]
         latest_state = detail["latest_state"]
+        prospect_id = self._prospect_id(company["company_id"])
         opportunity_score, opportunity_components = self._build_opportunity_score(detail)
         risk_score, risk_components = self._build_risk_score(detail)
         evidence_confidence_score = latest_state.get("evidence_confidence_score", 0)
@@ -256,9 +257,13 @@ class ProspectService:
             evidence_confidence_score=evidence_confidence_score,
             linkage_quality=linkage_quality,
         )
+        workflow_state = self.repo.get_prospect_workflow_state(
+            prospect_id=prospect_id,
+            company_id=company["company_id"],
+        )
 
         return {
-            "prospect_id": self._prospect_id(company["company_id"]),
+            "prospect_id": prospect_id,
             "company_id": company["company_id"],
             "canonical_name": company["canonical_name"],
             "display_name": company.get("display_name"),
@@ -300,6 +305,7 @@ class ProspectService:
                 "linkage_quality": linkage_quality,
                 "governance_flags": governance_flags,
             },
+            "workflow_state": workflow_state,
         }
 
     def list_prospects(
@@ -358,8 +364,10 @@ class ProspectService:
         if not detail:
             return None
         brief = self.get_prospect_brief(prospect_id)
+        prospect = self._build_prospect_summary(detail)
         return {
-            "prospect": self._build_prospect_summary(detail),
+            "prospect": prospect,
+            "workflow_state": prospect["workflow_state"],
             "company": detail["company"],
             "latest_state": detail["latest_state"],
             "fusion_explanation": brief.get("fusion_explanation") if brief else None,
@@ -419,6 +427,30 @@ class ProspectService:
             "limit": limit,
             "offset": offset,
         }
+
+    def get_prospect_workflow(self, prospect_id: str) -> dict[str, Any] | None:
+        company_id = self._company_id_from_prospect_id(prospect_id)
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+        return self.repo.get_prospect_workflow_state(prospect_id=prospect_id, company_id=company_id)
+
+    def update_prospect_workflow(self, prospect_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        company_id = self._company_id_from_prospect_id(prospect_id)
+        detail = self.company_service.get_company_detail(company_id)
+        if not detail:
+            return None
+        return self.repo.upsert_prospect_workflow_state(
+            prospect_id=prospect_id,
+            company_id=company_id,
+            owner=payload.get("owner"),
+            stage=payload["stage"],
+            status=payload["status"],
+            last_action=payload.get("last_action"),
+            next_action=payload.get("next_action"),
+            review_status=payload["review_status"],
+            notes=payload.get("notes"),
+        )
 
     def get_prospect_evidence(self, prospect_id: str) -> dict[str, Any] | None:
         company_id = self._company_id_from_prospect_id(prospect_id)

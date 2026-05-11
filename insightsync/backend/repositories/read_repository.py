@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import inspect
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 
@@ -509,6 +511,92 @@ class ReadRepository:
             params,
         ).mappings()
         return [dict(row) for row in rows]
+
+    @staticmethod
+    def default_workflow_state(*, prospect_id: str, company_id: str) -> dict[str, Any]:
+        return {
+            "prospect_id": prospect_id,
+            "company_id": company_id,
+            "owner": None,
+            "stage": "new",
+            "status": "open",
+            "last_action": None,
+            "next_action": None,
+            "review_status": "not_reviewed",
+            "notes": None,
+            "updated_at": None,
+        }
+
+    def get_prospect_workflow_state(self, *, prospect_id: str, company_id: str) -> dict[str, Any]:
+        try:
+            row = self.db.execute(
+                text(
+                    """
+                    SELECT prospect_id, company_id, owner, stage, status, last_action, next_action,
+                           review_status, notes, updated_at
+                    FROM prospect_workflow_states
+                    WHERE prospect_id = :prospect_id
+                    """
+                ),
+                {"prospect_id": prospect_id},
+            ).mappings().first()
+        except OperationalError:
+            return self.default_workflow_state(prospect_id=prospect_id, company_id=company_id)
+        if not row:
+            return self.default_workflow_state(prospect_id=prospect_id, company_id=company_id)
+        return dict(row)
+
+    def upsert_prospect_workflow_state(
+        self,
+        *,
+        prospect_id: str,
+        company_id: str,
+        owner: str | None,
+        stage: str,
+        status: str,
+        last_action: str | None,
+        next_action: str | None,
+        review_status: str,
+        notes: str | None,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        self.db.execute(
+            text(
+                """
+                INSERT INTO prospect_workflow_states (
+                  prospect_id, company_id, owner, stage, status, last_action, next_action,
+                  review_status, notes, updated_at
+                )
+                VALUES (
+                  :prospect_id, :company_id, :owner, :stage, :status, :last_action, :next_action,
+                  :review_status, :notes, :updated_at
+                )
+                ON CONFLICT (prospect_id) DO UPDATE SET
+                  company_id = EXCLUDED.company_id,
+                  owner = EXCLUDED.owner,
+                  stage = EXCLUDED.stage,
+                  status = EXCLUDED.status,
+                  last_action = EXCLUDED.last_action,
+                  next_action = EXCLUDED.next_action,
+                  review_status = EXCLUDED.review_status,
+                  notes = EXCLUDED.notes,
+                  updated_at = EXCLUDED.updated_at
+                """
+            ),
+            {
+                "prospect_id": prospect_id,
+                "company_id": company_id,
+                "owner": owner,
+                "stage": stage,
+                "status": status,
+                "last_action": last_action,
+                "next_action": next_action,
+                "review_status": review_status,
+                "notes": notes,
+                "updated_at": now,
+            },
+        )
+        return self.get_prospect_workflow_state(prospect_id=prospect_id, company_id=company_id)
 
     def metadata_filters(self) -> dict[str, list[dict[str, Any]]]:
         def sorted_counts(values: list[str]) -> list[dict[str, Any]]:

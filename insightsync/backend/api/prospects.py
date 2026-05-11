@@ -15,6 +15,8 @@ from insightsync.backend.schemas.prospects import (
     ProspectQuestionIn,
     ProspectQuestionOut,
     ProspectReviewOut,
+    ProspectWorkflowStateOut,
+    ProspectWorkflowUpdateIn,
 )
 from insightsync.backend.schemas.signals import SignalListOut
 from insightsync.backend.schemas.timeline import TimelineListOut
@@ -109,6 +111,34 @@ def list_prospect_insights(
     if not payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return ProspectInsightListOut(**payload)
+
+
+@router.get("/{prospect_id}/workflow", response_model=ProspectWorkflowStateOut)
+def get_prospect_workflow(prospect_id: str, db: Session = Depends(get_db)) -> ProspectWorkflowStateOut:
+    """Return persisted banker workflow state for a prospect."""
+
+    payload = ProspectService(db).get_prospect_workflow(prospect_id)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    return ProspectWorkflowStateOut(**payload)
+
+
+@router.put("/{prospect_id}/workflow", response_model=ProspectWorkflowStateOut)
+def update_prospect_workflow(
+    prospect_id: str,
+    payload: ProspectWorkflowUpdateIn,
+    db: Session = Depends(get_db),
+) -> ProspectWorkflowStateOut:
+    """Update persisted banker workflow state for a prospect."""
+
+    result = ProspectService(db).update_prospect_workflow(
+        prospect_id,
+        payload.model_dump(),
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    db.commit()
+    return ProspectWorkflowStateOut(**result)
 
 
 @router.get("/{prospect_id}/evidence", response_model=ProspectEvidenceOut)

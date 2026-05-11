@@ -295,6 +295,22 @@ def _test_client() -> Generator[TestClient, None, None]:
         )
         conn.exec_driver_sql(
             """
+            CREATE TABLE prospect_workflow_states (
+              prospect_id TEXT PRIMARY KEY,
+              company_id TEXT NOT NULL,
+              owner TEXT,
+              stage TEXT NOT NULL,
+              status TEXT NOT NULL,
+              last_action TEXT,
+              next_action TEXT,
+              review_status TEXT NOT NULL,
+              notes TEXT,
+              updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
             CREATE TABLE parsed_documents (
               id INTEGER PRIMARY KEY,
               source_table TEXT NOT NULL,
