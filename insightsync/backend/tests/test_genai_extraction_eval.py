@@ -13,11 +13,15 @@ def test_genai_extraction_eval_cases_pass_with_fixture_outputs() -> None:
             chat_json=mock_chat_json_for_case(case),
             max_candidates=8,
             include_raw=True,
+            api_preview=True,
         )
 
         assert result["status"] == "ok", case["case_id"]
         assert result["candidate_count"] >= 1, case["case_id"]
         assert result["raw_response"], case["case_id"]
+        assert result["api_preview"]["status"] == "ok", case["case_id"]
+        assert "accepted_facts" in result["api_preview"], case["case_id"]
+        assert "raw_response" not in result["api_preview"], case["case_id"]
         assert result["passed"], result
 
 

@@ -59,6 +59,12 @@ Run a multilingual GLM extraction demo against English, simplified Chinese, trad
 python -m insightsync.backend.workflows.glm_extraction_demo --include-raw --delay-seconds 10
 ```
 
+Add `--api-preview` to include the same `recent_documents[].genai_extraction` audit shape returned by the company/prospect evidence APIs:
+
+```bash
+python -m insightsync.backend.workflows.glm_extraction_demo --mock --strict --api-preview
+```
+
 For deterministic local validation without calling GLM:
 
 ```bash

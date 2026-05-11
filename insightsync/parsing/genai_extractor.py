@@ -360,8 +360,11 @@ def _system_prompt() -> str:
     return (
         "You extract structured commercial-banking facts from supplied candidate paragraphs. "
         "Handle English, Simplified Chinese, Traditional Chinese, and Cantonese business text. "
+        "Preserve the source language, script, and Cantonese register in summaries and descriptions where practical; "
+        "use English only for canonical enum labels. "
         "Use only the supplied evidence. Do not assign scores or priorities. "
         "Every item must cite one allowed evidence span and copy quoted_text exactly from that span. "
+        "Do not default confidence to 1.0; reserve it for facts stated almost verbatim with unambiguous evidence. "
         "Return strict JSON only."
     )
 
@@ -438,6 +441,8 @@ def _build_prompt_payload(
             "For example, if a sentence says a company expanded and signed a cooperation agreement, return one expansion event and one partnership event.",
             "Use canonical English metric names when obvious, for example revenue for \u8425\u4e1a\u6536\u5165 or \u71df\u696d\u6536\u5165.",
             "For Chinese or Cantonese text, quoted_text may be a short exact phrase when it is the minimal evidence.",
+            "For Chinese or Cantonese text, preserve the source script in description and summary fields where practical.",
+            "Use confidence as extraction certainty, not business importance; avoid 1.0 unless the fact is nearly exact.",
             "Use opportunity_signal_candidates only for possible downstream rule review.",
             "Return empty lists when evidence is insufficient.",
             f"Only include items with extraction confidence >= {config.min_confidence}.",

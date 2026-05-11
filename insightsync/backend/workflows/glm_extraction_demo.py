@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from insightsync.backend.ai.providers.openai_client import OpenAIProvider
 from insightsync.backend.core.config import get_settings
+from insightsync.backend.services.genai_extraction_view import build_genai_extraction_view_from_raw
 from insightsync.parsing import GenAIExtractionConfig, ParseRequest, parse_content, run_genai_extraction
 from insightsync.parsing.genai_extractor import CandidateParagraph
 from insightsync.parsing.utils import normalize_text
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-candidates", type=int, default=8)
     parser.add_argument("--mock", action="store_true", help="Use fixture model outputs instead of calling GLM.")
     parser.add_argument("--include-raw", action="store_true", help="Include raw model JSON in output.")
+    parser.add_argument("--api-preview", action="store_true", help="Include API-shaped genai_extraction metadata.")
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="Sleep between live cases.")
     parser.add_argument("--strict", action="store_true", help="Exit non-zero when expected checks fail.")
     return parser
@@ -42,6 +44,7 @@ def run_case(
     chat_json: ChatJSONCallable,
     max_candidates: int = 8,
     include_raw: bool = False,
+    api_preview: bool = False,
 ) -> dict[str, Any]:
     parsed = parse_content(
         ParseRequest(
@@ -85,6 +88,10 @@ def run_case(
         result["reason"] = run.reason
     if include_raw:
         result["raw_response"] = run.raw_response
+    if api_preview:
+        result["api_preview"] = build_genai_extraction_view_from_raw(
+            run.as_metadata(include_raw_response=include_raw)
+        )
 
     result["checks"] = evaluate_result(case, result)
     result["passed"] = run.status == "ok" and all(check["passed"] for check in result["checks"])
@@ -190,6 +197,7 @@ def main() -> int:
                 chat_json=chat_json,
                 max_candidates=max(1, int(args.max_candidates)),
                 include_raw=args.include_raw,
+                api_preview=args.api_preview,
             )
         )
         if not args.mock and args.delay_seconds > 0 and index < len(cases) - 1:
