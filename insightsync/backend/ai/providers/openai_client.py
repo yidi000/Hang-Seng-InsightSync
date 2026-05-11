@@ -16,6 +16,15 @@ MAX_GENERATION_EVIDENCE_ITEMS = 5
 MAX_GENERATION_EVIDENCE_TEXT_CHARS = 700
 
 
+class LLMProviderError(RuntimeError):
+    """Structured error for OpenAI-compatible chat failures."""
+
+    def __init__(self, error_code: str, message: str) -> None:
+        super().__init__(f"{error_code}: {message}")
+        self.error_code = error_code
+        self.message = message
+
+
 class OpenAIProvider:
     """OpenAI-backed provider with deterministic local fallbacks."""
 
@@ -45,13 +54,21 @@ class OpenAIProvider:
             return self._fallback_generation(question=question, evidence=evidence, insight_type=insight_type)
 
         compact_evidence = self._compact_evidence_for_generation(evidence)
+        allowed_chunk_ids = [
+            item["chunk_id"]
+            for item in compact_evidence
+            if item.get("chunk_id") is not None
+        ]
         prompt = {
             "question": question,
             "insight_type": insight_type,
             "evidence": compact_evidence,
+            "allowed_chunk_ids": allowed_chunk_ids,
             "rules": [
                 "Use only the supplied evidence.",
                 "Every conclusion must cite at least one evidence item.",
+                "citations[].chunk_id must be copied exactly from allowed_chunk_ids.",
+                "If no allowed_chunk_ids support the answer, return status='insufficient_evidence' and citations=[].",
                 "Cite every evidence item that materially affects the summary, reasoning, action, limitations, or human-review decision.",
                 "If a regulatory, compliance, liquidity, or execution risk is mentioned, cite the risk evidence item.",
                 "If regulatory or compliance risk evidence is cited, limitations must name the risk and requires_human_review must be true.",
@@ -87,6 +104,7 @@ class OpenAIProvider:
             fallback = self._fallback_generation(question=question, evidence=evidence, insight_type=insight_type)
             fallback["status"] = "llm_error_fallback"
             fallback["llm_error"] = str(exc)
+            fallback["llm_error_code"] = getattr(exc, "error_code", "LLM_PROVIDER_ERROR")
             return fallback
 
     def chat_json(self, *, system_prompt: str, messages: list[dict[str, str]]) -> dict[str, Any]:
@@ -123,14 +141,20 @@ class OpenAIProvider:
                 response = client.chat.completions.create(**call_request)
                 content = response.choices[0].message.content or ""
                 if not content.strip():
-                    raise ValueError("LLM returned empty content")
+                    raise LLMProviderError("LLM_EMPTY_RESPONSE", "LLM returned empty content")
                 return self._parse_json_content(content)
             except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
+                errors.append(self._to_llm_error(exc))
                 if attempt_index < len(use_response_format_plan) - 1:
                     time.sleep(0.8 * (attempt_index + 1))
                     continue
-                raise RuntimeError("; ".join(str(error) for error in errors)) from exc
+                if len(errors) == 1:
+                    raise errors[0] from exc
+                last_error = errors[-1]
+                raise LLMProviderError(
+                    getattr(last_error, "error_code", "LLM_PROVIDER_ERROR"),
+                    "; ".join(str(error) for error in errors),
+                ) from exc
 
     @staticmethod
     def _parse_json_content(content: str) -> dict[str, Any]:
@@ -142,9 +166,25 @@ class OpenAIProvider:
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", text, flags=re.S)
             if not match:
-                raise
-            parsed = json.loads(match.group(0))
+                raise LLMProviderError("LLM_JSON_PARSE_ERROR", "LLM response did not contain a JSON object")
+            try:
+                parsed = json.loads(match.group(0))
+            except json.JSONDecodeError as exc:
+                raise LLMProviderError("LLM_JSON_PARSE_ERROR", str(exc)) from exc
         return parsed if isinstance(parsed, dict) else {}
+
+    @staticmethod
+    def _to_llm_error(exc: Exception) -> LLMProviderError:
+        if isinstance(exc, LLMProviderError):
+            return exc
+        status_code = getattr(exc, "status_code", None)
+        message = str(exc)
+        lowered = message.lower()
+        if status_code == 429 or "429" in lowered or "rate limit" in lowered or "overloaded" in lowered:
+            return LLMProviderError("LLM_RATE_LIMITED", message)
+        if isinstance(exc, json.JSONDecodeError):
+            return LLMProviderError("LLM_JSON_PARSE_ERROR", message)
+        return LLMProviderError("LLM_PROVIDER_ERROR", message)
 
     @staticmethod
     def _compact_evidence_for_generation(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:

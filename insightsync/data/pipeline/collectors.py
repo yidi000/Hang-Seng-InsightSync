@@ -955,7 +955,7 @@ class HKGovNewsCollector(BaseCollector):
         *,
         raw_dir: str | Path,
         language: str = "en",
-        since_months: int = 3,
+        since_months: int | None = 3,
         since_days: int | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
@@ -969,7 +969,7 @@ class HKGovNewsCollector(BaseCollector):
         if self.language not in {"en", "tc"}:
             raise ValueError("hkgov language must be 'en' or 'tc'")
 
-        self.since_months = int(since_months)
+        self.since_months = None if since_months is None else int(since_months)
         self.since_days = None if since_days is None else int(since_days)
         self.start_date = normalize_text(start_date) or None
         self.end_date = normalize_text(end_date) or None
@@ -1063,7 +1063,7 @@ class HKGovNewsCollector(BaseCollector):
             window_label = f"{self.start_date}_{self.end_date}"
         elif self.since_days is not None:
             window_label = f"last_{self.since_days}_days"
-        elif self.since_months > 0:
+        elif self.since_months is not None and self.since_months > 0:
             window_label = f"last_{self.since_months}_months"
         else:
             window_label = "latest_rss"
