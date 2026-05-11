@@ -36,6 +36,7 @@ def test_llm_enabled_uses_llm_credentials() -> None:
     assert settings.llm_base_url == "https://api.z.ai/api/paas/v4/"
     assert settings.llm_chat_model == "glm-4.7-flash"
     assert settings.llm_enable_thinking is False
+    assert settings.llm_timeout_seconds == 45.0
 
 
 def test_glm_provider_uses_explicit_thinking_control() -> None:

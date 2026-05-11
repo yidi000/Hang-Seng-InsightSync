@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     llm_chat_model: str = Field(default="glm-4.7-flash", alias="LLM_CHAT_MODEL")
     llm_temperature: float = Field(default=0.2, alias="LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=2048, alias="LLM_MAX_TOKENS")
+    llm_timeout_seconds: float = Field(default=45.0, alias="LLM_TIMEOUT_SECONDS")
     llm_enable_thinking: bool = Field(default=False, alias="LLM_ENABLE_THINKING")
 
     rag_top_k: int = Field(default=6, alias="RAG_TOP_K")

@@ -45,6 +45,7 @@ LLM_API_KEY=<your-bigmodel-api-key>
 LLM_BASE_URL=https://api.z.ai/api/paas/v4/
 LLM_CHAT_MODEL=glm-4.7-flash
 LLM_ENABLE_THINKING=false
+LLM_TIMEOUT_SECONDS=45
 ```
 
 Then run a direct smoke check:
@@ -145,6 +146,7 @@ Current implementation focus is the data and backend intelligence foundation.
 - Implemented: GLM 4.7 Flash-compatible LLM configuration and smoke-check workflow through the OpenAI-compatible provider path
 - Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history/workflow payloads, metadata filters, and frontend API handover guide
 - Implemented: prospect scorecard metadata, linkage-quality metrics, and governance flags to separate business score from evidence confidence
+- Implemented: bounded GLM-assisted prospect review for linkage quality, subjectivity risk, rule overreach, and extraction gaps; review is advisory and does not rewrite scores
 - Added: multilingual parsing evaluation samples covering English, simplified Chinese, traditional Chinese, and Cantonese-style traditional Chinese text
 - Still maturing: score calibration, company identity resolution, generated insight evaluation, frontend dashboard implementation, and production handover runbooks
 

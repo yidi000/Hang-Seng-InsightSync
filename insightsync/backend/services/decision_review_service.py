@@ -6,6 +6,12 @@ from typing import Any
 from insightsync.backend.ai.providers.openai_client import OpenAIProvider
 from insightsync.backend.core.config import Settings
 
+MAX_REVIEW_SIGNALS = 5
+MAX_REVIEW_FEATURES = 8
+MAX_REVIEW_TEXT_CHARS = 220
+REVIEW_MAX_TOKENS = 900
+REVIEW_TIMEOUT_SECONDS = 35.0
+
 
 class DecisionReviewService:
     """Use an LLM as a bounded reviewer for linkage and decision quality."""
@@ -30,12 +36,14 @@ class DecisionReviewService:
         try:
             parsed = self.provider.chat_json(
                 system_prompt=(
-                    "You review commercial banking decision logic as strict JSON. "
-                    "You are not allowed to rescore the company. "
-                    "You only review linkage quality, subjectivity risks, rule overreach, "
-                    "and extraction gaps based on the supplied evidence."
+                    "You are a bounded audit reviewer for Hang Seng Bank commercial banking decisions. "
+                    "Return compact JSON only. Do not rescore, rank, or add new business facts. "
+                    "Review only linkage quality, subjectivity risk, rule overreach, and extraction gaps."
                 ),
                 messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+                max_tokens=REVIEW_MAX_TOKENS,
+                timeout_seconds=min(self.settings.llm_timeout_seconds, REVIEW_TIMEOUT_SECONDS),
+                use_response_format=False,
             )
         except Exception as exc:  # noqa: BLE001
             fallback["status"] = "llm_error_fallback"
@@ -57,33 +65,27 @@ class DecisionReviewService:
         ]
         signal_items = [
             {
-                "title": item.get("title"),
-                "detail": item.get("detail"),
-                "source_type": item.get("source_type"),
-                "source": item.get("source"),
+                "item_key": f"signal_{index}",
+                "title": _truncate(item.get("title")),
+                "evidence_text": _truncate(item.get("detail")),
                 "signal_type": item.get("signal_type"),
                 "severity": item.get("severity"),
                 "current_linkage_type": item.get("linkage_type"),
                 "current_linkage_strength": item.get("linkage_strength"),
-                "current_linkage_rationale": item.get("linkage_rationale"),
                 "supports_company_scoring": item.get("supports_company_scoring"),
                 "context_only": item.get("context_only"),
             }
-            for item in signals[:8]
+            for index, item in enumerate(signals[:MAX_REVIEW_SIGNALS], start=1)
         ]
 
         feature_items = [
             {
-                "feature_key": item.get("feature_key"),
-                "feature_label": item.get("feature_label"),
-                "feature_group": item.get("feature_group"),
-                "feature_description": item.get("feature_description"),
-                "business_question": item.get("business_question"),
-                "value_num": item.get("value_num"),
-                "score_contribution": item.get("score_contribution"),
-                "rationale": item.get("rationale"),
+                "key": item.get("feature_key"),
+                "group": item.get("feature_group"),
+                "points": item.get("score_contribution"),
+                "rationale": _truncate(item.get("rationale")),
             }
-            for item in latest_state.get("decision_features", [])
+            for item in latest_state.get("decision_features", [])[:MAX_REVIEW_FEATURES]
         ]
 
         return {
@@ -91,8 +93,8 @@ class DecisionReviewService:
                 "company_id": company.get("company_id"),
                 "display_name": company.get("display_name") or company.get("canonical_name"),
                 "region": company.get("region"),
-                "industries": company.get("industries", []),
-                "segments": company.get("segments", []),
+                "industries": company.get("industries", [])[:3],
+                "segments": company.get("segments", [])[:3],
             },
             "prospect": {
                 "prospect_id": prospect.get("prospect_id") if prospect else None,
@@ -101,28 +103,66 @@ class DecisionReviewService:
                 "opportunity_score": prospect.get("opportunity_score") if prospect else None,
                 "risk_score": prospect.get("risk_score") if prospect else None,
             },
-            "latest_state": {
+            "scores": {
                 "status": latest_state.get("status"),
-                "why_now": latest_state.get("why_now"),
                 "recommended_next_step": latest_state.get("recommended_next_step"),
                 "commercial_attractiveness_score": latest_state.get("commercial_attractiveness_score"),
                 "immediacy_score": latest_state.get("immediacy_score"),
                 "product_fit_score": latest_state.get("product_fit_score"),
                 "risk_penalty_score": latest_state.get("risk_penalty_score"),
                 "evidence_confidence_score": latest_state.get("evidence_confidence_score"),
-                "coverage_flags": latest_state.get("coverage_flags", {}),
-                "signals": signal_items,
-                "decision_features": feature_items,
-                "product_fit": latest_state.get("product_fit", []),
-                "decision_answers": latest_state.get("decision_answers", []),
             },
-            "instructions": [
-                "Review whether each current linkage assignment is appropriate, too strong, or too weak.",
-                "Flag rules or outputs that appear overly subjective, overly expert-driven, or too eager.",
-                "Do not produce a new score. Review the current decision logic only.",
-                "Highlight missing extraction opportunities that would materially improve this case.",
-                "Return JSON with review_summary, linkage_reviews, audit_findings, and extraction_opportunities.",
+            "coverage_flags": latest_state.get("coverage_flags", {}),
+            "signals_to_review": signal_items,
+            "decision_features": feature_items,
+            "top_products": [
+                {
+                    "product_name": item.get("product_name"),
+                    "fit_score": item.get("fit_score"),
+                    "rationale": _truncate(item.get("rationale")),
+                }
+                for item in latest_state.get("product_fit", [])[:3]
             ],
+            "rules": [
+                "Do not produce a new score or priority.",
+                "Review the current decision logic only.",
+                "Return at most 3 linkage_reviews, 3 audit_findings, and 3 extraction_opportunities.",
+                "Use item_key from signals_to_review when producing linkage_reviews.",
+                "Mark context-only or weak macro evidence as should_affect_scoring=false.",
+                "Use status='ok' for successful review.",
+            ],
+            "required_schema": {
+                "status": "ok",
+                "review_summary": "one short paragraph",
+                "linkage_reviews": [
+                    {
+                        "item_key": "signal_1",
+                        "review_status": "confirm/challenge/uncertain",
+                        "suggested_linkage_type": "direct_company_link/macro_context_link/cross_border_exposure_link/unknown",
+                        "suggested_linkage_strength": "strong/medium/weak",
+                        "reason": "short reason",
+                        "should_affect_scoring": True,
+                    }
+                ],
+                "audit_findings": [
+                    {
+                        "finding_key": "short_key",
+                        "severity": "low/medium/high",
+                        "area": "linkage/product_fit/risk/confidence/scoring",
+                        "issue": "short issue",
+                        "reason": "short reason",
+                        "affected_feature_keys": ["optional"],
+                        "suggested_action": "short action",
+                    }
+                ],
+                "extraction_opportunities": [
+                    {
+                        "area": "management_discussion/business_events/structured_metrics/risk_factors",
+                        "why": "short reason",
+                        "suggested_output": "short output",
+                    }
+                ],
+            },
         }
 
     def _fallback(
@@ -138,7 +178,7 @@ class DecisionReviewService:
             *latest_state.get("risk_signals", []),
         ]
         linkage_reviews: list[dict[str, Any]] = []
-        for index, item in enumerate(signals[:8], start=1):
+        for index, item in enumerate(signals[:MAX_REVIEW_SIGNALS], start=1):
             signal_type = item.get("signal_type")
             current_linkage_type = item.get("linkage_type")
             suggested_linkage_type = current_linkage_type
@@ -281,9 +321,54 @@ class DecisionReviewService:
         return {
             "status": payload.get("status", "ok"),
             "review_summary": payload.get("review_summary") or fallback["review_summary"],
-            "linkage_reviews": payload.get("linkage_reviews") or fallback["linkage_reviews"],
-            "audit_findings": payload.get("audit_findings") or fallback["audit_findings"],
-            "extraction_opportunities": payload.get("extraction_opportunities") or fallback["extraction_opportunities"],
+            "linkage_reviews": _normalize_linkage_reviews(
+                payload.get("linkage_reviews"),
+                fallback["linkage_reviews"],
+            ),
+            "audit_findings": _list_or_fallback(payload.get("audit_findings"), fallback["audit_findings"]),
+            "extraction_opportunities": _list_or_fallback(
+                payload.get("extraction_opportunities"),
+                fallback["extraction_opportunities"],
+            ),
             "model_name": self.settings.llm_chat_model if self.settings.llm_enabled else None,
             "llm_error": payload.get("llm_error"),
         }
+
+
+def _truncate(value: Any, limit: int = MAX_REVIEW_TEXT_CHARS) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+def _list_or_fallback(value: Any, fallback: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return fallback
+    return [item for item in value if isinstance(item, dict)] or fallback
+
+
+def _normalize_linkage_reviews(value: Any, fallback: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return fallback
+    fallback_by_key = {item.get("item_key"): item for item in fallback if item.get("item_key")}
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        item_key = item.get("item_key")
+        base = fallback_by_key.get(item_key, {})
+        merged = dict(base)
+        for key, raw_value in item.items():
+            if raw_value is not None and raw_value != "":
+                merged[key] = raw_value
+        if not merged.get("item_key"):
+            continue
+        if not merged.get("review_status"):
+            merged["review_status"] = "uncertain"
+        if not merged.get("reason"):
+            merged["reason"] = "LLM review did not provide a reason; use fallback context for manual review."
+        normalized.append(merged)
+    return normalized or fallback

@@ -561,17 +561,19 @@ Current scope:
 - returns linkage-quality review items
 - returns audit findings about subjective or over-eager decision logic
 - returns extraction opportunities that would improve evidence quality
+- uses GLM-assisted review when LLM generation is enabled and configured
 - uses deterministic fallback review when LLM generation is disabled
 
 Frontend use:
 
 - show this in an analyst/debug/governance panel, not as the primary RM call-to-action
 - useful labels include `review_status`, `severity`, `area`, and `suggested_action`
+- treat `status=ok` with `model_name=glm-4.7-flash` as live LLM review, and `status=fallback` or `status=llm_error_fallback` as deterministic fallback review
 
 Current limitation:
 
 - the review is advisory and does not rewrite scores
-- LLM-assisted review quality depends on `ENABLE_LLM_GENERATION`, `LLM_API_KEY`, and prompt/model configuration
+- LLM-assisted review quality depends on `ENABLE_LLM_GENERATION`, `LLM_API_KEY`, `LLM_TIMEOUT_SECONDS`, and prompt/model configuration
 
 ### `GET /api/prospects/{prospect_id}/insights`
 

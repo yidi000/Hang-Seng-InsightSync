@@ -107,7 +107,15 @@ class OpenAIProvider:
             fallback["llm_error_code"] = getattr(exc, "error_code", "LLM_PROVIDER_ERROR")
             return fallback
 
-    def chat_json(self, *, system_prompt: str, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def chat_json(
+        self,
+        *,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        max_tokens: int | None = None,
+        timeout_seconds: float | None = None,
+        use_response_format: bool = True,
+    ) -> dict[str, Any]:
         """Call an OpenAI-compatible chat model and parse strict JSON output."""
 
         if not self.settings.llm_enabled:
@@ -115,7 +123,13 @@ class OpenAIProvider:
 
         from openai import OpenAI
 
-        client = OpenAI(api_key=self.settings.llm_api_key, base_url=self.settings.llm_base_url)
+        timeout = timeout_seconds if timeout_seconds is not None else self.settings.llm_timeout_seconds
+        client = OpenAI(
+            api_key=self.settings.llm_api_key,
+            base_url=self.settings.llm_base_url,
+            timeout=timeout,
+            max_retries=0,
+        )
         extra_body: dict[str, Any] = {}
         if self.settings.llm_enable_thinking:
             extra_body["thinking"] = {"type": "enabled"}
@@ -128,13 +142,13 @@ class OpenAIProvider:
                 *messages,
             ],
             "temperature": self.settings.llm_temperature,
-            "max_tokens": self.settings.llm_max_tokens,
+            "max_tokens": max_tokens if max_tokens is not None else self.settings.llm_max_tokens,
         }
         if extra_body:
             request["extra_body"] = extra_body
 
         errors: list[Exception] = []
-        use_response_format_plan = [True, False, False]
+        use_response_format_plan = [True, False] if use_response_format else [False]
         for attempt_index, use_response_format in enumerate(use_response_format_plan):
             try:
                 call_request = dict(request)
