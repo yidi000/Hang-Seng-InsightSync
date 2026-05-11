@@ -230,6 +230,14 @@ python -m insightsync.data --sources company --once
 python -m insightsync.data --skip-ingestion --sync-market-companies --backfill-company-ids
 ```
 
+Run optional GLM-assisted semantic extraction during parsing:
+
+```bash
+python -m insightsync.data --skip-ingestion --run-parsing --parse-enable-genai-extraction --parse-genai-max-candidates 8
+```
+
+This is a bounded extraction adapter, not a scoring engine. It first selects candidate report sections, asks GLM to extract structured facts with located evidence spans, validates the quotes against the source paragraphs, and only then converts eligible facts into the existing parsed metric/risk/event objects. Management statements and opportunity candidates are kept as metadata unless later rules promote them.
+
 Run multilingual parsing evaluation:
 
 ```bash
