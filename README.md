@@ -39,6 +39,7 @@ Frontend handover:
 
 - API guide: `insightsync/docs/frontend-api-guide.md`
 - Dev backend runbook: `insightsync/docs/dev-backend-handover.md`
+- Shared API deployment runbook: `insightsync/docs/shared-dev-api-runbook.md`
 - OpenAPI: `http://127.0.0.1:8000/openapi.json`
 
 RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.

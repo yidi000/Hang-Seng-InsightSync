@@ -8,6 +8,8 @@ Frontend should consume the backend through HTTP APIs only. Do not connect the f
 
 This is the preferred frontend workflow when a shared backend environment is available.
 
+Backend owner setup instructions are in `insightsync/docs/shared-dev-api-runbook.md`.
+
 The backend owner should provide:
 
 - API base URL, for example `https://dev-api.example.com`
