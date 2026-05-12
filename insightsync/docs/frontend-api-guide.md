@@ -25,6 +25,8 @@ Yes. The current backend contracts are ready for frontend implementation of the 
 
 The frontend should treat this guide plus `/openapi.json` as the integration contract. The backend will continue improving real-sample coverage, scoring calibration, and evaluation quality, but those improvements should be additive rather than blocking UI build-out.
 
+For local/shared backend setup instructions, also see `insightsync/docs/dev-backend-handover.md`.
+
 ### Base URL and Docs
 
 Local Docker default:

@@ -17,10 +17,10 @@ docker compose up --build
 In another terminal, initialize the backend database and load the bundled demo SQLite snapshot:
 
 ```bash
-docker compose exec api alembic upgrade head
-docker compose exec api python -m insightsync.backend.workflows.sync_from_sqlite --full
-docker compose exec api python -m insightsync.backend.workflows.build_rag_index --full
+docker compose exec api python -m insightsync.backend.workflows.init_dev_backend
 ```
+
+This runs migrations, syncs the bundled demo SQLite snapshot into PostgreSQL, and builds the local RAG index.
 
 Verify the service:
 
@@ -34,6 +34,12 @@ curl "http://127.0.0.1:8000/api/dashboard/overview"
 curl "http://127.0.0.1:8000/api/rag/index/status"
 curl "http://127.0.0.1:8000/api/metadata/filters"
 ```
+
+Frontend handover:
+
+- API guide: `insightsync/docs/frontend-api-guide.md`
+- Dev backend runbook: `insightsync/docs/dev-backend-handover.md`
+- OpenAPI: `http://127.0.0.1:8000/openapi.json`
 
 RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
 
