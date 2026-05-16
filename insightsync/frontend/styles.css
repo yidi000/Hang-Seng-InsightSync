@@ -408,6 +408,10 @@ svg {
   font-size: 12px;
 }
 
+.button.full {
+  width: 100%;
+}
+
 .button-icon {
   width: 16px;
   height: 16px;
@@ -763,6 +767,32 @@ textarea:focus {
   border-color: rgb(61 127 157 / 24%);
   background: var(--chart-3-soft);
   color: var(--chart-3);
+}
+
+.badge.cross_border,
+.badge.signal {
+  border-color: rgb(61 127 157 / 24%);
+  background: var(--chart-3-soft);
+  color: var(--chart-3);
+}
+
+.badge.financing,
+.badge.funding {
+  border-color: rgb(200 87 49 / 22%);
+  background: var(--chart-2-soft);
+  color: var(--chart-2);
+}
+
+.badge.policy {
+  border-color: rgb(162 123 34 / 24%);
+  background: var(--chart-4-soft);
+  color: var(--chart-4);
+}
+
+.badge.expansion {
+  border-color: rgb(68 128 63 / 22%);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .badge.removable {
@@ -1263,26 +1293,119 @@ tr:hover td {
   height: 14px;
 }
 
+.detail-topbar {
+  display: grid;
+  min-height: 56px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin: -24px -24px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  padding: 0 24px;
+}
+
+.detail-topbar-title h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.detail-topbar-title p {
+  margin: 2px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.detail-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .detail-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
+  gap: 24px;
   border-color: rgb(68 128 63 / 22%);
   background: linear-gradient(90deg, rgb(68 128 63 / 8%) 0%, #fff 58%);
-  padding: 22px;
+  padding: 24px;
 }
 
 .detail-hero h2 {
-  margin: 14px 0 4px;
+  margin: 12px 0 4px;
   color: var(--foreground);
   font-size: 28px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.12;
 }
 
-.detail-hero p {
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
   color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.detail-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-meta svg {
+  width: 16px;
+  height: 16px;
+}
+
+.today-action {
+  margin-top: 22px;
+  border: 1px solid rgb(68 128 63 / 20%);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 16px;
+}
+
+.today-action .eyebrow,
+.section-kicker {
+  margin: 0 0 8px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.today-action h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.today-action p {
+  margin: 8px 0 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
   line-height: 1.55;
+}
+
+.today-action strong {
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+.detail-side-metrics {
+  display: grid;
+  align-self: start;
+  gap: 12px;
 }
 
 .score-grid {
@@ -1292,8 +1415,16 @@ tr:hover td {
   align-self: start;
 }
 
+.score-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .score-box {
   padding: 14px;
+}
+
+.score-box.wide {
+  min-height: 110px;
 }
 
 .score-box span {
@@ -1310,26 +1441,138 @@ tr:hover td {
   line-height: 1;
 }
 
-.tabs {
-  display: flex;
-  gap: 2px;
-  margin-top: 18px;
-  border-bottom: 1px solid var(--border);
+.score-box.wide strong {
+  font-size: 32px;
 }
 
-.tab {
-  border-bottom: 2px solid transparent;
-  background: transparent;
+.score-box small {
+  display: block;
+  margin-top: 7px;
   color: var(--muted-foreground);
-  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: start;
+}
+
+.detail-main-stack,
+.detail-side-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.action-plan-panel {
+  border-color: rgb(68 128 63 / 28%);
+  background: linear-gradient(90deg, rgb(68 128 63 / 6%) 0%, var(--card) 42%);
+}
+
+.panel-title svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  vertical-align: -4px;
+}
+
+.mini-stat {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 12px;
+}
+
+.mini-stat span {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.mini-stat strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--foreground);
   font-size: 13px;
   font-weight: 650;
-  text-transform: capitalize;
+  line-height: 1.35;
 }
 
-.tab.active {
-  border-bottom-color: var(--primary);
+.action-point,
+.evidence-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 12px;
+}
+
+.action-point {
+  justify-content: flex-start;
+}
+
+.action-point > svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 2px;
   color: var(--primary);
+}
+
+.action-point h3,
+.evidence-row h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.action-point p,
+.evidence-row p {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.evidence-row h3 {
+  margin-top: 8px;
+}
+
+.compact-card {
+  box-shadow: none;
+}
+
+.context-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.context-row strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: right;
+}
+
+.risk-note {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(244 241 237 / 55%);
+  color: var(--muted-foreground);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .workflow-form {
@@ -1662,7 +1905,7 @@ tr:hover td {
 
   .nav {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     padding: 12px;
   }
@@ -1686,8 +1929,18 @@ tr:hover td {
   .grid.metrics,
   .grid.two,
   .grid.three,
-  .detail-hero {
+  .detail-hero,
+  .detail-layout {
     grid-template-columns: 1fr;
+  }
+
+  .detail-topbar {
+    grid-template-columns: 1fr;
+    padding: 12px 16px;
+  }
+
+  .detail-topbar-actions {
+    flex-wrap: wrap;
   }
 
   .brief-panel {

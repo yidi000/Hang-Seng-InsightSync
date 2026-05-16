@@ -233,7 +233,6 @@ const state = {
   apiKey: localStorage.getItem("INSIGHTSYNC_API_KEY") || "",
   route: routeFromHash().route,
   selectedProspectId: routeFromHash().id,
-  activeDetailTab: "brief",
   loading: true,
   backendOnline: false,
   backendError: null,
@@ -286,6 +285,13 @@ function icon(name, className = "") {
     external: `<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>`,
     chevron: `<path d="m9 18 6-6-6-6"></path>`,
     filter: `<path d="M3 6h18"></path><path d="M7 12h10"></path><path d="M10 18h4"></path>`,
+    x: `<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>`,
+    send: `<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>`,
+    arrowLeft: `<path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path>`,
+    edit: `<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>`,
+    target: `<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>`,
+    check: `<path d="M20 6 9 17l-5-5"></path>`,
+    calendar: `<path d="M8 2v4"></path><path d="M16 2v4"></path><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M3 10h18"></path>`,
   };
   return `<svg class="${escapeHtml(className)}" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.file}</svg>`;
 }
@@ -428,6 +434,19 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
   return date.toLocaleDateString("en-HK", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatShortDate(value) {
+  if (!value) return "To schedule";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toLocaleDateString("en-HK", { month: "short", day: "numeric" });
+}
+
+function formatLabel(value) {
+  const label = String(value || "").replace(/[_-]/g, " ").trim();
+  if (!label) return "Not set";
+  return label.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatTags(tags = [], limit = 4) {
@@ -761,7 +780,7 @@ function renderOverview() {
         <div class="wrap mt">
           <button class="button primary" data-route="prospects">Review RM Actions</button>
           <button class="button" data-route="signals">Open Evidence</button>
-          <button class="button" data-route="copilot">Ask Copilot</button>
+          <button class="button" data-open-copilot>Ask Copilot</button>
         </div>
       </div>
       <button class="focus-score" data-route="prospects">
@@ -1157,6 +1176,21 @@ function scoreComponentRows(components = []) {
   `).join("");
 }
 
+function detailSignalsForProspect(p, detail = {}) {
+  const detailSignals = detail.recent_signals || [];
+  return detailSignals.length ? detailSignals : linkedSignalsForProspect(p);
+}
+
+function detailEvidenceCount(signals = [], evidence = {}, detail = {}) {
+  return (
+    signals.length +
+    (evidence.recent_documents || detail.recent_documents || []).length +
+    (evidence.key_metrics || detail.key_metrics || []).length +
+    (evidence.key_risk_factors || detail.key_risk_factors || []).length +
+    (evidence.key_business_events || detail.key_business_events || []).length
+  );
+}
+
 function renderDetail() {
   const id = state.selectedProspectId;
   const cached = state.detailCache[id];
@@ -1173,247 +1207,283 @@ function renderDetail() {
   const workflow = cached.workflow || detail.workflow_state || p.workflow_state || {};
   const score = p.score_breakdown || {};
   const linkage = score.linkage_quality || {};
-
-  return `
-    ${renderModeBanner()}
-    <button class="button ghost" data-route="prospects">Back to prospects</button>
-    <section class="detail-hero mt">
-      <div>
-        <div class="wrap">
-          ${badge(p.priority_level)}
-          <span class="badge">Evidence ${escapeHtml(p.evidence_confidence_score ?? "N/A")}</span>
-          <span class="badge">Scorecard ${escapeHtml(score.scorecard_version || "N/A")}</span>
-        </div>
-        <h2>${escapeHtml(prospectName(p))}</h2>
-        <p class="muted">${escapeHtml([p.region, (p.industries || [])[0], p.company_id].filter(Boolean).join(" / "))}</p>
-        <p>${escapeHtml(brief.summary || p.recommended_next_step || "Review linked evidence and prepare outreach.")}</p>
-        <div class="wrap">${formatTags(p.recommended_product_themes || p.focus_tags || [], 6)}</div>
-      </div>
-      <div class="score-grid">
-        <div class="score-box"><span class="muted">Priority</span><strong>${escapeHtml(p.priority_score ?? "N/A")}</strong></div>
-        <div class="score-box"><span class="muted">Opportunity</span><strong>${escapeHtml(p.opportunity_score ?? "N/A")}</strong></div>
-        <div class="score-box"><span class="muted">Risk</span><strong>${escapeHtml(p.risk_score ?? "N/A")}</strong></div>
-      </div>
-    </section>
-
-    <div class="tabs">
-      ${["brief", "evidence", "score", "review", "workflow"].map((tab) => `
-        <button class="tab ${state.activeDetailTab === tab ? "active" : ""}" data-detail-tab="${tab}">${escapeHtml(tab)}</button>
-      `).join("")}
-    </div>
-
-    <div class="mt">
-      ${state.activeDetailTab === "brief" ? renderBriefTab(p, brief, detail) : ""}
-      ${state.activeDetailTab === "evidence" ? renderEvidenceTab(evidence, detail) : ""}
-      ${state.activeDetailTab === "score" ? renderScoreTab(score, linkage) : ""}
-      ${state.activeDetailTab === "review" ? renderReviewTab(review) : ""}
-      ${state.activeDetailTab === "workflow" ? renderWorkflowTab(id, workflow) : ""}
-    </div>
-  `;
-}
-
-function renderBriefTab(p, brief, detail) {
-  const signals = detail.recent_signals || [];
-  return `
-    <div class="grid two">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">${escapeHtml(brief.title || "RM action brief")}</h2>
-          <p class="panel-subtitle">Prepared for relationship managers before outreach.</p>
-          </div>
-          <button class="button small primary" data-copilot-prospect="${escapeHtml(prospectId(p))}">Ask about this prospect</button>
-        </div>
-        <div class="panel-body stack">
-          <div class="list-card">
-            <h3>Recommended next step</h3>
-            <p>${escapeHtml(brief.recommended_next_step || p.recommended_next_step || "Review linked evidence.")}</p>
-          </div>
-          <div class="list-card">
-            <h3>Top opportunities</h3>
-            <p>${escapeHtml((brief.top_opportunities || p.recommended_product_themes || []).join("; ") || "No opportunity summary returned yet.")}</p>
-          </div>
-          <div class="list-card">
-            <h3>Top risks</h3>
-            <p>${escapeHtml((brief.top_risks || []).join("; ") || "No risk summary returned yet.")}</p>
-          </div>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Recent linked signals</h2>
-            <p class="panel-subtitle">Company-linked evidence surfaced for the RM.</p>
-          </div>
-        </div>
-        <div class="panel-body list">
-          ${signals.slice(0, 6).map(renderSignalCard).join("") || `<div class="empty-state">No linked signals returned yet.</div>`}
-        </div>
-      </section>
-    </div>
-  `;
-}
-
-function renderEvidenceTab(evidence, detail) {
+  const signals = detailSignalsForProspect(p, detail);
   const documents = evidence.recent_documents || detail.recent_documents || [];
   const metrics = evidence.key_metrics || detail.key_metrics || [];
   const risks = evidence.key_risk_factors || detail.key_risk_factors || [];
   const events = evidence.key_business_events || detail.key_business_events || [];
-  return `
-    <div class="grid two">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Parsed documents</h2>
-          <p class="panel-subtitle">Report evidence, extracted metrics, risks, events, and model audit trail.</p>
-          </div>
-        </div>
-        <div class="panel-body list">
-          ${documents.map((doc) => `
-            <article class="list-card">
-              <div class="wrap">
-                <span class="badge">${escapeHtml(doc.parse_status || "parsed")}</span>
-                <span class="badge">${escapeHtml(doc.lang || "unknown language")}</span>
-                <span class="badge">${escapeHtml(doc.source || "source")}</span>
-              </div>
-              <h3>${escapeHtml(doc.title || "Parsed document")}</h3>
-              <p>${escapeHtml(doc.summary || doc.management_discussion_summary || "")}</p>
-              <p class="muted">Metrics ${escapeHtml(doc.metric_count || 0)} / Risks ${escapeHtml(doc.risk_factor_count || 0)} / Events ${escapeHtml(doc.business_event_count || 0)}</p>
-              ${doc.genai_extraction ? `<p class="muted">GenAI extraction: ${escapeHtml(doc.genai_extraction.status)} / accepted ${escapeHtml(doc.genai_extraction.accepted_count || 0)} / rejected ${escapeHtml(doc.genai_extraction.rejected_count || 0)}</p>` : ""}
-            </article>
-          `).join("") || `<div class="empty-state">No parsed documents returned yet.</div>`}
-        </div>
-      </section>
-      <section class="stack">
-        <section class="panel">
-          <div class="panel-header"><h2 class="panel-title">Metrics</h2></div>
-          <div class="panel-body list">
-            ${metrics.map((item) => `<div class="list-card"><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml([item.value, item.unit, item.period].filter(Boolean).join(" "))}</p><p class="muted">${escapeHtml(item.context || "")}</p></div>`).join("") || `<div class="empty-state">No structured metrics.</div>`}
-          </div>
-        </section>
-        <section class="panel">
-          <div class="panel-header"><h2 class="panel-title">Risks and events</h2></div>
-          <div class="panel-body list">
-            ${risks.map((item) => `<div class="list-card"><span class="badge risk">${escapeHtml(item.severity)}</span><h3>${escapeHtml(item.category)}</h3><p>${escapeHtml(item.description)}</p></div>`).join("")}
-            ${events.map((item) => `<div class="list-card"><span class="badge">${escapeHtml(item.event_type)}</span><h3>${escapeHtml(item.title || item.event_type)}</h3><p>${escapeHtml(item.summary)}</p></div>`).join("")}
-            ${!risks.length && !events.length ? `<div class="empty-state">No structured risks or events.</div>` : ""}
-          </div>
-        </section>
-      </section>
-    </div>
-  `;
-}
+  const products = brief.recommended_product_themes || p.recommended_product_themes || p.focus_tags || [];
+  const opportunities = brief.top_opportunities || products;
+  const topRisks = brief.top_risks || risks.map((risk) => risk.category || risk.description).filter(Boolean);
+  const nextAction = workflow.next_action || brief.recommended_next_step || p.recommended_next_step || "Review linked evidence and prepare client outreach.";
+  const primaryTopic = opportunities[0] || (p.focus_tags || [])[0] || "Evidence-backed client outreach";
+  const primaryEvidence = signals[0] || documents[0];
+  const evidenceCount = detailEvidenceCount(signals, evidence, detail);
+  const currentStage = workflow.stage || "new";
+  const reviewStatus = workflow.review_status || "not_reviewed";
 
-function renderScoreTab(score, linkage) {
   return `
-    <div class="grid two">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Score audit</h2>
-          <p class="panel-subtitle">${escapeHtml(score.scoring_method || "Transparent scorecard with evidence-quality checks")}</p>
-          </div>
-          <span class="badge">${escapeHtml(score.calibration_status || "calibration pending")}</span>
+    <section class="detail-topbar">
+      <div>
+        <button class="button ghost" data-route="prospects">${icon("arrowLeft", "button-icon")} Back</button>
+      </div>
+      <div class="detail-topbar-title">
+        <h2>Client Action Brief</h2>
+        <p>Pre-meeting summary for ${escapeHtml(prospectName(p))}</p>
+      </div>
+      <div class="detail-topbar-actions">
+        <button class="button outline" data-scroll-target="workflow-section">${icon("edit", "button-icon")} Update RM Notes</button>
+        <button class="button primary" data-copilot-prospect="${escapeHtml(prospectId(p))}">${icon("sparkles", "button-icon")} Ask AI Copilot</button>
+      </div>
+    </section>
+    ${renderModeBanner()}
+
+    <section class="detail-hero mt">
+      <div>
+        <div class="wrap">
+          <span class="badge ${escapeHtml(priorityTier(p.priority_level).toLowerCase())}">Tier ${escapeHtml(priorityTier(p.priority_level))}</span>
+          <span class="badge">Priority score ${escapeHtml(p.priority_score ?? "N/A")}</span>
+          <span class="badge">${escapeHtml(formatLabel(reviewStatus))}</span>
         </div>
-        <div class="panel-body stack">
-          <div class="list-card">
-            <h3>Formula</h3>
-            <p>${escapeHtml(score.priority_formula || "Backend formula not returned.")}</p>
-          </div>
-          <div class="grid three">
-            <div class="score-box"><span class="muted">Direct evidence ratio</span><strong>${escapeHtml(linkage.direct_evidence_ratio ?? "N/A")}</strong></div>
-            <div class="score-box"><span class="muted">Scoreable ratio</span><strong>${escapeHtml(linkage.scoreable_evidence_ratio ?? "N/A")}</strong></div>
-            <div class="score-box"><span class="muted">Context-only</span><strong>${escapeHtml(linkage.context_only_count ?? linkage.context_only_evidence_count ?? "N/A")}</strong></div>
-          </div>
-          <h3 class="panel-title">Opportunity components</h3>
-          ${scoreComponentRows(score.opportunity_components)}
-          <h3 class="panel-title">Risk components</h3>
-          ${scoreComponentRows(score.risk_components)}
+        <h2>${escapeHtml(prospectName(p))}</h2>
+        <div class="detail-meta">
+          <span>${icon("building")}${escapeHtml((p.industries || [])[0] || "Unknown industry")}</span>
+          <span>${icon("globe")}${escapeHtml(p.region || "Unknown region")}</span>
+          <span>${icon("users")}Owner: ${escapeHtml(workflow.owner || "Unassigned")}</span>
+          <span>${icon("calendar")}Follow-up ${escapeHtml(formatShortDate(workflow.next_follow_up_at || workflow.next_follow_up || workflow.updated_at))}</span>
         </div>
-      </section>
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Governance flags</h2>
-            <p class="panel-subtitle">Caution indicators for weak evidence or scoring risk.</p>
-          </div>
+        <div class="today-action">
+          <p class="eyebrow">Today's RM action</p>
+          <h3>${escapeHtml(nextAction)}</h3>
+          <p>
+            Start with <strong>${escapeHtml(primaryTopic)}</strong>.
+            ${primaryEvidence ? ` Strongest current evidence: ${escapeHtml(signalTitle(primaryEvidence) || primaryEvidence.title || "linked record")}.` : " No direct evidence is linked yet, so review broader market context before outreach."}
+          </p>
         </div>
-        <div class="panel-body list">
-          ${(score.governance_flags || []).map((flag) => `
-            <div class="list-card">
-              <span class="badge risk">${escapeHtml(flag.severity)}</span>
-              <h3>${escapeHtml(flag.area || flag.flag_key)}</h3>
-              <p>${escapeHtml(flag.message || flag.suggested_action || "")}</p>
+      </div>
+      <div class="detail-side-metrics">
+        <div class="score-box wide"><span>Evidence confidence</span><strong>${escapeHtml(p.evidence_confidence_score ?? "N/A")}</strong><small>${escapeHtml(evidenceCount)} linked records</small></div>
+        <div class="score-grid compact">
+          <div class="score-box"><span>Opportunity</span><strong>${escapeHtml(p.opportunity_score ?? "N/A")}</strong></div>
+          <div class="score-box"><span>Risk</span><strong>${escapeHtml(p.risk_score ?? "N/A")}</strong></div>
+        </div>
+        <button class="button primary full" data-scroll-target="workflow-section">${icon("check", "button-icon")} Mark review / add note</button>
+      </div>
+    </section>
+
+    <div class="detail-layout mt">
+      <div class="detail-main-stack">
+        <section class="panel action-plan-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">${icon("target")} RM Action Plan</h2>
+              <p class="panel-subtitle">What the RM should do next, why it matters, and how to open the conversation.</p>
             </div>
-          `).join("") || `<div class="empty-state">No governance flags returned.</div>`}
-        </div>
-      </section>
+          </div>
+          <div class="panel-body stack">
+            <div class="grid three">
+              <div class="mini-stat"><span>Primary topic</span><strong>${escapeHtml(primaryTopic)}</strong></div>
+              <div class="mini-stat"><span>Why now</span><strong>${escapeHtml(evidenceCount)} linked evidence records</strong></div>
+              <div class="mini-stat"><span>Next follow-up</span><strong>${escapeHtml(formatShortDate(workflow.next_follow_up_at || workflow.next_follow_up || workflow.updated_at))}</strong></div>
+            </div>
+            <div>
+              <p class="section-kicker">Suggested client discussion points</p>
+              <div class="list">
+                ${(opportunities.length ? opportunities : [nextAction]).slice(0, 3).map((item) => `
+                  <div class="action-point">
+                    ${icon("trending")}
+                    <div>
+                      <h3>${escapeHtml(item)}</h3>
+                      <p>${escapeHtml(brief.summary || (p.why_prioritized || [])[0] || "Use the linked evidence before committing to outreach.")}</p>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+            <div>
+              <p class="section-kicker">Product angle to prepare</p>
+              <div class="wrap">${formatTags(products, 6)}</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">${icon("file")} Evidence Supporting This Action</h2>
+              <p class="panel-subtitle">Signals, parsed reports, metrics, risk factors, and events linked to this company brief.</p>
+            </div>
+            <span class="badge">Evidence layer</span>
+          </div>
+          <div class="panel-body stack">
+            <div class="list">
+              ${signals.slice(0, 5).map((signal) => `
+                <div class="evidence-row">
+                  <div>
+                    <div class="wrap">
+                      <span class="badge ${escapeHtml(signalTypeClass(signal.signal_type))}">${escapeHtml(signalTypeLabel(signal.signal_type))}</span>
+                      <span class="badge">${escapeHtml(formatDate(signal.event_time || signal.date))}</span>
+                      <span class="badge monitor">${escapeHtml(signal.source || "InsightSync")}</span>
+                    </div>
+                    <h3>${escapeHtml(signalTitle(signal))}</h3>
+                    <p>${escapeHtml(signal.signal_text || signal.value_text || signal.detail || "")}</p>
+                  </div>
+                  <button class="button ghost small" data-ask-signal="${escapeHtml(signalTitle(signal))}">${icon("sparkles", "button-icon")} Explain</button>
+                </div>
+              `).join("")}
+              ${documents.slice(0, 3).map((doc) => `
+                <div class="evidence-row">
+                  <div>
+                    <div class="wrap">
+                      <span class="badge">${escapeHtml(doc.parse_status || "parsed")}</span>
+                      <span class="badge">${escapeHtml(doc.lang || "unknown language")}</span>
+                      <span class="badge monitor">${escapeHtml(doc.source || "source")}</span>
+                    </div>
+                    <h3>${escapeHtml(doc.title || "Parsed document")}</h3>
+                    <p>${escapeHtml(doc.summary || doc.management_discussion_summary || "")}</p>
+                  </div>
+                </div>
+              `).join("")}
+              ${!signals.length && !documents.length ? `<div class="empty-state">No RM-readable evidence is linked to this company yet.</div>` : ""}
+            </div>
+            <div class="grid two">
+              <div class="list">
+                <h3 class="panel-title">Extracted metrics</h3>
+                ${metrics.slice(0, 4).map((item) => `<div class="list-card compact-card"><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml([item.value, item.unit, item.period].filter(Boolean).join(" "))}</p><p class="muted">${escapeHtml(item.context || "")}</p></div>`).join("") || `<div class="empty-state">No structured metrics.</div>`}
+              </div>
+              <div class="list">
+                <h3 class="panel-title">Risks and events</h3>
+                ${risks.slice(0, 3).map((item) => `<div class="list-card compact-card"><span class="badge risk">${escapeHtml(item.severity || "risk")}</span><h3>${escapeHtml(item.category || "Risk factor")}</h3><p>${escapeHtml(item.description || "")}</p></div>`).join("")}
+                ${events.slice(0, 3).map((item) => `<div class="list-card compact-card"><span class="badge">${escapeHtml(item.event_type || "event")}</span><h3>${escapeHtml(item.title || item.event_type || "Business event")}</h3><p>${escapeHtml(item.summary || "")}</p></div>`).join("")}
+                ${!risks.length && !events.length ? `<div class="empty-state">No structured risks or events.</div>` : ""}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Score Audit</h2>
+              <p class="panel-subtitle">${escapeHtml(score.scoring_method || "Transparent scorecard with evidence-quality checks")}</p>
+            </div>
+            <span class="badge">${escapeHtml(score.calibration_status || "calibration pending")}</span>
+          </div>
+          <div class="panel-body stack">
+            <div class="list-card compact-card">
+              <h3>Formula</h3>
+              <p>${escapeHtml(score.priority_formula || "Backend formula not returned.")}</p>
+            </div>
+            <div class="grid three">
+              <div class="score-box"><span>Direct evidence ratio</span><strong>${escapeHtml(linkage.direct_evidence_ratio ?? "N/A")}</strong></div>
+              <div class="score-box"><span>Scoreable ratio</span><strong>${escapeHtml(linkage.scoreable_evidence_ratio ?? "N/A")}</strong></div>
+              <div class="score-box"><span>Context-only</span><strong>${escapeHtml(linkage.context_only_count ?? linkage.context_only_evidence_count ?? "N/A")}</strong></div>
+            </div>
+            <div class="grid two">
+              <div class="list">
+                <h3 class="panel-title">Opportunity components</h3>
+                ${scoreComponentRows(score.opportunity_components)}
+              </div>
+              <div class="list">
+                <h3 class="panel-title">Risk components</h3>
+                ${scoreComponentRows(score.risk_components)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">LLM Review</h2>
+              <p class="panel-subtitle">Quality review for linkage strength, evidence gaps, and decision risk.</p>
+            </div>
+            <span class="badge">${escapeHtml(review.status || "not loaded")}</span>
+          </div>
+          <div class="panel-body stack">
+            <div class="list-card compact-card">
+              <h3>Summary</h3>
+              <p>${escapeHtml(review.review_summary || "No LLM review returned yet.")}</p>
+              <p class="muted">${escapeHtml(review.model_name || "")}</p>
+            </div>
+            <div class="grid two">
+              <div class="list">
+                <h3 class="panel-title">Audit findings</h3>
+                ${(review.audit_findings || []).map((item) => `<div class="list-card compact-card"><span class="badge risk">${escapeHtml(item.severity || "finding")}</span><h3>${escapeHtml(item.area || "Finding")}</h3><p>${escapeHtml(item.issue || item.reason || "")}</p><p class="muted">${escapeHtml(item.suggested_action || "")}</p></div>`).join("") || `<div class="empty-state">No audit findings.</div>`}
+              </div>
+              <div class="list">
+                <h3 class="panel-title">Extraction opportunities</h3>
+                ${(review.extraction_opportunities || []).map((item) => `<div class="list-card compact-card"><h3>${escapeHtml(item.area || "Opportunity")}</h3><p>${escapeHtml(item.why || "")}</p><p class="muted">${escapeHtml(item.suggested_output || "")}</p></div>`).join("") || `<div class="empty-state">No extraction opportunities.</div>`}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="detail-side-stack">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Relationship Context</h2>
+              <p class="panel-subtitle">RM ownership and current working state.</p>
+            </div>
+          </div>
+          <div class="panel-body stack">
+            <div class="context-row"><span>Owner</span><strong>${escapeHtml(workflow.owner || "Unassigned")}</strong></div>
+            <div class="context-row"><span>Stage</span><strong>${escapeHtml(formatLabel(currentStage))}</strong></div>
+            <div class="context-row"><span>Status</span><strong>${escapeHtml(formatLabel(workflow.status || "open"))}</strong></div>
+            <div class="context-row"><span>Review</span><strong>${escapeHtml(formatLabel(reviewStatus))}</strong></div>
+            <div class="context-row"><span>Products</span><strong>${escapeHtml(products.length)} suggested</strong></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header"><h2 class="panel-title">Product Angles</h2></div>
+          <div class="panel-body">
+            <div class="wrap">${formatTags(products, 8)}</div>
+            <div class="mt">
+              ${(topRisks.length ? topRisks : ["No major risk summary returned yet."]).slice(0, 4).map((risk) => `<div class="risk-note">${escapeHtml(risk)}</div>`).join("")}
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="workflow-section">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Update RM Notes</h2>
+              <p class="panel-subtitle">Saved to the backend workflow endpoint when available.</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            ${renderWorkflowForm(id, workflow)}
+          </div>
+        </section>
+      </aside>
     </div>
   `;
 }
 
-function renderReviewTab(review) {
+function renderWorkflowForm(id, workflow) {
   return `
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">LLM review</h2>
-          <p class="panel-subtitle">Quality review for linkage strength, evidence gaps, and decision risk.</p>
-        </div>
-        <span class="badge">${escapeHtml(review.status || "not loaded")}</span>
-      </div>
-      <div class="panel-body stack">
-        <div class="list-card">
-          <h3>Summary</h3>
-          <p>${escapeHtml(review.review_summary || "No LLM review returned yet.")}</p>
-          <p class="muted">${escapeHtml(review.model_name || "")}</p>
-        </div>
-        <div class="grid two">
-          <div class="list">
-            <h3 class="panel-title">Audit findings</h3>
-            ${(review.audit_findings || []).map((item) => `<div class="list-card"><span class="badge risk">${escapeHtml(item.severity)}</span><h3>${escapeHtml(item.area)}</h3><p>${escapeHtml(item.issue || item.reason)}</p><p class="muted">${escapeHtml(item.suggested_action || "")}</p></div>`).join("") || `<div class="empty-state">No audit findings.</div>`}
-          </div>
-          <div class="list">
-            <h3 class="panel-title">Extraction opportunities</h3>
-            ${(review.extraction_opportunities || []).map((item) => `<div class="list-card"><h3>${escapeHtml(item.area)}</h3><p>${escapeHtml(item.why)}</p><p class="muted">${escapeHtml(item.suggested_output)}</p></div>`).join("") || `<div class="empty-state">No extraction opportunities.</div>`}
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderWorkflowTab(id, workflow) {
-  return `
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">RM workflow state</h2>
-          <p class="panel-subtitle">RM-owned follow-up state for the selected opportunity.</p>
-        </div>
-      </div>
-      <div class="panel-body">
-        <form class="workflow-form" id="workflow-form" data-prospect-id="${escapeHtml(id)}">
-          <label>Owner <input name="owner" value="${escapeHtml(workflow.owner || "")}" placeholder="RM owner" /></label>
-          <label>Stage
-            <select name="stage">
-              ${["new", "qualification", "discovery", "proposal", "active", "monitoring"].map((value) => `<option value="${value}" ${workflow.stage === value ? "selected" : ""}>${value}</option>`).join("")}
-            </select>
-          </label>
-          <label>Status <input name="status" value="${escapeHtml(workflow.status || "open")}" /></label>
-          <label>Review status <input name="review_status" value="${escapeHtml(workflow.review_status || "not_reviewed")}" /></label>
-          <label>Last action <input name="last_action" value="${escapeHtml(workflow.last_action || "")}" /></label>
-          <label>Next action <input name="next_action" value="${escapeHtml(workflow.next_action || "")}" /></label>
-          <label>Notes <textarea name="notes">${escapeHtml(workflow.notes || "")}</textarea></label>
-          <button class="button primary" type="submit">Save workflow</button>
-        </form>
-      </div>
-    </section>
+    <form class="workflow-form" id="workflow-form" data-prospect-id="${escapeHtml(id)}">
+      <label>Owner <input name="owner" value="${escapeHtml(workflow.owner || "")}" placeholder="RM owner" /></label>
+      <label>Stage
+        <select name="stage">
+          ${["new", "qualification", "discovery", "proposal", "active", "monitoring"].map((value) => `<option value="${value}" ${workflow.stage === value ? "selected" : ""}>${value}</option>`).join("")}
+        </select>
+      </label>
+      <label>Status <input name="status" value="${escapeHtml(workflow.status || "open")}" /></label>
+      <label>Review status <input name="review_status" value="${escapeHtml(workflow.review_status || "not_reviewed")}" /></label>
+      <label>Next action <input name="next_action" value="${escapeHtml(workflow.next_action || "")}" /></label>
+      <label>Notes <textarea name="notes">${escapeHtml(workflow.notes || "")}</textarea></label>
+      <button class="button primary full" type="submit">Save workflow</button>
+    </form>
   `;
 }
 
 function renderCopilotPanel() {
   const prospects = asList(state.data.prospects);
+  $("#floating-copilot")?.classList.toggle("hidden", state.copilotOpen);
   const promptCards = [
     { icon: "sparkles", label: "Priority explanation", prompt: "Why is this company high priority?" },
     { icon: "trending", label: "Recent changes", prompt: "What changed recently?" },
@@ -1431,7 +1501,7 @@ function renderCopilotPanel() {
           <h2>AI Copilot</h2>
           <p>Intelligence assistant</p>
         </div>
-        <button class="icon-button" data-close-copilot aria-label="Close AI Copilot">x</button>
+        <button class="icon-button" data-close-copilot aria-label="Close AI Copilot">${icon("x")}</button>
       </div>
       <div class="copilot-panel-body">
         ${state.chat.length ? `
@@ -1467,7 +1537,7 @@ function renderCopilotPanel() {
           </select>
           <div class="copilot-input-row">
             <input id="copilot-question" placeholder="Ask about signals, prospects, or meeting prep..." autocomplete="off" />
-            <button class="button primary" type="submit" aria-label="Send Copilot question">${icon("chevron", "button-icon")}</button>
+            <button class="button primary" type="submit" aria-label="Send Copilot question">${icon("send", "button-icon")}</button>
           </div>
         </form>
         <p>Responses are evidence-grounded where the backend returns citations. Verify before use.</p>
@@ -1662,13 +1732,6 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  const tabButton = event.target.closest("[data-detail-tab]");
-  if (tabButton) {
-    state.activeDetailTab = tabButton.dataset.detailTab;
-    render();
-    return;
-  }
-
   const signalAsk = event.target.closest("[data-ask-signal]");
   if (signalAsk) {
     state.copilotOpen = true;
@@ -1682,6 +1745,12 @@ document.addEventListener("click", (event) => {
     state.selectedProspectId = prospectAsk.dataset.copilotProspect;
     state.copilotOpen = true;
     render();
+    return;
+  }
+
+  const scrollTarget = event.target.closest("[data-scroll-target]");
+  if (scrollTarget) {
+    document.getElementById(scrollTarget.dataset.scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
 
