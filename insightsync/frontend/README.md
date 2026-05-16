@@ -1,6 +1,6 @@
-# InsightSync Frontend
+# RM Insight Pro Frontend
 
-This is the lightweight frontend MVP for the InsightSync banker-facing dashboard.
+This is the lightweight RM Insight Pro frontend for the InsightSync banker-facing dashboard.
 It is intentionally dependency-free for now, so it can be opened directly in a browser
 or served by any static file server while the backend contract continues to mature.
 
@@ -24,7 +24,7 @@ The default backend base URL is:
 http://127.0.0.1:8000
 ```
 
-You can change it from the header input in the UI. The value is saved in browser
+You can change it from the `API` menu in the top bar. The value is saved in browser
 local storage as `INSIGHTSYNC_API_BASE`.
 
 If `API_KEYS` is configured on the backend, set the key in the UI. The frontend

@@ -269,6 +269,24 @@ function escapeHtml(value) {
   })[char]);
 }
 
+function icon(name, className = "") {
+  const icons = {
+    users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>`,
+    zap: `<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>`,
+    globe: `<circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>`,
+    trending: `<path d="M16 7h6v6"></path><path d="m22 7-8.5 8.5-5-5L2 17"></path>`,
+    building: `<path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path><path d="M9 9v.01"></path><path d="M9 12v.01"></path><path d="M9 15v.01"></path><path d="M9 18v.01"></path>`,
+    file: `<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>`,
+    clock: `<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>`,
+    search: `<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path>`,
+    sparkles: `<path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path>`,
+    external: `<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>`,
+    chevron: `<path d="m9 18 6-6-6-6"></path>`,
+    filter: `<path d="M3 6h18"></path><path d="M7 12h10"></path><path d="M10 18h4"></path>`,
+  };
+  return `<svg class="${escapeHtml(className)}" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.file}</svg>`;
+}
+
 function routeFromHash() {
   const raw = (window.location.hash || "#overview").replace(/^#/, "");
   if (raw.startsWith("prospect/")) {
@@ -447,17 +465,24 @@ function getFilteredSignals() {
     .sort((a, b) => new Date(b.event_time || 0) - new Date(a.event_time || 0));
 }
 
-function metricCard(label, value, detail, accent = false) {
+function metricCard(label, value, detail, options = {}) {
+  const tone = options.tone || "";
+  const route = options.route ? ` data-route="${escapeHtml(options.route)}"` : "";
+  const tag = options.route ? "button" : "div";
   return `
-    <div class="metric-card ${accent ? "accent" : ""}">
-      <div class="metric-label"><span>${escapeHtml(label)}</span></div>
+    <${tag} class="metric-card ${escapeHtml(tone)}"${route}>
+      <div class="metric-top">
+        <span class="metric-icon">${icon(options.icon || "users")}</span>
+        ${options.route ? icon("chevron", "chevron-icon") : ""}
+      </div>
       <div class="metric-value">${escapeHtml(value ?? 0)}</div>
+      <small>${escapeHtml(label)}</small>
       <small>${escapeHtml(detail || "")}</small>
-    </div>
+    </${tag}>
   `;
 }
 
-function bars(items = []) {
+function bars(items = [], labelKey = "name") {
   const max = Math.max(1, ...items.map((item) => item.count || item.value || 0));
   if (!items.length) return `<div class="empty-state">No distribution data available yet.</div>`;
   return items.map((item) => {
@@ -465,7 +490,7 @@ function bars(items = []) {
     const width = Math.max(3, Math.round((count / max) * 100));
     return `
       <div class="bar-row">
-        <span>${escapeHtml(item.name || item.value || "Unknown")}</span>
+        <span>${escapeHtml(item[labelKey] || item.name || item.value || "Unknown")}</span>
         <span class="bar-track"><span class="bar-fill" style="width:${width}%"></span></span>
         <strong>${escapeHtml(count)}</strong>
       </div>
@@ -473,34 +498,99 @@ function bars(items = []) {
   }).join("");
 }
 
+function distribution(items, getter) {
+  const counts = new Map();
+  items.forEach((item) => {
+    const key = getter(item) || "Unknown";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function signalTypeLabel(value) {
+  const normalized = String(value || "signal").toLowerCase().replace(/[_-]/g, " ");
+  if (normalized.includes("cross")) return "Cross-border";
+  if (normalized.includes("fund") || normalized.includes("financ")) return "Financing";
+  if (normalized.includes("policy") || normalized.includes("macro")) return "Policy/Macro";
+  if (normalized.includes("expansion")) return "Expansion";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function signalTypeClass(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.includes("cross")) return "cross_border";
+  if (normalized.includes("fund") || normalized.includes("financ")) return "financing";
+  if (normalized.includes("policy") || normalized.includes("macro")) return "policy";
+  if (normalized.includes("expansion") || normalized.includes("growth")) return "expansion";
+  return "signal";
+}
+
+function priorityTier(value) {
+  const normalized = priorityClass(value);
+  if (normalized === "high") return "A";
+  if (normalized === "medium") return "B";
+  return "C";
+}
+
+function signalBelongsToProspect(signal, prospect) {
+  const prospectIds = [prospectId(prospect), companyId(prospect), prospectName(prospect)]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const signalIds = [signal.prospect_id, signal.company_id, signal.entity, signal.company]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  return signalIds.some((value) => prospectIds.includes(value));
+}
+
+function linkedSignalsForProspect(prospect) {
+  return asList(state.data.signals).filter((signal) => signalBelongsToProspect(signal, prospect));
+}
+
 function renderOverview() {
   const summary = state.data.summary || mockData.summary;
   const market = state.data.marketOverview || mockData.marketOverview;
+  const allProspects = asList(state.data.prospects);
+  const allSignals = asList(state.data.signals);
   const topProspects = asList(state.data.priorityProspects).length
     ? asList(state.data.priorityProspects)
     : getFilteredProspects().slice(0, 5);
   const triggerSignals = asList(state.data.triggerSignals).length
     ? asList(state.data.triggerSignals)
     : asList(state.data.signals).slice(0, 5);
+  const signalBreakdown = distribution(allSignals, (item) => signalTypeLabel(item.signal_type));
+  const focusScore = Math.round(
+    (topProspects.slice(0, 5).reduce((sum, item) => sum + (item.priority_score || 0), 0) || 0) /
+      Math.max(1, topProspects.slice(0, 5).length)
+  );
+  const primaryTheme = (summary.cross_border || 0) >= (summary.financing_signals || 0)
+    ? "cross-border activity"
+    : "financing-linked signals";
 
   return `
-    ${renderModeBanner()}
-    <div class="grid metrics">
-      ${metricCard("Lead pool", summary.lead_pool, "Current prospect universe")}
-      ${metricCard("High priority", summary.high_priority, "Prospects requiring review", true)}
-      ${metricCard("Cross-border", summary.cross_border, "Signals and focus tags")}
-      ${metricCard("Financing signals", summary.financing_signals, "Liquidity and funding themes")}
-    </div>
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">Portfolio Summary</h2>
+        <span class="section-note">${icon("clock")} ${state.backendOnline ? "Live intelligence" : "Sample data"}</span>
+      </div>
+      <div class="grid metrics">
+        ${metricCard("Company profiles", summary.lead_pool ?? allProspects.length, "Current prospect universe", { icon: "users", route: "prospects" })}
+        ${metricCard("High-priority companies", summary.high_priority, "Prospects requiring RM review", { icon: "zap", tone: "danger", route: "prospects" })}
+        ${metricCard("Cross-border opportunities", summary.cross_border, "Signals and focus tags", { icon: "globe", tone: "blue", route: "prospects" })}
+        ${metricCard("Financing-linked signals", summary.financing_signals, "Liquidity and funding themes", { icon: "trending", tone: "orange", route: "signals" })}
+      </div>
+    </section>
 
-    <section class="brief-panel mt">
+    <section class="brief-panel section">
       <div>
         <span class="badge high">Morning Brief</span>
         <h2>${escapeHtml(topProspects.length)} client relationships need RM review</h2>
         <p>
-          Portfolio activity is led by cross-border and financing signals. Start with
-          high-priority relationships, then open supporting evidence before outreach.
+          Portfolio activity is led by ${escapeHtml(primaryTheme)}. Start with high-priority
+          company profiles, then open the supporting evidence before outreach.
         </p>
-        <div class="wrap">
+        <div class="wrap mt">
           <button class="button primary" data-route="prospects">Review RM Actions</button>
           <button class="button" data-route="signals">Open Evidence</button>
           <button class="button" data-route="copilot">Ask Copilot</button>
@@ -508,77 +598,91 @@ function renderOverview() {
       </div>
       <button class="focus-score" data-route="prospects">
         <span>Focus score</span>
-        <strong>${escapeHtml(Math.round((topProspects.slice(0, 5).reduce((sum, item) => sum + (item.priority_score || 0), 0) || 0) / Math.max(1, topProspects.slice(0, 5).length)))}</strong>
+        <strong>${escapeHtml(focusScore)}</strong>
         <small>${escapeHtml(summary.high_priority || 0)} priority clients</small>
       </button>
     </section>
 
-    <div class="grid two mt">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Priority Prospects</h2>
-            <p class="panel-subtitle">Companies with the clearest evidence-backed conversation path.</p>
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">Market Opportunity Overview</h2>
+        <span class="section-note">Click into prospects or signals to inspect evidence</span>
+      </div>
+      <div class="grid three">
+        <article class="panel chart-card">
+          <div class="panel-header">
+            <h3 class="panel-title">By Industry</h3>
           </div>
-          <button class="button small" data-route="prospects">View all</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>Priority</th>
-                <th>Evidence</th>
-                <th>Recommended next step</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${topProspects.map((item) => `
-                <tr>
-                  <td>
-                    <div class="company-name">${escapeHtml(prospectName(item))}</div>
-                    <div class="muted">${escapeHtml(companyId(item))}</div>
-                  </td>
-                  <td>
-                    ${badge(item.priority_level)}
-                    <div class="muted">Score ${escapeHtml(item.priority_score ?? "N/A")}</div>
-                  </td>
-                  <td>${formatTags(item.focus_tags || [], 3)}</td>
-                  <td>${escapeHtml(item.recommended_next_step || "Review linked evidence.")}</td>
-                  <td><button class="button small primary" data-open-prospect="${escapeHtml(prospectId(item))}">Open</button></td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Market Overview</h2>
-            <p class="panel-subtitle">Industry and region distribution from current data.</p>
+          <div class="panel-body">${bars(market.industry_breakdown)}</div>
+        </article>
+        <article class="panel chart-card">
+          <div class="panel-header">
+            <h3 class="panel-title">By Region</h3>
           </div>
-        </div>
-        <div class="panel-body">
-          <h3 class="panel-title">By industry</h3>
-          ${bars(market.industry_breakdown)}
-          <h3 class="panel-title mt">By region</h3>
-          ${bars(market.region_breakdown)}
-        </div>
-      </section>
-    </div>
+          <div class="panel-body">
+            <div class="mini-donut" aria-hidden="true"></div>
+            ${bars(market.region_breakdown)}
+          </div>
+        </article>
+        <article class="panel chart-card">
+          <div class="panel-header">
+            <h3 class="panel-title">By Signal Type</h3>
+          </div>
+          <div class="panel-body">${bars(signalBreakdown)}</div>
+        </article>
+      </div>
+    </section>
 
-    <section class="panel mt">
+    <section class="panel section">
       <div class="panel-header">
         <div>
-          <h2 class="panel-title">Recent Trigger Signals</h2>
-          <p class="panel-subtitle">Signals link market changes to companies and prospect actions.</p>
+          <h2 class="panel-title">Top Priority Company Profiles</h2>
+          <p class="panel-subtitle">Company-first intelligence with evidence-backed engagement angles.</p>
+        </div>
+        <button class="button small" data-route="prospects">View all</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th>Tier</th>
+              <th>Evidence</th>
+              <th>RM Conversation Focus</th>
+              <th>Next step</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${topProspects.map((item) => `
+              <tr>
+                <td>
+                  <div class="company-name">${escapeHtml(prospectName(item))}</div>
+                  <div class="muted">${escapeHtml([item.region, (item.industries || [])[0], companyId(item)].filter(Boolean).join(" / "))}</div>
+                </td>
+                <td>
+                  <span class="badge ${escapeHtml(priorityTier(item.priority_level).toLowerCase())}">Tier ${escapeHtml(priorityTier(item.priority_level))}</span>
+                  <div class="muted">Score ${escapeHtml(item.priority_score ?? "N/A")}</div>
+                </td>
+                <td>${formatTags(item.focus_tags || [], 3)}</td>
+                <td>${escapeHtml((item.why_prioritized || [])[0] || item.recommended_next_step || "Review linked evidence.")}</td>
+                <td>${escapeHtml(item.recommended_next_step || "Prepare evidence-backed outreach.")}</td>
+                <td><button class="button small primary" data-open-prospect="${escapeHtml(prospectId(item))}">Open brief</button></td>
+              </tr>
+            `).join("") || `<tr><td colspan="6"><div class="empty-state">No priority prospects available.</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Recent Trigger Signals</h2>
         </div>
         <button class="button small" data-route="signals">Open signal explorer</button>
       </div>
-      <div class="panel-body list">
+      <div class="list">
         ${triggerSignals.map(renderSignalCard).join("") || `<div class="empty-state">No signals available.</div>`}
       </div>
     </section>
@@ -595,6 +699,60 @@ function unique(values) {
   return Array.from(new Set(values.filter(Boolean))).sort();
 }
 
+function renderProspectCard(item) {
+  const workflow = item.workflow_state || {};
+  const linkedSignals = linkedSignalsForProspect(item);
+  const latestSignal = linkedSignals[0];
+  const tier = priorityTier(item.priority_level);
+  const priority = priorityClass(item.priority_level);
+  const reasons = item.why_prioritized || [];
+  const products = item.recommended_product_themes || item.focus_tags || [];
+  const focus = item.recommended_next_step || reasons[0] || "Review evidence and prepare an RM outreach brief.";
+
+  return `
+    <article class="prospect-card">
+      <div class="prospect-rail ${escapeHtml(priority)}"></div>
+      <div class="prospect-body">
+        <div class="prospect-head">
+          <div>
+            <div class="prospect-title-row">
+              <h3 class="company-name">${escapeHtml(prospectName(item))}</h3>
+              <span class="badge ${escapeHtml(tier.toLowerCase())}">Tier ${escapeHtml(tier)}</span>
+              <span class="muted">Score: ${escapeHtml(item.priority_score ?? "N/A")}</span>
+            </div>
+            <div class="prospect-meta">
+              <span>${icon("building")}${escapeHtml((item.industries || [])[0] || "Unknown industry")}</span>
+              <span>${icon("globe")}${escapeHtml(item.region || "Unknown region")}</span>
+              <span>${icon("users")}Owner: ${escapeHtml(workflow.owner || "Unassigned")}</span>
+            </div>
+          </div>
+          <div class="wrap">
+            <button class="button ghost small" data-copilot-prospect="${escapeHtml(prospectId(item))}">${icon("sparkles", "button-icon")} Ask AI</button>
+            <button class="button small" data-open-prospect="${escapeHtml(prospectId(item))}">Open brief ${icon("external", "button-icon")}</button>
+          </div>
+        </div>
+
+        <div class="conversation-focus">
+          <strong>RM Conversation Focus</strong>
+          <p>${escapeHtml(focus)}</p>
+          ${reasons.length ? `<div class="wrap mt">${reasons.slice(0, 3).map((reason) => `<span class="badge">${escapeHtml(reason)}</span>`).join("")}</div>` : ""}
+        </div>
+
+        <div class="prospect-meta">
+          ${latestSignal ? `<span><span class="badge blue">Evidence: ${escapeHtml(signalTypeLabel(latestSignal.signal_type))}</span> ${escapeHtml(signalTitle(latestSignal))}</span>` : `<span class="muted">Evidence awaiting linked signal review</span>`}
+          <span class="badge">Evidence: ${escapeHtml(linkedSignals.length)}</span>
+          <span class="badge">Stage: ${escapeHtml(workflow.stage || "new")}</span>
+          <span>${icon("clock")}Follow-up ${escapeHtml(workflow.next_action || "To schedule")}</span>
+        </div>
+
+        <div class="wrap mt">
+          ${products.slice(0, 6).map((product) => `<span class="badge monitor">${escapeHtml(product)}</span>`).join("")}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function renderProspects() {
   const items = getFilteredProspects();
   const allProspects = asList(state.data.prospects);
@@ -604,54 +762,20 @@ function renderProspects() {
   return `
     ${renderModeBanner()}
     <div class="toolbar">
-      <input id="prospect-search" value="${escapeHtml(state.search)}" placeholder="Search company, region, industry, or tag" />
+      <div class="search-wrap">
+        ${icon("search")}
+        <input id="prospect-search" value="${escapeHtml(state.search)}" placeholder="Search company profiles..." />
+      </div>
       <select id="industry-filter">${optionList(industries, state.industryFilter)}</select>
       <select id="region-filter">${optionList(regions, state.regionFilter)}</select>
-      <button class="button" id="clear-filters">Clear</button>
-      <span class="muted">${items.length} of ${allProspects.length} prospects</span>
+      <button class="button outline" id="clear-filters">${icon("filter", "button-icon")} Clear</button>
+      <span class="toolbar-spacer"></span>
+      <span class="section-note">${items.length} company profiles / ${state.backendOnline ? "live intelligence" : "sample data"}</span>
     </div>
 
-    <section class="panel">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Score</th>
-              <th>Fit</th>
-              <th>Why prioritized</th>
-              <th>Workflow</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map((item) => {
-              const workflow = item.workflow_state || {};
-              return `
-                <tr>
-                  <td>
-                    <div class="company-name">${escapeHtml(prospectName(item))}</div>
-                    <div class="muted">${escapeHtml([item.region, (item.industries || [])[0]].filter(Boolean).join(" / "))}</div>
-                  </td>
-                  <td>
-                    ${badge(item.priority_level)}
-                    <div class="muted">Priority ${escapeHtml(item.priority_score ?? "N/A")}</div>
-                    <div class="muted">Opportunity ${escapeHtml(item.opportunity_score ?? "N/A")} / Risk ${escapeHtml(item.risk_score ?? "N/A")}</div>
-                  </td>
-                  <td>${formatTags(item.recommended_product_themes || item.focus_tags || [], 4)}</td>
-                  <td>${(item.why_prioritized || []).slice(0, 3).map((reason) => `<div>${escapeHtml(reason)}</div>`).join("") || escapeHtml(item.recommended_next_step || "")}</td>
-                  <td>
-                    <div>${escapeHtml(workflow.stage || "new")}</div>
-                    <div class="muted">${escapeHtml(workflow.owner || "Unassigned")}</div>
-                  </td>
-                  <td><button class="button small primary" data-open-prospect="${escapeHtml(prospectId(item))}">Open brief</button></td>
-                </tr>
-              `;
-            }).join("") || `<tr><td colspan="6"><div class="empty-state">No prospects match the current filters.</div></td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div class="list">
+      ${items.map(renderProspectCard).join("") || `<div class="empty-state">No prospects match the current filters.</div>`}
+    </div>
   `;
 }
 
@@ -688,11 +812,15 @@ function renderCompanies() {
   return `
     ${renderModeBanner()}
     <div class="toolbar">
-      <input id="company-search" value="${escapeHtml(state.search)}" placeholder="Search company, source, region, industry, or profile text" />
+      <div class="search-wrap">
+        ${icon("search")}
+        <input id="company-search" value="${escapeHtml(state.search)}" placeholder="Search company, source, region, industry, or profile text" />
+      </div>
       <select id="industry-filter">${optionList(industries, state.industryFilter)}</select>
       <select id="region-filter">${optionList(regions, state.regionFilter)}</select>
-      <button class="button" id="clear-filters">Clear</button>
-      <span class="muted">${items.length} of ${allCompanies.length} companies</span>
+      <button class="button outline" id="clear-filters">${icon("filter", "button-icon")} Clear</button>
+      <span class="toolbar-spacer"></span>
+      <span class="section-note">${items.length} of ${allCompanies.length} companies</span>
     </div>
 
     <section class="panel">
@@ -748,19 +876,32 @@ function signalCompany(item) {
 }
 
 function renderSignalCard(item) {
+  const typeClass = signalTypeClass(item.signal_type);
+  const levelClass = item.signal_level === "high" ? "risk" : "monitor";
   return `
-    <article class="list-card">
-      <div class="wrap">
-        <span class="badge ${item.signal_level === "high" ? "risk" : ""}">${escapeHtml(item.signal_type || "signal")}</span>
-        <span class="badge">${escapeHtml(item.source || "InsightSync")}</span>
-        <span class="badge">${escapeHtml(formatDate(item.event_time))}</span>
-      </div>
-      <h3>${escapeHtml(signalTitle(item))}</h3>
-      <p>${escapeHtml(item.signal_text || item.value_text || item.detail || "")}</p>
-      <p><strong>${escapeHtml(signalCompany(item))}</strong></p>
-      <div class="wrap mt">
-        ${item.prospect_id ? `<button class="button small primary" data-open-prospect="${escapeHtml(item.prospect_id)}">Open linked prospect</button>` : ""}
-        <button class="button small" data-ask-signal="${escapeHtml(signalTitle(item))}">Ask Copilot</button>
+    <article class="signal-card">
+      <div class="signal-icon ${escapeHtml(typeClass)}">${icon(typeClass === "cross_border" ? "globe" : typeClass === "financing" ? "trending" : typeClass === "policy" ? "file" : "zap")}</div>
+      <div class="signal-content">
+        <div class="signal-head">
+          <div>
+            <h3>${escapeHtml(signalTitle(item))}</h3>
+            <div class="muted">${escapeHtml(signalCompany(item))}</div>
+          </div>
+          <div class="wrap">
+            <span class="badge ${escapeHtml(levelClass)}">${escapeHtml(signalTypeLabel(item.signal_type))}</span>
+            <span class="badge">${escapeHtml(formatDate(item.event_time))}</span>
+          </div>
+        </div>
+        <p>${escapeHtml(item.signal_text || item.value_text || item.detail || "")}</p>
+        <div class="prospect-meta">
+          <span class="badge monitor">Source: ${escapeHtml(item.source || "InsightSync")}</span>
+          ${item.signal_level ? `<span class="badge ${escapeHtml(levelClass)}">Level: ${escapeHtml(item.signal_level)}</span>` : ""}
+          ${item.prospect_id ? `<span class="badge high">Linked company profile</span>` : ""}
+        </div>
+        <div class="wrap mt">
+          <button class="button ghost small" data-ask-signal="${escapeHtml(signalTitle(item))}">${icon("sparkles", "button-icon")} Explain</button>
+          ${item.prospect_id ? `<button class="button small" data-open-prospect="${escapeHtml(item.prospect_id)}">Open Company Brief ${icon("external", "button-icon")}</button>` : ""}
+        </div>
       </div>
     </article>
   `;
@@ -770,19 +911,30 @@ function renderSignals() {
   const items = getFilteredSignals();
   const allSignals = asList(state.data.signals);
   const types = unique(allSignals.map((signal) => signal.signal_type));
+  const chipTypes = ["all"].concat(types);
   return `
     ${renderModeBanner()}
-    <div class="toolbar">
-      <input id="signal-search" value="${escapeHtml(state.search)}" placeholder="Search title, company, source, or signal text" />
-      <select id="signal-type-filter">${optionList(types, state.signalTypeFilter)}</select>
-      <button class="button" id="clear-filters">Clear</button>
-      <span class="muted">${items.length} of ${allSignals.length} signals</span>
+    <div class="chip-row">
+      ${chipTypes.map((type) => `
+        <button class="chip ${state.signalTypeFilter === type ? "active" : ""}" data-signal-chip="${escapeHtml(type)}">
+          ${icon(type === "all" ? "zap" : signalTypeClass(type) === "cross_border" ? "globe" : signalTypeClass(type) === "financing" ? "trending" : signalTypeClass(type) === "policy" ? "file" : "zap")}
+          ${escapeHtml(type === "all" ? "All Signals" : signalTypeLabel(type))}
+        </button>
+      `).join("")}
     </div>
-    <section class="panel">
-      <div class="panel-body list">
-        ${items.map(renderSignalCard).join("") || `<div class="empty-state">No signals match the current filters.</div>`}
+    <div class="toolbar">
+      <div class="search-wrap">
+        ${icon("search")}
+        <input id="signal-search" value="${escapeHtml(state.search)}" placeholder="Search signals..." />
       </div>
-    </section>
+      <select id="signal-type-filter">${optionList(types, state.signalTypeFilter)}</select>
+      <button class="button outline" id="clear-filters">${icon("filter", "button-icon")} Clear</button>
+      <span class="toolbar-spacer"></span>
+      <span class="section-note">${items.length} actionable signals / ${state.backendOnline ? "live intelligence" : "sample data"}</span>
+    </div>
+    <div class="list">
+      ${items.map(renderSignalCard).join("") || `<div class="empty-state">No signals match the current filters.</div>`}
+    </div>
   `;
 }
 
@@ -1172,9 +1324,9 @@ function render() {
 
 function renderModeBanner() {
   if (state.backendOnline) {
-    return `<div class="list-card" style="margin-bottom:14px"><span class="badge high">Live API</span> <span class="muted">Connected to ${escapeHtml(cleanBase(state.apiBase))}</span></div>`;
+    return `<div class="mode-banner"><span class="badge high">Live API</span><span class="muted">Connected to ${escapeHtml(cleanBase(state.apiBase))}</span></div>`;
   }
-  return `<div class="list-card" style="margin-bottom:14px"><span class="badge medium">Sample data</span> <span class="muted">Start the FastAPI backend or set a shared API base URL to connect live data.</span></div>`;
+  return `<div class="mode-banner"><span class="badge medium">Sample data</span><span class="muted">Start the FastAPI backend or set a shared API base URL to connect live data.</span></div>`;
 }
 
 async function saveWorkflow(form) {
@@ -1239,6 +1391,13 @@ document.addEventListener("click", (event) => {
     state.selectedProspectId = null;
     state.search = "";
     setHash(state.route);
+    render();
+    return;
+  }
+
+  const signalChip = event.target.closest("[data-signal-chip]");
+  if (signalChip) {
+    state.signalTypeFilter = signalChip.dataset.signalChip;
     render();
     return;
   }
