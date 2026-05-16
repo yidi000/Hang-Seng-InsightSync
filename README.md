@@ -64,7 +64,7 @@ Run a live backend/frontend acceptance check after both services are up:
 python -m insightsync.backend.workflows.acceptance_check --api-base http://127.0.0.1:8000 --frontend-base http://127.0.0.1:3000 --strict
 ```
 
-Add `--include-review` to include the advisory prospect review endpoint, and `--include-rag` to include prospect-scoped RAG Q&A.
+Add `--include-review` to include the advisory prospect review endpoint, and `--include-rag` to include prospect-scoped RAG Q&A. Use `--timeout-seconds 45` when live GLM calls are enabled.
 
 RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
 
@@ -72,12 +72,15 @@ For real GLM 4.7 Flash generation, set:
 
 ```bash
 ENABLE_LLM_GENERATION=true
+ENABLE_LLM_BRIEF_GENERATION=false
 LLM_API_KEY=<your-bigmodel-api-key>
 LLM_BASE_URL=https://api.z.ai/api/paas/v4/
 LLM_CHAT_MODEL=glm-4.7-flash
 LLM_ENABLE_THINKING=false
 LLM_TIMEOUT_SECONDS=45
 ```
+
+`ENABLE_LLM_BRIEF_GENERATION=false` keeps frontend brief/detail pages fast and deterministic. Use `/review` and `/question` for live LLM-assisted review and RAG Q&A; set `ENABLE_LLM_BRIEF_GENERATION=true` only when you explicitly want every brief response to call the LLM.
 
 Then run a direct smoke check:
 

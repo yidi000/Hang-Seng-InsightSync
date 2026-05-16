@@ -70,6 +70,7 @@ For live GLM behavior, also set:
 
 ```bash
 ENABLE_LLM_GENERATION=true
+ENABLE_LLM_BRIEF_GENERATION=false
 LLM_API_KEY=<z-ai-key>
 LLM_BASE_URL=https://api.z.ai/api/paas/v4/
 LLM_CHAT_MODEL=glm-4.7-flash
@@ -77,7 +78,7 @@ LLM_ENABLE_THINKING=false
 LLM_TIMEOUT_SECONDS=45
 ```
 
-For frontend UI development, live GLM is optional. If disabled, the API returns deterministic fallback output for LLM-assisted features.
+For frontend UI development, live GLM is optional. If disabled, the API returns deterministic fallback output for LLM-assisted features. Keep `ENABLE_LLM_BRIEF_GENERATION=false` for a responsive shared UI; `/review` and `/question` still exercise the live LLM when `ENABLE_LLM_GENERATION=true`.
 
 ## Step 3: Start PostgreSQL
 
@@ -139,6 +140,14 @@ curl -H "X-API-Key: <key>" http://127.0.0.1:8000/api/prospects?limit=20
 ```
 
 From your laptop, replace `127.0.0.1` with the server domain or IP.
+
+If frontend is also running, use the live acceptance workflow:
+
+```bash
+python -m insightsync.backend.workflows.acceptance_check --api-base http://127.0.0.1:8000 --frontend-base http://127.0.0.1:3000 --strict
+```
+
+Add `--include-review --include-rag --timeout-seconds 45` when live GLM endpoints should be checked.
 
 ## Step 7: Give Frontend The Handover Package
 

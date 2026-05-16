@@ -75,6 +75,7 @@ For live GLM-4.7 Flash behavior, configure `.env`:
 
 ```bash
 ENABLE_LLM_GENERATION=true
+ENABLE_LLM_BRIEF_GENERATION=false
 LLM_API_KEY=<your-z-ai-key>
 LLM_BASE_URL=https://api.z.ai/api/paas/v4/
 LLM_CHAT_MODEL=glm-4.7-flash
@@ -83,6 +84,8 @@ LLM_TIMEOUT_SECONDS=45
 ```
 
 Then restart the API container.
+
+Keep `ENABLE_LLM_BRIEF_GENERATION=false` unless you deliberately want prospect brief/detail page loads to call GLM. The dedicated `/review` and `/question` endpoints remain the better places to test live LLM behavior.
 
 ## Auth, CORS, And Rate Limit
 

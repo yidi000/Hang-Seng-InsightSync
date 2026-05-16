@@ -483,6 +483,7 @@ class ProspectService:
                 company=detail["company"],
                 latest_state=latest_state,
                 prospect=prospect,
+                allow_llm=self.settings.llm_brief_enabled,
             )
         top_opportunities = [
             item.get("detail") or item.get("title")

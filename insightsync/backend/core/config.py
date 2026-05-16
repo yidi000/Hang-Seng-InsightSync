@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     rag_top_k: int = Field(default=6, alias="RAG_TOP_K")
     rag_min_score: float = Field(default=0.15, alias="RAG_MIN_SCORE")
     enable_llm_generation: bool = Field(default=False, alias="ENABLE_LLM_GENERATION")
+    enable_llm_brief_generation: bool = Field(default=False, alias="ENABLE_LLM_BRIEF_GENERATION")
 
     cors_allow_origins_raw: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")
 
@@ -67,6 +68,12 @@ class Settings(BaseSettings):
         """Return whether real LLM calls are allowed."""
 
         return bool(self.enable_llm_generation and self.llm_api_key)
+
+    @property
+    def llm_brief_enabled(self) -> bool:
+        """Return whether banker brief endpoints may call the LLM."""
+
+        return bool(self.llm_enabled and self.enable_llm_brief_generation)
 
 
 @lru_cache

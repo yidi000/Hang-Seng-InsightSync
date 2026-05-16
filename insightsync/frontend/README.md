@@ -55,4 +55,6 @@ With backend and frontend running:
 python -m insightsync.backend.workflows.acceptance_check --api-base http://127.0.0.1:8000 --frontend-base http://127.0.0.1:3000 --strict
 ```
 
+Use `--include-review --include-rag --timeout-seconds 45` when live GLM endpoints are enabled and should be checked too.
+
 The previous static prototype is retained under `legacy-static/` for reference only.
