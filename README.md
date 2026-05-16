@@ -58,6 +58,14 @@ Then open:
 http://127.0.0.1:3000
 ```
 
+Run a live backend/frontend acceptance check after both services are up:
+
+```bash
+python -m insightsync.backend.workflows.acceptance_check --api-base http://127.0.0.1:8000 --frontend-base http://127.0.0.1:3000 --strict
+```
+
+Add `--include-review` to include the advisory prospect review endpoint, and `--include-rag` to include prospect-scoped RAG Q&A.
+
 RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
 
 For real GLM 4.7 Flash generation, set:
@@ -170,8 +178,10 @@ Current implementation focus is the data and backend intelligence foundation.
 - Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history/workflow payloads, metadata filters, and frontend API handover guide
 - Implemented: prospect scorecard metadata, linkage-quality metrics, and governance flags to separate business score from evidence confidence
 - Implemented: bounded GLM-assisted prospect review for linkage quality, subjectivity risk, rule overreach, and extraction gaps; review is advisory and does not rewrite scores
+- Implemented: formal Next.js frontend application with dashboard, prospect list/detail, signal feed, Copilot panel, metadata-backed filters, score audit, evidence, review, workflow, timeline, and generated insight views
+- Implemented: live acceptance workflow for backend/frontend contract smoke checks
 - Added: multilingual parsing evaluation samples covering English, simplified Chinese, traditional Chinese, and Cantonese-style traditional Chinese text
-- Still maturing: score calibration, company identity resolution, generated insight evaluation, frontend dashboard implementation, and production handover runbooks
+- Still maturing: score calibration with labeled business cases, deeper company identity resolution, generated insight evaluation, and production handover runbooks
 
 ## Data Sources Integrated
 
@@ -293,6 +303,13 @@ Run company identity/linkage evaluation:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest insightsync/data/tests/test_company_identity_linkage_eval.py -q
 ```
 
+Run the broader deterministic backend/data acceptance suite:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ENABLE_LLM_GENERATION=false python -m pytest insightsync/backend/tests insightsync/data/tests -q
+python -m insightsync.backend.workflows.glm_extraction_demo --mock --strict --api-preview
+```
+
 ## Collaboration Workflow
 
 1. Sync main branch
@@ -325,8 +342,8 @@ git push
 1. Calibrate prospect scoring and linkage rules with labeled examples and RM/product review
 2. Expand multilingual evaluation cases for annual reports, announcements, market news, and Cantonese-style business text
 3. Improve company identity resolution across English, simplified Chinese, traditional Chinese, stock codes, aliases, and subsidiaries
-4. Add prospect task/activity history beyond the latest workflow state
-5. Add governance, evaluation logs, model/prompt configuration records, and backend handover runbooks
+4. Add prospect task/activity history beyond the latest workflow state if CRM integration becomes available
+5. Add governance dashboards, evaluation logs, and model/prompt configuration records
 
 ## Notes
 
