@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>InsightSync | Hang Seng Bank</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">IS</div>
+          <div>
+            <div class="brand-name">InsightSync</div>
+            <div class="brand-subtitle">Hang Seng Bank</div>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-route="overview">
+            <span class="nav-icon">01</span>
+            <span>
+              <strong>Dashboard</strong>
+              <small>Portfolio view</small>
+            </span>
+          </button>
+          <button class="nav-item" data-route="prospects">
+            <span class="nav-icon">02</span>
+            <span>
+              <strong>Prospects</strong>
+              <small>RM action list</small>
+            </span>
+          </button>
+          <button class="nav-item" data-route="signals">
+            <span class="nav-icon">03</span>
+            <span>
+              <strong>Signals</strong>
+              <small>Market triggers</small>
+            </span>
+          </button>
+          <button class="nav-item" data-route="companies">
+            <span class="nav-icon">04</span>
+            <span>
+              <strong>Companies</strong>
+              <small>Fact layer</small>
+            </span>
+          </button>
+          <button class="nav-item" data-route="copilot">
+            <span class="nav-icon">AI</span>
+            <span>
+              <strong>Copilot</strong>
+              <small>Evidence Q&amp;A</small>
+            </span>
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="status-dot" id="sidebar-status-dot"></div>
+          <div>
+            <strong id="sidebar-status">Checking backend</strong>
+            <small id="sidebar-status-detail">FastAPI connection</small>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 id="page-title">Dashboard</h1>
+            <p id="page-subtitle">Actionable intelligence from reports, signals, and market data.</p>
+          </div>
+          <div class="api-controls">
+            <label>
+              API base
+              <input id="api-base-input" autocomplete="off" />
+            </label>
+            <label>
+              API key
+              <input id="api-key-input" type="password" autocomplete="off" placeholder="optional" />
+            </label>
+            <button class="button primary" id="save-api-settings">Save</button>
+            <button class="button" id="refresh-data">Refresh</button>
+          </div>
+        </header>
+
+        <section id="content" class="content">
+          <div class="loading-card">Loading InsightSync data...</div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

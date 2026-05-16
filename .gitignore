@@ -28,6 +28,7 @@ env/
 .tmp_test/
 pytest-cache-files-*/
 tmp*/
+insightsync/outside_code/
 
 # Dev/prod SQLite artifacts are local — not the demo fixture.
 insightsync/data/storage/insightsync.db
