@@ -254,11 +254,13 @@ const state = {
   signalTypeFilter: "all",
   priorityFilter: "all",
   chat: [],
+  copilotOpen: false,
   sampleToastShown: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
 const content = $("#content");
+const copilotRoot = $("#copilot-root");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -292,6 +294,9 @@ function routeFromHash() {
   const raw = (window.location.hash || "#overview").replace(/^#/, "");
   if (raw.startsWith("prospect/")) {
     return { route: "detail", id: decodeURIComponent(raw.slice("prospect/".length)) };
+  }
+  if (raw === "copilot") {
+    return { route: "overview", id: null };
   }
   return { route: raw || "overview", id: null };
 }
@@ -1407,49 +1412,67 @@ function renderWorkflowTab(id, workflow) {
   `;
 }
 
-function renderCopilot() {
+function renderCopilotPanel() {
   const prospects = asList(state.data.prospects);
-  return `
-    ${renderModeBanner()}
-    <div class="copilot-layout">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Evidence-grounded Copilot</h2>
-            <p class="panel-subtitle">Ask questions grounded in linked documents, signals, and citations.</p>
+  const promptCards = [
+    { icon: "sparkles", label: "Priority explanation", prompt: "Why is this company high priority?" },
+    { icon: "trending", label: "Recent changes", prompt: "What changed recently?" },
+    { icon: "users", label: "Meeting prep", prompt: "What should I say in the first meeting?" },
+    { icon: "file", label: "Product recommendations", prompt: "What products should I pitch first?" },
+    { icon: "globe", label: "Signal summary", prompt: "Summarize the most relevant signals" },
+  ];
+
+  copilotRoot.innerHTML = `
+    <div class="copilot-backdrop ${state.copilotOpen ? "open" : ""}" data-close-copilot></div>
+    <aside class="copilot-panel ${state.copilotOpen ? "open" : ""}" aria-hidden="${state.copilotOpen ? "false" : "true"}">
+      <div class="copilot-panel-header">
+        <div class="copilot-title-mark">${icon("sparkles")}</div>
+        <div>
+          <h2>AI Copilot</h2>
+          <p>Intelligence assistant</p>
+        </div>
+        <button class="icon-button" data-close-copilot aria-label="Close AI Copilot">x</button>
+      </div>
+      <div class="copilot-panel-body">
+        ${state.chat.length ? `
+          <div class="copilot-messages">
+            ${state.chat.map((msg) => `
+              <div class="message ${msg.role}">
+                ${msg.role === "assistant" ? `<div class="message-label">${icon("sparkles")} <span>AI Copilot</span></div>` : ""}
+                ${escapeHtml(msg.content)}
+              </div>
+            `).join("")}
           </div>
-        </div>
-        <div class="chat-thread" id="chat-thread">
-          ${state.chat.map((msg) => `<div class="message ${msg.role}">${escapeHtml(msg.content)}</div>`).join("") || `<div class="empty-state">Ask a question about prospects, signals, evidence, or RM next actions.</div>`}
-        </div>
-        <div class="panel-body">
-          <form class="copilot-composer" id="copilot-form">
-            <select id="copilot-prospect">
-              <option value="">General portfolio question</option>
-              ${prospects.map((p) => `<option value="${escapeHtml(prospectId(p))}" ${state.selectedProspectId === prospectId(p) ? "selected" : ""}>${escapeHtml(prospectName(p))}</option>`).join("")}
-            </select>
-            <textarea id="copilot-question" placeholder="Example: Why is this company high priority, and what evidence supports the next step?"></textarea>
-            <button class="button primary" type="submit">Ask Copilot</button>
-          </form>
-        </div>
-      </section>
-      <aside class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Useful prompts</h2>
-            <p class="panel-subtitle">Designed for the current backend API.</p>
+        ` : `
+          <div class="copilot-empty">
+            <div class="copilot-empty-icon">${icon("sparkles")}</div>
+            <h3>Ask AI Copilot</h3>
+            <p>Get insights based on the signals and prospects shown on your dashboard.</p>
+            <div class="copilot-prompt-list">
+              ${promptCards.map((item) => `
+                <button class="copilot-prompt-card" data-quick-prompt="${escapeHtml(item.prompt)}">
+                  <span>${icon(item.icon)}</span>
+                  ${escapeHtml(item.label)}
+                </button>
+              `).join("")}
+            </div>
           </div>
-        </div>
-        <div class="panel-body quick-prompts">
-          ${[
-            "Which prospects should an RM review first today?",
-            "Explain the score drivers and evidence quality for the selected prospect.",
-            "What cross-border opportunities are visible in the current signals?",
-            "What risks should be checked before outreach?",
-          ].map((prompt) => `<button class="button" data-quick-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>`).join("")}
-        </div>
-      </aside>
-    </div>
+        `}
+      </div>
+      <div class="copilot-panel-footer">
+        <form class="copilot-inline-form" id="copilot-form">
+          <select id="copilot-prospect" aria-label="Copilot prospect scope">
+            <option value="">General portfolio question</option>
+            ${prospects.map((p) => `<option value="${escapeHtml(prospectId(p))}" ${state.selectedProspectId === prospectId(p) ? "selected" : ""}>${escapeHtml(prospectName(p))}</option>`).join("")}
+          </select>
+          <div class="copilot-input-row">
+            <input id="copilot-question" placeholder="Ask about signals, prospects, or meeting prep..." autocomplete="off" />
+            <button class="button primary" type="submit" aria-label="Send Copilot question">${icon("chevron", "button-icon")}</button>
+          </div>
+        </form>
+        <p>Responses are evidence-grounded where the backend returns citations. Verify before use.</p>
+      </div>
+    </aside>
   `;
 }
 
@@ -1470,7 +1493,6 @@ function render() {
     prospects: ["Priority Prospects", "Evidence-backed company opportunities for RM review."],
     signals: ["Trigger Signals", "Market, policy, financing, and risk signals linked to companies."],
     companies: ["Companies", "Company fact layer, profile coverage, and linked activity."],
-    copilot: ["Copilot", "Evidence-grounded Q&A over current backend data."],
     detail: ["Prospect Detail", "Brief, evidence, score audit, review, and workflow state."],
   };
   const [title, subtitle] = titleMap[state.route] || titleMap.overview;
@@ -1487,9 +1509,10 @@ function render() {
   else if (state.route === "prospects") content.innerHTML = renderProspects();
   else if (state.route === "signals") content.innerHTML = renderSignals();
   else if (state.route === "companies") content.innerHTML = renderCompanies();
-  else if (state.route === "copilot") content.innerHTML = renderCopilot();
   else if (state.route === "detail") content.innerHTML = renderDetail();
   else content.innerHTML = renderOverview();
+
+  renderCopilotPanel();
 }
 
 function renderModeBanner() {
@@ -1519,6 +1542,7 @@ async function saveWorkflow(form) {
 async function askCopilot(question, prospectId) {
   const prompt = String(question || "").trim();
   if (!prompt) return;
+  state.copilotOpen = true;
   state.chat.push({ role: "user", content: prompt });
   state.chat.push({ role: "assistant", content: "Thinking against the evidence layer..." });
   render();
@@ -1555,6 +1579,18 @@ async function askCopilot(question, prospectId) {
 }
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-open-copilot]")) {
+    state.copilotOpen = true;
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-close-copilot]")) {
+    state.copilotOpen = false;
+    render();
+    return;
+  }
+
   const summaryFilter = event.target.closest("[data-summary-filter]");
   if (summaryFilter) {
     const value = summaryFilter.dataset.summaryFilter;
@@ -1635,9 +1671,8 @@ document.addEventListener("click", (event) => {
 
   const signalAsk = event.target.closest("[data-ask-signal]");
   if (signalAsk) {
-    state.route = "copilot";
+    state.copilotOpen = true;
     state.chat = [];
-    setHash("copilot");
     askCopilot(`Explain this signal for an RM and suggest the next action: ${signalAsk.dataset.askSignal}`, state.selectedProspectId);
     return;
   }
@@ -1645,8 +1680,7 @@ document.addEventListener("click", (event) => {
   const prospectAsk = event.target.closest("[data-copilot-prospect]");
   if (prospectAsk) {
     state.selectedProspectId = prospectAsk.dataset.copilotProspect;
-    state.route = "copilot";
-    setHash("copilot");
+    state.copilotOpen = true;
     render();
     return;
   }

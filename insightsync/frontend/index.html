@@ -48,24 +48,6 @@
               <small>Market &amp; news signals</small>
             </span>
           </button>
-          <button class="nav-item nav-item-secondary" data-route="companies">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path><path d="M9 9v.01"></path><path d="M9 12v.01"></path><path d="M9 15v.01"></path><path d="M9 18v.01"></path></svg>
-            </span>
-            <span>
-              <strong>Company Layer</strong>
-              <small>Fact and profile coverage</small>
-            </span>
-          </button>
-          <button class="nav-item nav-item-secondary" data-route="copilot">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path></svg>
-            </span>
-            <span>
-              <strong>AI Copilot</strong>
-              <small>Evidence Q&amp;A</small>
-            </span>
-          </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -91,7 +73,7 @@
                 <small id="sidebar-status-detail">FastAPI connection</small>
               </span>
             </div>
-            <button class="button primary" data-route="copilot">
+            <button class="button primary" data-open-copilot>
               <svg class="button-icon" viewBox="0 0 24 24"><path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path></svg>
               Ask AI Copilot
             </button>
@@ -122,6 +104,10 @@
       </main>
     </div>
 
+    <div id="copilot-root"></div>
+    <button id="floating-copilot" class="floating-copilot" data-open-copilot aria-label="Open AI Copilot">
+      <svg viewBox="0 0 24 24"><path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path></svg>
+    </button>
     <div id="toast" class="toast hidden"></div>
     <script src="./app.js"></script>
   </body>
