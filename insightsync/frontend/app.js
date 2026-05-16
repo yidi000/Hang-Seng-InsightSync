@@ -743,13 +743,17 @@ function renderOverview() {
     : getFilteredProspects().slice(0, 5);
   const filteredProspects = filteredOverviewProspects(allProspects);
   const topProspects = hasOverviewFilters() ? filteredProspects.slice(0, 8) : unfilteredTopProspects.slice(0, 8);
+  const highPriorityProspects = allProspects
+    .filter((item) => priorityClass(item.priority_level) === "high")
+    .sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0));
+  const morningBriefCount = summary.high_priority ?? highPriorityProspects.length;
   const triggerSignals = asList(state.data.triggerSignals).length
     ? asList(state.data.triggerSignals)
     : asList(state.data.signals).slice(0, 5);
   const signalBreakdown = distribution(allSignals, (item) => signalTypeLabel(item.signal_type));
   const focusScore = Math.round(
-    (topProspects.slice(0, 5).reduce((sum, item) => sum + (item.priority_score || 0), 0) || 0) /
-      Math.max(1, topProspects.slice(0, 5).length)
+    (highPriorityProspects.slice(0, 5).reduce((sum, item) => sum + (item.priority_score || 0), 0) || 0) /
+      Math.max(1, highPriorityProspects.slice(0, 5).length)
   );
   const primaryTheme = (summary.cross_border || 0) >= (summary.financing_signals || 0)
     ? "cross-border activity"
@@ -772,10 +776,10 @@ function renderOverview() {
     <section class="brief-panel section">
       <div>
         <span class="badge high">Morning Brief</span>
-        <h2>${escapeHtml(topProspects.length)} client relationships need RM review</h2>
+        <h2>${escapeHtml(morningBriefCount)} client relationships need RM review</h2>
         <p>
           Portfolio activity is led by ${escapeHtml(primaryTheme)}. Start with high-priority
-          company profiles, then open the supporting evidence before outreach.
+          company profiles, then use the summary cards to filter the table below.
         </p>
         <div class="wrap mt">
           <button class="button primary" data-route="prospects">Review RM Actions</button>
@@ -786,7 +790,7 @@ function renderOverview() {
       <button class="focus-score" data-route="prospects">
         <span>Focus score</span>
         <strong>${escapeHtml(focusScore)}</strong>
-        <small>${escapeHtml(summary.high_priority || 0)} priority clients</small>
+        <small>${escapeHtml(morningBriefCount)} priority clients</small>
       </button>
     </section>
 

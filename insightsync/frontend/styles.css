@@ -17,16 +17,16 @@
 }
 
 :root {
-  --background: #fbfaf7;
-  --foreground: #20242b;
+  --background: #fbfaf8;
+  --foreground: #242831;
   --card: #ffffff;
-  --muted: #f4f1ed;
-  --muted-foreground: #73777f;
-  --border: #e7e1da;
-  --input: #e8e2dc;
+  --muted: #f5f3ef;
+  --muted-foreground: #747981;
+  --border: #e9e3dd;
+  --input: #ede6df;
   --primary: #44803f;
-  --primary-hover: #396f35;
-  --primary-soft: #edf6ec;
+  --primary-hover: #3c7338;
+  --primary-soft: #eef7ed;
   --primary-foreground: #ffffff;
   --destructive: #d22d1f;
   --destructive-soft: #fff0ee;
@@ -38,10 +38,10 @@
   --chart-4-soft: #fff8e8;
   --chart-5: #7862a8;
   --chart-5-soft: #f3f0fb;
-  --sidebar: #173d24;
-  --sidebar-accent: #215130;
-  --sidebar-border: #2a5a38;
-  --sidebar-primary: #57a45a;
+  --sidebar: #1b3e26;
+  --sidebar-accent: #275636;
+  --sidebar-border: #2d5e3d;
+  --sidebar-primary: #5ca85c;
   --radius: 6px;
   --shadow-sm: 0 1px 2px rgb(15 23 42 / 5%);
   --shadow-md: 0 8px 20px rgb(15 23 42 / 8%);
@@ -372,8 +372,8 @@ svg {
   background: var(--card);
   color: var(--foreground);
   padding: 0 12px;
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1;
   text-decoration: none;
   transition: background .14s ease, border-color .14s ease, box-shadow .14s ease;
@@ -381,6 +381,7 @@ svg {
 
 .button:hover {
   background: var(--muted);
+  border-color: #dcd5ce;
 }
 
 .button.primary {
@@ -395,6 +396,11 @@ svg {
 
 .button.outline {
   background: var(--card);
+}
+
+.button.outline:hover,
+.button.ghost:hover {
+  background: var(--muted);
 }
 
 .button.ghost {
@@ -460,7 +466,7 @@ select,
 textarea {
   border: 1px solid var(--input);
   border-radius: var(--radius);
-  background: var(--card);
+  background: var(--background);
   color: var(--foreground);
   outline: none;
 }
@@ -545,12 +551,12 @@ textarea:focus {
 
 .panel-header {
   display: flex;
-  min-height: 57px;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--border);
-  padding: 14px 16px;
+  padding: 14px 18px;
 }
 
 .panel-title {
@@ -569,7 +575,7 @@ textarea:focus {
 }
 
 .panel-body {
-  padding: 16px;
+  padding: 18px;
 }
 
 .metric-card {
@@ -667,7 +673,7 @@ textarea:focus {
   justify-content: space-between;
   gap: 24px;
   border-color: rgb(68 128 63 / 25%);
-  background: linear-gradient(90deg, rgb(68 128 63 / 8%) 0%, #fff 54%);
+  background: linear-gradient(90deg, rgb(68 128 63 / 8%) 0%, var(--card) 54%);
   padding: 24px;
 }
 
@@ -692,7 +698,7 @@ textarea:focus {
   display: block;
   min-width: 190px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--sidebar);
   color: #f8faf5;
   padding: 28px 32px;
@@ -1331,7 +1337,7 @@ tr:hover td {
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 24px;
   border-color: rgb(68 128 63 / 22%);
-  background: linear-gradient(90deg, rgb(68 128 63 / 8%) 0%, #fff 58%);
+  background: linear-gradient(90deg, rgb(68 128 63 / 8%) 0%, var(--card) 58%);
   padding: 24px;
 }
 
