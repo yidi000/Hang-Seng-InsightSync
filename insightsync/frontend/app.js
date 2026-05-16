@@ -492,6 +492,27 @@ function renderOverview() {
       ${metricCard("Financing signals", summary.financing_signals, "Liquidity and funding themes")}
     </div>
 
+    <section class="brief-panel mt">
+      <div>
+        <span class="badge high">Morning Brief</span>
+        <h2>${escapeHtml(topProspects.length)} client relationships need RM review</h2>
+        <p>
+          Portfolio activity is led by cross-border and financing signals. Start with
+          high-priority relationships, then open supporting evidence before outreach.
+        </p>
+        <div class="wrap">
+          <button class="button primary" data-route="prospects">Review RM Actions</button>
+          <button class="button" data-route="signals">Open Evidence</button>
+          <button class="button" data-route="copilot">Ask Copilot</button>
+        </div>
+      </div>
+      <button class="focus-score" data-route="prospects">
+        <span>Focus score</span>
+        <strong>${escapeHtml(Math.round((topProspects.slice(0, 5).reduce((sum, item) => sum + (item.priority_score || 0), 0) || 0) / Math.max(1, topProspects.slice(0, 5).length)))}</strong>
+        <small>${escapeHtml(summary.high_priority || 0)} priority clients</small>
+      </button>
+    </section>
+
     <div class="grid two mt">
       <section class="panel">
         <div class="panel-header">
