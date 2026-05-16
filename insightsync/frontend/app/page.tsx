@@ -135,20 +135,23 @@ function formatStage(value?: string | null) {
 }
 
 function formatRelationshipContext(prospect: {
-  crm?: { crmStatus?: string; productsHeld?: string[]; nextFollowUpAt?: string | null };
+  workflowState?: {
+    stage?: string | null;
+    reviewStatus?: string | null;
+    nextAction?: string | null;
+  };
   productFit: string[];
+  recommendedNextStep?: string;
 }) {
-  const crmStatus = prospect.crm?.crmStatus?.replace(/_/g, " ") || "not linked";
-  const heldCount = prospect.crm?.productsHeld?.length || 0;
-  const productLabel =
-    heldCount > 0
-      ? `Products held: ${heldCount}`
-      : `Suggested products: ${prospect.productFit.length}`;
-  const followUp = prospect.crm?.nextFollowUpAt
-    ? formatDate(prospect.crm.nextFollowUpAt)
-    : "To schedule";
+  const reviewStatus =
+    prospect.workflowState?.reviewStatus?.replace(/_/g, " ") || "not reviewed";
+  const productLabel = `Suggested products: ${prospect.productFit.length}`;
+  const nextAction =
+    prospect.workflowState?.nextAction ||
+    prospect.recommendedNextStep ||
+    "Review linked evidence";
 
-  return { crmStatus, productLabel, followUp };
+  return { reviewStatus, productLabel, nextAction };
 }
 
 export default function OverviewPage() {
@@ -943,19 +946,16 @@ export default function OverviewPage() {
                           <td className="px-4 py-4 align-top">
                             <div className="space-y-1.5 text-xs">
                               <p className="font-medium text-foreground">
-                                {formatStage(
-                                  prospect.crm?.relationshipStage ||
-                                    prospect.workflowState?.stage
-                                )}
+                                {formatStage(prospect.workflowState?.stage)}
                               </p>
                               <p className="text-muted-foreground">
-                                CRM: {relationshipContext.crmStatus}
+                                Review: {relationshipContext.reviewStatus}
                               </p>
                               <p className="text-muted-foreground">
                                 {relationshipContext.productLabel}
                               </p>
                               <p className="text-muted-foreground">
-                                Follow-up: {relationshipContext.followUp}
+                                Next: {relationshipContext.nextAction}
                               </p>
                             </div>
                           </td>

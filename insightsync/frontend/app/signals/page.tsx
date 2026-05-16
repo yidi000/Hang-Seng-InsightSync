@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Zap,
   Search,
@@ -22,6 +22,7 @@ import {
   AICopilotButton,
 } from "@/components/ai-copilot-panel";
 import { useInsightSyncData } from "@/lib/api-data";
+import { useMetadataFilters } from "@/lib/metadata-data";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,8 +44,6 @@ const signalTypeColors: Record<string, string> = {
   policy: "bg-chart-4/10 text-chart-4 border-chart-4/20",
   crossborder: "bg-chart-3/10 text-chart-3 border-chart-3/20",
 };
-
-const types = ["All", "expansion", "funding", "policy", "crossborder"];
 
 function formatSignalType(type: string) {
   if (type === "All") return "All Signals";
@@ -113,6 +112,7 @@ function signalBelongsToProspect(
 
 export default function SignalsPage() {
   const { triggerSignals, prospects, backendOnline } = useInsightSyncData();
+  const metadataFilters = useMetadataFilters(prospects, triggerSignals);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotPrompt, setCopilotPrompt] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,15 +130,8 @@ export default function SignalsPage() {
     const frame = window.requestAnimationFrame(() => setSearchQuery(query));
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  const sourceOptions = useMemo(
-    () => [
-      "All",
-      ...Array.from(
-        new Set(triggerSignals.map((signal) => formatSource(signal.source)))
-      ).sort(),
-    ],
-    [triggerSignals]
-  );
+  const typeOptions = metadataFilters.signalTypes;
+  const sourceOptions = metadataFilters.sources;
 
   // Filter signals
   const filteredSignals = triggerSignals.filter((s) => {
@@ -209,7 +202,7 @@ export default function SignalsPage() {
         <div className="p-6">
           {/* Signal Type Chips */}
           <div className="mb-4 flex flex-wrap gap-2">
-            {types.map((type) => {
+            {typeOptions.map((type) => {
               const Icon = type !== "All" ? signalTypeIcons[type] || Zap : Zap;
               const isActive = typeFilter === type;
               return (

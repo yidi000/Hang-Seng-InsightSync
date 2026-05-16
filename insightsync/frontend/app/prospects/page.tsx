@@ -2,34 +2,35 @@
 
 import { useState } from "react";
 import {
-  Search,
-  Filter,
-  Users,
-  ChevronDown,
   ArrowUpDown,
-  ExternalLink,
-  Sparkles,
-  Clock,
   Building2,
-  Globe,
+  ChevronDown,
+  Clock,
+  ExternalLink,
   FileText,
+  Filter,
+  Globe,
+  Search,
+  Sparkles,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  AICopilotButton,
+  AICopilotPanel,
+} from "@/components/ai-copilot-panel";
+import { AppSidebar } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AppSidebar } from "@/components/app-sidebar";
-import {
-  AICopilotPanel,
-  AICopilotButton,
-} from "@/components/ai-copilot-panel";
-import { useInsightSyncData } from "@/lib/api-data";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useInsightSyncData } from "@/lib/api-data";
+import { useMetadataFilters } from "@/lib/metadata-data";
 
 const tierColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
@@ -37,16 +38,34 @@ const tierColors: Record<string, string> = {
   C: "bg-muted text-muted-foreground",
 };
 
-const industries = ["All", "Financial Services", "Macro", "Industry", "National Accounts", "Agriculture", "Clean Energy", "Healthcare", "Technology", "Manufacturing", "Logistics", "Hospitality", "Electronics", "Furniture"];
-const regions = ["All", "Hong Kong", "Guangdong", "Shenzhen", "Guangzhou", "Foshan", "Zhuhai", "Macau", "Dongguan", "Zhongshan"];
-const sources = ["All", "HKMA", "Bloomberg", "SCMP", "News"];
-
 function normalizeEntityName(value: string | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeSource(value: string | undefined) {
+  return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function formatLabel(value: string | undefined | null) {
+  if (!value) return "Unassigned";
+  return value.replace(/[_-]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function signalBelongsToProspect(
+  signal: { prospectId?: string; company: string },
+  prospect: { id: string; name: string; nameZh?: string }
+) {
+  const signalCompany = normalizeEntityName(signal.company);
+  return (
+    signal.prospectId === prospect.id ||
+    signalCompany === normalizeEntityName(prospect.name) ||
+    signalCompany === normalizeEntityName(prospect.nameZh)
+  );
+}
+
 export default function ProspectsPage() {
   const { prospects, triggerSignals, backendOnline } = useInsightSyncData();
+  const metadataFilters = useMetadataFilters(prospects, triggerSignals);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState("All");
@@ -54,17 +73,29 @@ export default function ProspectsPage() {
   const [sourceFilter, setSourceFilter] = useState("All");
   const [sortBy, setSortBy] = useState<"score" | "name" | "industry">("score");
 
-  // Filter and sort prospects
   const filteredProspects = prospects
-    .filter((p) => {
-      if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase()) && !p.nameZh.includes(searchQuery)) return false;
-      if (industryFilter !== "All" && p.industry !== industryFilter) return false;
-      if (regionFilter !== "All" && p.region !== regionFilter) return false;
-      if (
-        sourceFilter !== "All" &&
-        !p.news.some((item) => item.source.toLowerCase() === sourceFilter.toLowerCase())
-      ) {
+    .filter((prospect) => {
+      const searchText = `${prospect.name} ${prospect.nameZh}`.toLowerCase();
+      if (searchQuery && !searchText.includes(searchQuery.toLowerCase())) {
         return false;
+      }
+      if (industryFilter !== "All" && prospect.industry !== industryFilter) {
+        return false;
+      }
+      if (regionFilter !== "All" && prospect.region !== regionFilter) {
+        return false;
+      }
+      if (sourceFilter !== "All") {
+        const hasSourceEvidence =
+          prospect.news.some(
+            (item) => normalizeSource(item.source) === normalizeSource(sourceFilter)
+          ) ||
+          triggerSignals.some(
+            (signal) =>
+              signalBelongsToProspect(signal, prospect) &&
+              normalizeSource(signal.source) === normalizeSource(sourceFilter)
+          );
+        if (!hasSourceEvidence) return false;
       }
       return true;
     })
@@ -80,7 +111,6 @@ export default function ProspectsPage() {
       <AppSidebar />
 
       <main className="pl-64">
-        {/* Header */}
         <header className="sticky top-0 z-40 border-b border-border bg-card">
           <div className="flex h-14 items-center justify-between px-6">
             <div className="flex items-center gap-3">
@@ -94,34 +124,29 @@ export default function ProspectsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={() => setCopilotOpen(true)}
-                className="bg-primary hover:bg-primary/90"
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Ask AI Copilot
-              </Button>
-            </div>
+            <Button
+              onClick={() => setCopilotOpen(true)}
+              className="bg-primary hover:bg-primary/90"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Ask AI Copilot
+            </Button>
           </div>
         </header>
 
         <div className="p-6">
-          {/* Filters */}
           <div className="mb-6 flex flex-wrap items-center gap-3">
-            {/* Search */}
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search company profiles..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(event) => setSearchQuery(event.target.value)}
                 className="w-full rounded-lg border border-input bg-background py-2 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
-            {/* Industry Filter */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9">
@@ -131,7 +156,7 @@ export default function ProspectsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {industries.map((industry) => (
+                {metadataFilters.industries.map((industry) => (
                   <DropdownMenuItem
                     key={industry}
                     onClick={() => setIndustryFilter(industry)}
@@ -142,7 +167,6 @@ export default function ProspectsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Region Filter */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9">
@@ -152,7 +176,7 @@ export default function ProspectsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {regions.map((region) => (
+                {metadataFilters.regions.map((region) => (
                   <DropdownMenuItem
                     key={region}
                     onClick={() => setRegionFilter(region)}
@@ -163,7 +187,6 @@ export default function ProspectsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Source Filter */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9">
@@ -173,7 +196,7 @@ export default function ProspectsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {sources.map((source) => (
+                {metadataFilters.sources.map((source) => (
                   <DropdownMenuItem
                     key={source}
                     onClick={() => setSourceFilter(source)}
@@ -184,12 +207,12 @@ export default function ProspectsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Sort */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9">
                   <ArrowUpDown className="mr-2 h-3.5 w-3.5" />
-                  Sort by: {sortBy === "score" ? "Priority" : sortBy === "name" ? "Name" : "Industry"}
+                  Sort by:{" "}
+                  {sortBy === "score" ? "Priority" : sortBy === "name" ? "Name" : "Industry"}
                   <ChevronDown className="ml-2 h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -207,27 +230,21 @@ export default function ProspectsPage() {
             </DropdownMenu>
 
             <div className="ml-auto text-xs text-muted-foreground">
-              {filteredProspects.length} company profiles ·{" "}
+              {filteredProspects.length} company profiles -{" "}
               {backendOnline ? "live intelligence" : "sample data"}
             </div>
           </div>
 
-          {/* Prospect Cards */}
           <div className="space-y-4">
             {filteredProspects.map((prospect) => {
-              const latestSignal = triggerSignals.find(
-                (s) =>
-                  s.prospectId === prospect.id ||
-                  normalizeEntityName(s.company) === normalizeEntityName(prospect.name) ||
-                  normalizeEntityName(s.company) === normalizeEntityName(prospect.nameZh)
+              const latestSignal = triggerSignals.find((signal) =>
+                signalBelongsToProspect(signal, prospect)
               );
               const linkedEvidenceCount =
-                triggerSignals.filter(
-                  (s) =>
-                    s.prospectId === prospect.id ||
-                    normalizeEntityName(s.company) === normalizeEntityName(prospect.name) ||
-                    normalizeEntityName(s.company) === normalizeEntityName(prospect.nameZh)
+                triggerSignals.filter((signal) =>
+                  signalBelongsToProspect(signal, prospect)
                 ).length + prospect.news.length;
+
               return (
                 <Card
                   key={prospect.id}
@@ -235,7 +252,6 @@ export default function ProspectsPage() {
                 >
                   <CardContent className="p-0">
                     <div className="flex">
-                      {/* Priority indicator */}
                       <div
                         className={`w-1.5 shrink-0 rounded-l-lg ${
                           prospect.tier === "A"
@@ -247,10 +263,9 @@ export default function ProspectsPage() {
                       />
 
                       <div className="flex-1 p-4">
-                        <div className="flex items-start justify-between">
-                          {/* Company Info */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-3">
                               <h3 className="text-base font-semibold text-foreground">
                                 {prospect.name}
                               </h3>
@@ -276,13 +291,12 @@ export default function ProspectsPage() {
                               </span>
                               <span className="flex items-center gap-1">
                                 <Users className="h-3.5 w-3.5" />
-                                CRM: {prospect.crm?.crmStatus?.replace(/_/g, " ") || "not linked"}
+                                Workflow: {formatLabel(prospect.workflowState?.stage)}
                               </span>
                             </div>
                           </div>
 
-                          {/* Actions */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex shrink-0 items-center gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -292,16 +306,15 @@ export default function ProspectsPage() {
                               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                               Ask AI
                             </Button>
-                            <Link href={`/prospects/${prospect.id}`}>
-                              <Button variant="outline" size="sm" className="h-8">
+                            <Button variant="outline" size="sm" asChild className="h-8">
+                              <Link href={`/prospects/${prospect.id}`}>
                                 Open brief
                                 <ExternalLink className="ml-1.5 h-3 w-3" />
-                              </Button>
-                            </Link>
+                              </Link>
+                            </Button>
                           </div>
                         </div>
 
-                        {/* Why This Prospect */}
                         <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
                           <p className="mb-1 text-xs font-medium text-primary">
                             RM Conversation Focus
@@ -319,7 +332,11 @@ export default function ProspectsPage() {
                           {prospect.whyPrioritized?.length ? (
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               {prospect.whyPrioritized.slice(0, 3).map((reason) => (
-                                <Badge key={reason} variant="outline" className="bg-card text-[10px]">
+                                <Badge
+                                  key={reason}
+                                  variant="outline"
+                                  className="bg-card text-[10px]"
+                                >
                                   {reason}
                                 </Badge>
                               ))}
@@ -327,41 +344,36 @@ export default function ProspectsPage() {
                           ) : null}
                         </div>
 
-                        {/* Latest Signal & Evidence */}
-                        <div className="mt-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             {latestSignal && (
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[10px] capitalize">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] capitalize"
+                                >
                                   Evidence: {latestSignal.type}
                                 </Badge>
-                                <span className="text-xs text-muted-foreground">
+                                <span className="truncate text-xs text-muted-foreground">
                                   {latestSignal.title}
                                 </span>
                               </div>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex shrink-0 items-center gap-2">
                             <Badge variant="outline" className="bg-muted/50 text-[10px]">
                               Evidence: {linkedEvidenceCount}
                             </Badge>
                             <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                              Owner: {prospect.crm?.rmOwner || prospect.workflowState?.owner || "Unassigned"}
+                              Owner: {prospect.workflowState?.owner || "Unassigned"}
                             </Badge>
-                            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              Follow-up {prospect.crm?.nextFollowUpAt || "N/A"}
+                            <span className="flex max-w-56 items-center gap-1 truncate text-[10px] text-muted-foreground">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {prospect.workflowState?.nextAction || "Review evidence"}
                             </span>
                           </div>
                         </div>
 
-                        {prospect.crm?.source === "demo_crm" && (
-                          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            Sample CRM overlay: pipeline, contacts, products, and activities are demo records for prototyping.
-                          </div>
-                        )}
-
-                        {/* Product Fit */}
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {prospect.productFit.map((product) => (
                             <Badge
@@ -395,10 +407,8 @@ export default function ProspectsPage() {
         </div>
       </main>
 
-      {/* AI Copilot Panel */}
       <AICopilotPanel isOpen={copilotOpen} onClose={() => setCopilotOpen(false)} />
 
-      {/* Floating Copilot Button */}
       {!copilotOpen && <AICopilotButton onClick={() => setCopilotOpen(true)} />}
     </div>
   );

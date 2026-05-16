@@ -123,11 +123,50 @@ export interface BackendBusinessEvent {
   parsed_at: string;
 }
 
+export interface BackendTimelineEvent {
+  id: number;
+  source: string;
+  company_id?: string | null;
+  entity?: string | null;
+  event_time?: string | null;
+  event_type: string;
+  headline: string;
+  detail?: string | null;
+  evidence_url?: string | null;
+  payload?: Record<string, unknown> | null;
+}
+
+export interface BackendGeneratedInsight {
+  id: number;
+  source: string;
+  insight_type: string;
+  title: string;
+  summary: string;
+  confidence?: number | null;
+  model_name?: string | null;
+  prompt_version?: string | null;
+  generated_at: string;
+}
+
+export interface BackendProductFit {
+  product_name: string;
+  fit_score: number;
+  rationale: string;
+  supporting_signals?: string[];
+}
+
 export interface BackendLatestState {
   activity_at?: string | null;
   status: string;
   state_summary?: string | null;
   why_now?: string | null;
+  fusion?: {
+    summary?: string | null;
+    why_now?: string | null;
+    primary_opportunity?: string | null;
+    key_risk?: string | null;
+    decision_answers?: BackendDecisionAnswer[];
+  } | null;
   fusion_summary?: string | null;
   recommended_next_step?: string | null;
   commercial_attractiveness_score?: number;
@@ -137,6 +176,7 @@ export interface BackendLatestState {
   evidence_confidence_score?: number;
   focus_tags?: string[];
   signal_highlights?: string[];
+  product_fit?: BackendProductFit[];
   recommended_entry_angles?: string[];
   decision_answers?: BackendDecisionAnswer[];
   coverage_flags: BackendCoverageFlags;
@@ -149,6 +189,8 @@ export interface BackendProspectDetail {
   company: BackendCompanyProfile;
   latest_state: BackendLatestState;
   recent_signals?: BackendSignal[];
+  recent_timeline?: BackendTimelineEvent[];
+  recent_insights?: BackendGeneratedInsight[];
   recent_documents?: BackendParsedDocument[];
   key_metrics?: BackendMetric[];
   key_risk_factors?: BackendRiskFactor[];

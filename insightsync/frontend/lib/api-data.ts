@@ -79,6 +79,7 @@ export interface BackendProspectSummary {
   company_id: string;
   canonical_name: string;
   display_name?: string | null;
+  city?: string | null;
   priority_level: "high" | "medium" | "monitor" | string;
   priority_score: number;
   opportunity_score?: number;
@@ -86,11 +87,18 @@ export interface BackendProspectSummary {
   evidence_confidence_score?: number;
   region?: string | null;
   industries?: string[];
+  segments?: string[];
   focus_tags?: string[];
   why_prioritized?: string[];
   recommended_next_step?: string | null;
   recommended_product_themes?: string[];
   recommended_entry_angles?: string[];
+  decision_answers?: {
+    question_key: string;
+    question: string;
+    answer: string;
+    supporting_evidence?: string[];
+  }[];
   score_breakdown?: BackendScoreBreakdown;
   workflow_state?: BackendWorkflowState;
 }

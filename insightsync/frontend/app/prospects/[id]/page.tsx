@@ -71,16 +71,6 @@ function formatSource(source: string | undefined) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatMoney(value?: number, currency = "HKD"): string {
-  if (typeof value !== "number") return "N/A";
-  return `${currency} ${value.toLocaleString("en-HK")}`;
-}
-
-function formatPercent(value?: number): string {
-  if (typeof value !== "number") return "N/A";
-  return `${Math.round(value * 100)}%`;
-}
-
 function normalizeEntityName(value: string | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -188,6 +178,7 @@ export default function ProspectDetailPage({
   const copilot = detailState.copilot;
   const backendProspect = detail?.prospect;
   const backendWorkflow = savedWorkflow || detail?.workflow_state;
+  const company = detail?.company;
   const scoreBreakdown = backendProspect?.score_breakdown;
   const linkageQuality = scoreBreakdown?.linkage_quality;
   const governanceFlags = scoreBreakdown?.governance_flags || [];
@@ -197,6 +188,22 @@ export default function ProspectDetailPage({
   const keyMetrics = evidence?.key_metrics || detail?.key_metrics || [];
   const keyRiskFactors = evidence?.key_risk_factors || detail?.key_risk_factors || [];
   const keyBusinessEvents = evidence?.key_business_events || detail?.key_business_events || [];
+  const recentTimeline = detail?.recent_timeline || [];
+  const recentInsights = detail?.recent_insights || [];
+  const decisionAnswers =
+    brief?.decision_answers?.length
+      ? brief.decision_answers
+      : detail?.latest_state.decision_answers?.length
+      ? detail.latest_state.decision_answers
+      : detail?.latest_state.fusion?.decision_answers?.length
+      ? detail.latest_state.fusion.decision_answers
+      : backendProspect?.decision_answers || [];
+  const productFits = detail?.latest_state.product_fit || [];
+  const companyDescription =
+    company?.profile_summary ||
+    company?.description ||
+    detail?.latest_state.state_summary ||
+    prospect.description;
   const suggestedQuestions = copilot?.suggested_questions || [];
 
   const relatedSignals = triggerSignals
@@ -228,10 +235,10 @@ export default function ProspectDetailPage({
   const currentStage =
     draftStage ||
     backendWorkflow?.stage ||
-    prospect.crm?.relationshipStage ||
     prospect.workflowState?.stage ||
     "new";
-  const currentFollowUp = prospect.crm?.nextFollowUpAt || "";
+  const workflowUpdatedAt =
+    backendWorkflow?.updated_at || detail?.latest_state.activity_at || null;
   const currentActionStatus =
     draftStatus !== "not_reviewed"
       ? draftStatus
@@ -374,11 +381,11 @@ export default function ProspectDetailPage({
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Users className="h-4 w-4" />
-                      CRM {prospect.crm?.crmStatus?.replace(/_/g, " ") || "not linked"}
+                      Workflow {formatLabel(currentStage)}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Calendar className="h-4 w-4" />
-                      Follow-up {formatShortDate(currentFollowUp)}
+                      Updated {formatShortDate(workflowUpdatedAt)}
                     </span>
                   </div>
                   <div className="mt-6 rounded-lg border border-primary/20 bg-card p-4">
@@ -494,10 +501,10 @@ export default function ProspectDetailPage({
                     </div>
                     <div className="rounded-lg border border-border bg-card p-3">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Next follow-up
+                        Workflow updated
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
-                        {formatShortDate(currentFollowUp)}
+                        {formatShortDate(workflowUpdatedAt)}
                       </p>
                     </div>
                   </div>
@@ -543,6 +550,38 @@ export default function ProspectDetailPage({
                       ))}
                     </div>
                   </div>
+
+                  {decisionAnswers.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Decision answers
+                      </p>
+                      <div className="space-y-2">
+                        {decisionAnswers.slice(0, 4).map((answer) => (
+                          <div
+                            key={answer.question_key}
+                            className="rounded-lg border border-border bg-card p-3"
+                          >
+                            <p className="text-sm font-medium text-foreground">
+                              {answer.question}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {answer.answer}
+                            </p>
+                            {answer.supporting_evidence?.length ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {answer.supporting_evidence.slice(0, 3).map((item) => (
+                                  <Badge key={item} variant="outline" className="text-[10px]">
+                                    {item}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -838,6 +877,110 @@ export default function ProspectDetailPage({
                 </CardContent>
               </Card>
 
+              {(recentTimeline.length > 0 || recentInsights.length > 0) && (
+                <Card id="activity" className="border-border">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5 text-chart-4" />
+                      Timeline & Generated Insights
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Recent company events and backend-generated intelligence previews.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Recent timeline
+                      </p>
+                      {recentTimeline.length ? (
+                        recentTimeline.slice(0, 5).map((event) => (
+                          <div
+                            key={event.id}
+                            className="rounded-lg border border-border bg-muted/30 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {formatLabel(event.event_type)}
+                                  </Badge>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {formatShortDate(event.event_time)}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-sm font-medium text-foreground">
+                                  {event.headline}
+                                </p>
+                                {event.detail && (
+                                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                    {event.detail}
+                                  </p>
+                                )}
+                              </div>
+                              {event.evidence_url && (
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                >
+                                  <Link href={event.evidence_url}>
+                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                          No timeline events are linked yet.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Generated insights
+                      </p>
+                      {recentInsights.length ? (
+                        recentInsights.slice(0, 5).map((insight) => (
+                          <div
+                            key={insight.id}
+                            className="rounded-lg border border-border bg-card p-3"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className="bg-primary/10 text-primary text-[10px]">
+                                {formatLabel(insight.insight_type)}
+                              </Badge>
+                              {typeof insight.confidence === "number" && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  confidence {Math.round(insight.confidence * 100)}%
+                                </Badge>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatShortDate(insight.generated_at)}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm font-medium text-foreground">
+                              {insight.title}
+                            </p>
+                            <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">
+                              {insight.summary}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                          No generated insight previews are available yet.
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {scoreBreakdown && (
                 <Card id="score-audit" className="border-border">
                   <CardHeader className="pb-3">
@@ -1076,10 +1219,10 @@ export default function ProspectDetailPage({
             </div>
 
             <aside className="space-y-4">
-              <Card id="crm" className="border-border">
+              <Card id="workflow" className="border-border">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-sm">Relationship Context</CardTitle>
+                    <CardTitle className="text-sm">Workflow State</CardTitle>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1092,15 +1235,10 @@ export default function ProspectDetailPage({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {prospect.crm?.source === "demo_crm" && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Sample CRM overlay. Replace with CRM, KYC, product, and RM activity integrations for production.
-                    </div>
-                  )}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Owner</span>
                     <span className="font-medium text-foreground">
-                      {prospect.crm?.rmOwner || prospect.workflowState?.owner || "Unassigned"}
+                      {backendWorkflow?.owner || prospect.workflowState?.owner || "Unassigned"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -1110,27 +1248,34 @@ export default function ProspectDetailPage({
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">CRM status</span>
+                    <span className="text-muted-foreground">Status</span>
                     <Badge variant="outline" className="capitalize">
-                      {prospect.crm?.crmStatus?.replace(/_/g, " ") || "not linked"}
+                      {formatLabel(backendWorkflow?.status || prospect.workflowState?.status || "open")}
                     </Badge>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-lg border border-border bg-muted/30 p-3">
-                      <p className="text-[10px] text-muted-foreground">Pipeline</p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {formatMoney(
-                          prospect.crm?.pipelineValue,
-                          prospect.crm?.pipelineCurrency
-                        )}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-muted/30 p-3">
-                      <p className="text-[10px] text-muted-foreground">Est. conversion</p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {formatPercent(prospect.crm?.estimatedConversionProbability)}
-                      </p>
-                    </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Review</span>
+                    <Badge variant="outline" className="capitalize">
+                      {formatLabel(currentActionStatus)}
+                    </Badge>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <p className="text-[10px] text-muted-foreground">Last action</p>
+                    <p className="mt-1 text-xs text-foreground">
+                      {backendWorkflow?.last_action ||
+                        prospect.workflowState?.lastAction ||
+                        "No RM action recorded yet."}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <p className="text-[10px] text-muted-foreground">Next action</p>
+                    <p className="mt-1 text-xs text-foreground">
+                      {backendWorkflow?.next_action ||
+                        prospect.workflowState?.nextAction ||
+                        brief?.recommended_next_step ||
+                        prospect.recommendedNextStep ||
+                        "Review linked evidence."}
+                    </p>
                   </div>
                   {latestWorkflowNote && (
                     <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -1166,95 +1311,95 @@ export default function ProspectDetailPage({
                 </Card>
               )}
 
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Contacts</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {prospect.contacts?.length ? (
-                    prospect.contacts.map((contact) => (
-                      <div key={contact.email} className="rounded-lg border border-border p-3">
-                        <p className="text-sm font-semibold text-foreground">{contact.name}</p>
-                        <p className="text-xs text-muted-foreground">{contact.title}</p>
-                        <p className="mt-2 text-xs text-foreground">{contact.email}</p>
-                        <p className="text-xs text-muted-foreground">{contact.phone}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No CRM contacts linked.</p>
-                  )}
-                </CardContent>
-              </Card>
-
               <Card id="products" className="border-border">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Products & Opportunities</CardTitle>
+                  <CardTitle className="text-sm">Recommended Products</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Products held
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {prospect.crm?.productsHeld?.length ? (
-                        prospect.crm.productsHeld.map((product) => (
-                          <Badge key={product} variant="secondary" className="text-[10px]">
-                            {product}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">None in sample CRM data</span>
-                      )}
+                  {productFits.length > 0 ? (
+                    <div className="space-y-2">
+                      {productFits.slice(0, 4).map((product) => (
+                        <div
+                          key={product.product_name}
+                          className="rounded-lg border border-border p-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {product.product_name}
+                            </p>
+                            <Badge variant="outline" className="text-[10px]">
+                              fit {product.fit_score}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {product.rationale}
+                          </p>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    {prospect.crmOpportunities?.map((opportunity) => (
-                      <div
-                        key={`${opportunity.product}-${opportunity.value}`}
-                        className="rounded-lg border border-border p-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
+                  ) : (
+                    <div className="space-y-2">
+                      {prospect.opportunities.slice(0, 4).map((opportunity) => (
+                        <div
+                          key={opportunity.product}
+                          className="rounded-lg border border-border p-3"
+                        >
                           <p className="text-sm font-semibold text-foreground">
                             {opportunity.product}
                           </p>
-                          <Badge variant="outline" className="text-[10px] capitalize">
-                            {opportunity.stage}
-                          </Badge>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {opportunity.rationale}
+                          </p>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatMoney(opportunity.value, opportunity.currency)} · probability {formatPercent(opportunity.probability)}
-                        </p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
+                    {(brief?.recommended_product_themes?.length
+                      ? brief.recommended_product_themes
+                      : prospect.productFit
+                    )
+                      .slice(0, 5)
+                      .map((product) => (
+                        <Badge key={product} variant="secondary" className="text-[10px]">
+                          {product}
+                        </Badge>
+                      ))}
                   </div>
                 </CardContent>
               </Card>
 
               <Card className="border-border">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Recent RM Activity</CardTitle>
+                  <CardTitle className="text-sm">Recent Backend Activity</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {prospect.activities?.length ? (
-                    prospect.activities.map((activity) => (
+                  {recentTimeline.length ? (
+                    recentTimeline.slice(0, 3).map((activity) => (
                       <div
-                        key={`${activity.type}-${activity.occurredAt}`}
+                        key={activity.id}
                         className="rounded-lg border border-border p-3"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="outline" className="text-[10px] capitalize">
-                            {activity.type}
+                            {formatLabel(activity.event_type)}
                           </Badge>
                           <span className="text-[10px] text-muted-foreground">
-                            {formatDate(activity.occurredAt)}
+                            {formatShortDate(activity.event_time)}
                           </span>
                         </div>
-                        <p className="mt-2 text-sm text-foreground">{activity.summary}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Owner: {activity.owner}</p>
+                        <p className="mt-2 text-sm text-foreground">{activity.headline}</p>
+                        {activity.detail && (
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {activity.detail}
+                          </p>
+                        )}
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">No RM activity in sample CRM data.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No backend timeline events are linked yet.
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -1263,10 +1408,31 @@ export default function ProspectDetailPage({
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm">Company Background</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-foreground">{prospect.description}</p>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-foreground">{companyDescription}</p>
+                  {company?.website_url && (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-full justify-start text-xs"
+                    >
+                      <Link href={company.website_url}>
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        Company website
+                      </Link>
+                    </Button>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {prospect.crossBorderFootprint.map((location) => (
+                    {[
+                      company?.city,
+                      company?.region,
+                      company?.country,
+                      ...prospect.crossBorderFootprint,
+                    ]
+                      .filter((location): location is string => Boolean(location))
+                      .slice(0, 6)
+                      .map((location) => (
                       <Badge
                         key={location}
                         variant="outline"
@@ -1276,6 +1442,15 @@ export default function ProspectDetailPage({
                         {location}
                       </Badge>
                     ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[...(company?.industries || []), ...(company?.segments || [])]
+                      .slice(0, 6)
+                      .map((item) => (
+                        <Badge key={item} variant="secondary" className="text-[10px]">
+                          {formatLabel(item)}
+                        </Badge>
+                      ))}
                   </div>
                   {prospect.scoreBreakdown && (
                     <div className="mt-4 space-y-2 border-t border-border pt-3">
