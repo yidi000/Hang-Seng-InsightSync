@@ -22,6 +22,7 @@ env/
 !.env.example
 node_modules/
 .next/
+insightsync/frontend/next-env.d.ts
 
 *.log
 *.tmp
