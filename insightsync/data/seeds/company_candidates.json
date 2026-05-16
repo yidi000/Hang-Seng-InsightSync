@@ -158,5 +158,424 @@
     },
     "source_tags": ["seed", "hk", "saas"],
     "seed_source": "manual_seed_v1"
+  },
+  {
+    "name": "Animoca Brands",
+    "display_name": "Animoca Brands Corporation Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Digital Assets", "Gaming"],
+    "description": "Hong Kong based technology group active in digital entertainment, blockchain, and Web3 investments.",
+    "profile_urls": {
+      "website": "https://www.animocabrands.com",
+      "linkedin": "https://www.linkedin.com/company/animoca-brands",
+      "wikipedia": "https://en.wikipedia.org/wiki/Animoca_Brands"
+    },
+    "source_tags": ["seed", "hk", "technology"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "HashKey Group",
+    "display_name": "HashKey Group",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Digital Assets", "Financial Services"],
+    "description": "Hong Kong digital asset financial services group serving institutional and professional market participants.",
+    "profile_urls": {
+      "website": "https://www.hashkey.com",
+      "linkedin": "https://www.linkedin.com/company/hashkey-group"
+    },
+    "source_tags": ["seed", "hk", "fintech"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "OSL Group",
+    "display_name": "OSL Group",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Digital Assets", "Brokerage"],
+    "description": "Hong Kong digital asset platform and brokerage group with institutional trading and custody services.",
+    "profile_urls": {
+      "website": "https://osl.com",
+      "linkedin": "https://www.linkedin.com/company/osl"
+    },
+    "source_tags": ["seed", "hk", "fintech"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Prenetics",
+    "display_name": "Prenetics Global Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Healthcare", "Biotechnology"],
+    "description": "Health sciences company with diagnostics, prevention, and consumer health operations.",
+    "profile_urls": {
+      "website": "https://www.prenetics.com",
+      "linkedin": "https://www.linkedin.com/company/prenetics",
+      "wikipedia": "https://en.wikipedia.org/wiki/Prenetics"
+    },
+    "source_tags": ["seed", "hk", "healthcare"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Bowtie",
+    "display_name": "Bowtie Life Insurance Company Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "sme"],
+    "industries": ["Insurance", "Digital Banking"],
+    "description": "Hong Kong virtual insurer providing digital health and protection products.",
+    "profile_urls": {
+      "website": "https://www.bowtie.com.hk",
+      "linkedin": "https://www.linkedin.com/company/bowtie-life-insurance-company"
+    },
+    "source_tags": ["seed", "hk", "insurance"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "MoneyHero",
+    "display_name": "MoneyHero Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "sme"],
+    "industries": ["Consumer Finance", "Marketing Platform"],
+    "description": "Personal finance comparison and customer acquisition platform operating in Hong Kong and Southeast Asia.",
+    "profile_urls": {
+      "website": "https://www.moneyhero.com.hk",
+      "linkedin": "https://www.linkedin.com/company/moneyhero-com-hk"
+    },
+    "source_tags": ["seed", "hk", "consumer_finance"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "TNG FinTech Group",
+    "display_name": "TNG FinTech Group",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Payments", "Remittance"],
+    "description": "Fintech group focused on digital wallet, payments, remittance, and financial connectivity services.",
+    "profile_urls": {
+      "website": "https://www.tngfintech.com",
+      "linkedin": "https://www.linkedin.com/company/tng-fintech-group"
+    },
+    "source_tags": ["seed", "hk", "payments"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "RD Technologies",
+    "display_name": "RD Technologies",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["fintech", "sme"],
+    "industries": ["Payments", "Digital Banking"],
+    "description": "Hong Kong fintech company focused on business payments, account services, and digital financial infrastructure.",
+    "profile_urls": {
+      "website": "https://www.rd.group",
+      "linkedin": "https://www.linkedin.com/company/rd-technologies"
+    },
+    "source_tags": ["seed", "hk", "payments"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Tink Labs",
+    "display_name": "Tink Labs Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Travel Tech", "SaaS"],
+    "description": "Hong Kong technology company associated with hospitality and travel technology services.",
+    "profile_urls": {
+      "website": "https://www.tinklabs.com",
+      "linkedin": "https://www.linkedin.com/company/tink-labs"
+    },
+    "source_tags": ["seed", "hk", "travel"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "SenseTime",
+    "display_name": "SenseTime Group Inc.",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Artificial Intelligence", "Software"],
+    "description": "Artificial intelligence software company with Hong Kong listing and enterprise AI solutions.",
+    "profile_urls": {
+      "website": "https://www.sensetime.com",
+      "linkedin": "https://www.linkedin.com/company/sensetime-group",
+      "wikipedia": "https://en.wikipedia.org/wiki/SenseTime"
+    },
+    "source_tags": ["seed", "hk", "technology"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "GOGOX",
+    "display_name": "GOGOX Holdings Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Logistics", "Freight Platform"],
+    "description": "Same-day logistics and freight platform serving merchants and enterprise delivery users.",
+    "profile_urls": {
+      "website": "https://www.gogox.com",
+      "linkedin": "https://www.linkedin.com/company/gogox"
+    },
+    "source_tags": ["seed", "hk", "logistics"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "SF Holding",
+    "display_name": "SF Holding Co., Ltd.",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Shenzhen",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Logistics", "Supply Chain"],
+    "description": "Express logistics and supply chain services group with cross-border delivery exposure.",
+    "profile_urls": {
+      "website": "https://www.sf-express.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/SF_Express"
+    },
+    "source_tags": ["seed", "gba", "logistics"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "JD Logistics",
+    "display_name": "JD Logistics, Inc.",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Logistics", "E-commerce"],
+    "description": "Supply chain and logistics services provider supporting e-commerce and enterprise clients.",
+    "profile_urls": {
+      "website": "https://www.jdl.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/JD_Logistics"
+    },
+    "source_tags": ["seed", "hk", "logistics"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Cainiao",
+    "display_name": "Cainiao Smart Logistics Network Limited",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Hangzhou",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Logistics", "E-commerce"],
+    "description": "Smart logistics network supporting cross-border e-commerce and supply chain services.",
+    "profile_urls": {
+      "website": "https://www.cainiao.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Cainiao"
+    },
+    "source_tags": ["seed", "cross_border", "logistics"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "BYD",
+    "display_name": "BYD Company Limited",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Shenzhen",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Automotive", "Manufacturing"],
+    "description": "Electric vehicle, battery, and manufacturing group with international growth exposure.",
+    "profile_urls": {
+      "website": "https://www.bydglobal.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/BYD_Company"
+    },
+    "source_tags": ["seed", "gba", "manufacturing"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Xpeng",
+    "display_name": "XPeng Inc.",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Guangzhou",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Automotive", "Technology"],
+    "description": "Electric vehicle company with smart mobility technology and overseas market exposure.",
+    "profile_urls": {
+      "website": "https://www.xpeng.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/XPeng"
+    },
+    "source_tags": ["seed", "gba", "automotive"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "GAC Group",
+    "display_name": "Guangzhou Automobile Group Co., Ltd.",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Guangzhou",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Automotive", "Manufacturing"],
+    "description": "Automotive manufacturing group based in Guangzhou with electric vehicle and export opportunities.",
+    "profile_urls": {
+      "website": "https://www.gac.com.cn",
+      "wikipedia": "https://en.wikipedia.org/wiki/GAC_Group"
+    },
+    "source_tags": ["seed", "gba", "manufacturing"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Tencent",
+    "display_name": "Tencent Holdings Limited",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Shenzhen",
+    "segments": ["fintech", "cross_border"],
+    "industries": ["Internet", "Digital Payments"],
+    "description": "Internet and technology group with payments, cloud, gaming, and enterprise service activities.",
+    "profile_urls": {
+      "website": "https://www.tencent.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Tencent"
+    },
+    "source_tags": ["seed", "gba", "technology"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Meituan",
+    "display_name": "Meituan",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Beijing",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Local Services", "E-commerce"],
+    "description": "Local services and commerce platform with merchant ecosystem and transaction banking relevance.",
+    "profile_urls": {
+      "website": "https://about.meituan.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Meituan"
+    },
+    "source_tags": ["seed", "platform", "merchant"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Trip.com Group",
+    "display_name": "Trip.com Group Limited",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Shanghai",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Travel Tech", "E-commerce"],
+    "description": "Online travel services group with cross-border travel, merchant, and settlement flows.",
+    "profile_urls": {
+      "website": "https://group.trip.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Trip.com_Group"
+    },
+    "source_tags": ["seed", "travel", "cross_border"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "H World Group",
+    "display_name": "H World Group Limited",
+    "country": "China",
+    "region": "Greater Bay Area",
+    "city": "Shanghai",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Hospitality", "Travel"],
+    "description": "Hotel group with travel recovery, merchant acceptance, and treasury management relevance.",
+    "profile_urls": {
+      "website": "https://ir.hworld.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Huazhu_Hotels_Group"
+    },
+    "source_tags": ["seed", "travel", "hospitality"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Sino Biopharmaceutical",
+    "display_name": "Sino Biopharmaceutical Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Healthcare", "Pharmaceuticals"],
+    "description": "Pharmaceutical group with listed-company financing and healthcare sector relevance.",
+    "profile_urls": {
+      "website": "https://www.sinobiopharm.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Sino_Biopharmaceutical"
+    },
+    "source_tags": ["seed", "hk", "healthcare"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Wuxi Biologics",
+    "display_name": "WuXi Biologics (Cayman) Inc.",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Healthcare", "Biotechnology"],
+    "description": "Biologics contract research, development, and manufacturing services company.",
+    "profile_urls": {
+      "website": "https://www.wuxibiologics.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/WuXi_Biologics"
+    },
+    "source_tags": ["seed", "hk", "healthcare"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Henderson Land",
+    "display_name": "Henderson Land Development Company Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Property", "Real Estate"],
+    "description": "Hong Kong property group with financing, treasury, and commercial real estate relevance.",
+    "profile_urls": {
+      "website": "https://www.hld.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Henderson_Land_Development"
+    },
+    "source_tags": ["seed", "hk", "property"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "New World Development",
+    "display_name": "New World Development Company Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Property", "Infrastructure"],
+    "description": "Hong Kong property and infrastructure group with financing and portfolio monitoring relevance.",
+    "profile_urls": {
+      "website": "https://www.nwd.com.hk",
+      "wikipedia": "https://en.wikipedia.org/wiki/New_World_Development"
+    },
+    "source_tags": ["seed", "hk", "property"],
+    "seed_source": "manual_seed_v2"
+  },
+  {
+    "name": "Sun Hung Kai Properties",
+    "display_name": "Sun Hung Kai Properties Limited",
+    "country": "China",
+    "region": "Hong Kong",
+    "city": "Hong Kong",
+    "segments": ["sme", "cross_border"],
+    "industries": ["Property", "Real Estate"],
+    "description": "Hong Kong property developer and investor with treasury, lending, and portfolio monitoring relevance.",
+    "profile_urls": {
+      "website": "https://www.shkp.com",
+      "wikipedia": "https://en.wikipedia.org/wiki/Sun_Hung_Kai_Properties"
+    },
+    "source_tags": ["seed", "hk", "property"],
+    "seed_source": "manual_seed_v2"
   }
 ]
