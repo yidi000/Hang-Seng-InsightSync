@@ -893,6 +893,19 @@ function optionList(values, selected) {
   ).join("");
 }
 
+function filterSelect(id, label, values, selected, iconName = "filter") {
+  const selectedLabel = selected === "all" ? "All" : selected;
+  return `
+    <label class="select-button">
+      ${icon(iconName, "button-icon")}
+      <span>${escapeHtml(label)}:</span>
+      <strong>${escapeHtml(selectedLabel || "All")}</strong>
+      <select id="${escapeHtml(id)}">${optionList(values, selected)}</select>
+      ${icon("chevron", "select-chevron")}
+    </label>
+  `;
+}
+
 function unique(values) {
   return Array.from(new Set(values.filter(Boolean))).sort();
 }
@@ -964,8 +977,8 @@ function renderProspects() {
         ${icon("search")}
         <input id="prospect-search" value="${escapeHtml(state.search)}" placeholder="Search company profiles..." />
       </div>
-      <select id="industry-filter">${optionList(industries, state.industryFilter)}</select>
-      <select id="region-filter">${optionList(regions, state.regionFilter)}</select>
+      ${filterSelect("industry-filter", "Industry", industries, state.industryFilter, "filter")}
+      ${filterSelect("region-filter", "Region", regions, state.regionFilter, "globe")}
       <button class="button outline" id="clear-filters">${icon("filter", "button-icon")} Clear</button>
       <span class="toolbar-spacer"></span>
       <span class="section-note">${items.length} company profiles / ${state.backendOnline ? "live intelligence" : "sample data"}</span>
@@ -1014,8 +1027,8 @@ function renderCompanies() {
         ${icon("search")}
         <input id="company-search" value="${escapeHtml(state.search)}" placeholder="Search company, source, region, industry, or profile text" />
       </div>
-      <select id="industry-filter">${optionList(industries, state.industryFilter)}</select>
-      <select id="region-filter">${optionList(regions, state.regionFilter)}</select>
+      ${filterSelect("industry-filter", "Industry", industries, state.industryFilter, "filter")}
+      ${filterSelect("region-filter", "Region", regions, state.regionFilter, "globe")}
       <button class="button outline" id="clear-filters">${icon("filter", "button-icon")} Clear</button>
       <span class="toolbar-spacer"></span>
       <span class="section-note">${items.length} of ${allCompanies.length} companies</span>
@@ -1125,7 +1138,7 @@ function renderSignals() {
         ${icon("search")}
         <input id="signal-search" value="${escapeHtml(state.search)}" placeholder="Search signals..." />
       </div>
-      <select id="signal-type-filter">${optionList(types, state.signalTypeFilter)}</select>
+      ${filterSelect("signal-type-filter", "Type", types, state.signalTypeFilter, "file")}
       <button class="button outline" id="clear-filters">${icon("filter", "button-icon")} Clear</button>
       <span class="toolbar-spacer"></span>
       <span class="section-note">${items.length} actionable signals / ${state.backendOnline ? "live intelligence" : "sample data"}</span>

@@ -44,7 +44,9 @@
   --sidebar-primary: #5ca85c;
   --radius: 6px;
   --shadow-sm: 0 1px 2px rgb(15 23 42 / 5%);
-  --shadow-md: 0 8px 20px rgb(15 23 42 / 8%);
+  --shadow-md: 0 8px 18px rgb(15 23 42 / 7%);
+  --ring: rgb(68 128 63 / 34%);
+  --card-hover: rgb(68 128 63 / 5%);
   color-scheme: light;
 }
 
@@ -65,6 +67,10 @@ body {
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(68 128 63 / 18%);
 }
 
 button,
@@ -138,7 +144,7 @@ svg {
 .brand-name {
   color: #f9fbf7;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -215,7 +221,7 @@ svg {
 .nav-item strong {
   color: inherit;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.25;
 }
 
@@ -246,13 +252,13 @@ svg {
   background: var(--sidebar-accent);
   color: #f8faf5;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .sidebar-footer strong {
   display: block;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -281,6 +287,7 @@ svg {
   border-bottom: 1px solid var(--border);
   background: var(--card);
   padding: 0 24px;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 2%);
 }
 
 .topbar-title {
@@ -291,7 +298,7 @@ svg {
   margin: 0;
   color: var(--foreground);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -328,7 +335,7 @@ svg {
 .connection-pill strong {
   color: var(--foreground);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.1;
 }
 
@@ -376,7 +383,7 @@ svg {
   font-weight: 500;
   line-height: 1;
   text-decoration: none;
-  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease;
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, transform .14s ease;
 }
 
 .button:hover {
@@ -392,6 +399,18 @@ svg {
 
 .button.primary:hover {
   background: var(--primary-hover);
+}
+
+.button:focus-visible,
+.nav-item:focus-visible,
+.metric-card:focus-visible,
+.chip:focus-visible,
+.bar-row:focus-visible,
+.focus-score:focus-visible,
+.copilot-prompt-card:focus-visible,
+.floating-copilot:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 .button.outline {
@@ -475,7 +494,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: rgb(68 128 63 / 65%);
-  box-shadow: 0 0 0 3px rgb(68 128 63 / 13%);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 .api-controls input {
@@ -500,7 +519,7 @@ textarea:focus {
   margin: 0;
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.25;
 }
 
@@ -545,6 +564,14 @@ textarea:focus {
   box-shadow: var(--shadow-sm);
 }
 
+.card,
+.panel,
+.metric-card,
+.prospect-card,
+.signal-card {
+  transition: border-color .14s ease, background .14s ease, box-shadow .14s ease;
+}
+
 .panel {
   overflow: hidden;
 }
@@ -563,7 +590,7 @@ textarea:focus {
   margin: 0;
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.25;
 }
 
@@ -584,13 +611,12 @@ textarea:focus {
   min-height: 124px;
   padding: 16px;
   text-align: left;
-  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease;
 }
 
 .metric-card:hover {
   border-color: rgb(68 128 63 / 35%);
-  background: rgb(68 128 63 / 4%);
-  box-shadow: var(--shadow-md);
+  background: var(--card-hover);
+  box-shadow: var(--shadow-sm);
 }
 
 .metric-top {
@@ -651,7 +677,7 @@ textarea:focus {
   margin-top: 12px;
   color: var(--foreground);
   font-size: 24px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -682,7 +708,7 @@ textarea:focus {
   max-width: 760px;
   color: var(--foreground);
   font-size: 24px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.18;
 }
 
@@ -707,7 +733,7 @@ textarea:focus {
 }
 
 .focus-score:hover {
-  background: #12341d;
+  background: rgb(27 62 38 / 94%);
 }
 
 .focus-score span,
@@ -722,7 +748,7 @@ textarea:focus {
   margin: 8px 0;
   color: #ffffff;
   font-size: 48px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -733,11 +759,11 @@ textarea:focus {
   min-height: 22px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--card);
+  background: rgb(245 243 239 / 50%);
   color: var(--muted-foreground);
   padding: 2px 8px;
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -832,7 +858,7 @@ textarea:focus {
 .active-filters > span {
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .active-filters .button {
@@ -865,7 +891,8 @@ textarea:focus {
 }
 
 .toolbar input,
-.toolbar select {
+.toolbar select,
+.select-button {
   height: 36px;
   color: var(--foreground);
   font-size: 13px;
@@ -876,9 +903,59 @@ textarea:focus {
   padding: 0 12px 0 36px;
 }
 
-.toolbar select {
-  min-width: 150px;
-  padding: 0 34px 0 10px;
+.select-button {
+  position: relative;
+  display: inline-flex;
+  min-width: 164px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0 30px 0 11px;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.select-button:hover {
+  background: var(--muted);
+  border-color: #dcd5ce;
+}
+
+.select-button:focus-within {
+  border-color: rgb(68 128 63 / 65%);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.select-button > span {
+  color: var(--muted-foreground);
+}
+
+.select-button > strong {
+  max-width: 128px;
+  overflow: hidden;
+  color: var(--foreground);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-button select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.select-chevron {
+  position: absolute;
+  right: 9px;
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  transform: rotate(90deg);
 }
 
 .toolbar-spacer {
@@ -894,18 +971,22 @@ table {
   border-collapse: collapse;
 }
 
+thead tr {
+  background: rgb(245 243 239 / 45%);
+}
+
 th,
 td {
   border-bottom: 1px solid var(--border);
-  padding: 13px 16px;
+  padding: 12px 16px;
   text-align: left;
   vertical-align: top;
 }
 
 th {
   color: var(--muted-foreground);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -920,13 +1001,13 @@ tr:last-child td {
 }
 
 tr:hover td {
-  background: rgb(68 128 63 / 3%);
+  background: var(--card-hover);
 }
 
 .company-name {
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -953,19 +1034,19 @@ tr:hover td {
 
 .list-card {
   padding: 14px;
-  transition: border-color .14s ease, box-shadow .14s ease;
 }
 
 .list-card:hover {
   border-color: rgb(68 128 63 / 26%);
-  box-shadow: var(--shadow-md);
+  background: rgb(245 243 239 / 28%);
+  box-shadow: var(--shadow-sm);
 }
 
 .list-card h3 {
   margin: 8px 0 0;
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -983,12 +1064,11 @@ tr:hover td {
   border-radius: var(--radius);
   background: var(--card);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow .14s ease, border-color .14s ease;
 }
 
 .prospect-card:hover {
   border-color: rgb(68 128 63 / 25%);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .prospect-rail {
@@ -1050,7 +1130,7 @@ tr:hover td {
   margin-top: 14px;
   border: 1px solid rgb(68 128 63 / 20%);
   border-radius: 8px;
-  background: rgb(68 128 63 / 6%);
+  background: rgb(68 128 63 / 5%);
   padding: 12px;
 }
 
@@ -1058,7 +1138,7 @@ tr:hover td {
   display: block;
   color: var(--primary);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.25;
 }
 
@@ -1077,12 +1157,11 @@ tr:hover td {
   background: var(--card);
   padding: 16px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow .14s ease, border-color .14s ease;
 }
 
 .signal-card:hover {
   border-color: rgb(68 128 63 / 24%);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .signal-icon {
@@ -1140,7 +1219,7 @@ tr:hover td {
   margin: 0;
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -1153,6 +1232,22 @@ tr:hover td {
 
 .chart-card {
   min-height: 246px;
+}
+
+.chart-card .panel-header {
+  min-height: auto;
+  border-bottom: 0;
+  padding: 16px 16px 4px;
+}
+
+.chart-card .panel-title {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chart-card .panel-body {
+  padding: 8px 16px 16px;
 }
 
 .bar-row {
@@ -1285,7 +1380,13 @@ tr:hover td {
   color: var(--muted-foreground);
   padding: 0 12px;
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
+  transition: background .14s ease, border-color .14s ease, color .14s ease;
+}
+
+.chip:hover {
+  background: var(--muted);
+  color: var(--foreground);
 }
 
 .chip.active {
@@ -1315,7 +1416,7 @@ tr:hover td {
   margin: 0;
   color: var(--foreground);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -1392,7 +1493,7 @@ tr:hover td {
   margin: 0;
   color: var(--foreground);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -1405,7 +1506,7 @@ tr:hover td {
 
 .today-action strong {
   color: var(--foreground);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .detail-side-metrics {
@@ -1443,7 +1544,7 @@ tr:hover td {
   margin-top: 6px;
   color: var(--foreground);
   font-size: 26px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -1502,7 +1603,7 @@ tr:hover td {
   margin-top: 6px;
   color: var(--foreground);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -1535,7 +1636,7 @@ tr:hover td {
   margin: 0;
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -1567,14 +1668,14 @@ tr:hover td {
 .context-row strong {
   color: var(--foreground);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   text-align: right;
 }
 
 .risk-note {
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgb(244 241 237 / 55%);
+  background: rgb(245 243 239 / 55%);
   color: var(--muted-foreground);
   padding: 10px 12px;
   font-size: 12px;
@@ -1625,7 +1726,7 @@ tr:hover td {
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--card);
-  box-shadow: -20px 0 50px rgb(15 23 42 / 18%);
+  box-shadow: -20px 0 46px rgb(15 23 42 / 16%);
   transform: translateX(100%);
   transition: transform .24s ease;
 }
@@ -1661,7 +1762,7 @@ tr:hover td {
 .copilot-panel-header h2 {
   margin: 0;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .copilot-panel-header p {
@@ -1720,7 +1821,7 @@ tr:hover td {
 .copilot-empty h3 {
   margin: 16px 0 6px;
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .copilot-empty p {
@@ -1750,9 +1851,11 @@ tr:hover td {
   color: var(--foreground);
   padding: 12px;
   text-align: left;
+  transition: background .14s ease, border-color .14s ease;
 }
 
 .copilot-prompt-card:hover {
+  border-color: rgb(68 128 63 / 22%);
   background: rgb(68 128 63 / 5%);
 }
 
@@ -1787,7 +1890,7 @@ tr:hover td {
 
 .message.assistant {
   justify-self: start;
-  background: rgb(244 241 237 / 45%);
+  background: rgb(245 243 239 / 55%);
 }
 
 .message-label {
@@ -1797,7 +1900,7 @@ tr:hover td {
   margin-bottom: 7px;
   color: var(--primary);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .message-label svg {
@@ -1868,12 +1971,14 @@ tr:hover td {
   gap: 8px;
   margin-bottom: 16px;
   padding: 10px 12px;
+  background: rgb(245 243 239 / 55%);
 }
 
 .empty-state,
 .loading-card {
   padding: 24px;
   color: var(--muted-foreground);
+  text-align: center;
 }
 
 .toast {
