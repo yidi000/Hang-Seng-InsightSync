@@ -252,6 +252,7 @@ const state = {
   industryFilter: "all",
   regionFilter: "all",
   signalTypeFilter: "all",
+  priorityFilter: "all",
   chat: [],
   sampleToastShown: false,
 };
@@ -437,9 +438,18 @@ function getFilteredProspects() {
       const industries = (item.industries || []).join(" ").toLowerCase();
       const region = String(item.region || "").toLowerCase();
       const tags = (item.focus_tags || []).join(" ").toLowerCase();
+      const products = (item.recommended_product_themes || []).join(" ").toLowerCase();
       if (q && !`${name} ${industries} ${region} ${tags}`.includes(q)) return false;
+      if (state.priorityFilter === "high" && priorityClass(item.priority_level) !== "high") return false;
       if (state.industryFilter !== "all" && !(item.industries || []).includes(state.industryFilter)) return false;
       if (state.regionFilter !== "all" && item.region !== state.regionFilter) return false;
+      if (
+        state.signalTypeFilter !== "all" &&
+        !`${tags} ${products}`.includes(String(state.signalTypeFilter).toLowerCase()) &&
+        !linkedSignalsForProspect(item).some((signal) => signalMatchesFilter(signal, state.signalTypeFilter))
+      ) {
+        return false;
+      }
       return true;
     })
     .sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0));
@@ -468,9 +478,10 @@ function getFilteredSignals() {
 function metricCard(label, value, detail, options = {}) {
   const tone = options.tone || "";
   const route = options.route ? ` data-route="${escapeHtml(options.route)}"` : "";
+  const filter = options.filter ? ` data-summary-filter="${escapeHtml(options.filter)}"` : "";
   const tag = options.route ? "button" : "div";
   return `
-    <${tag} class="metric-card ${escapeHtml(tone)}"${route}>
+    <${tag} class="metric-card ${escapeHtml(tone)}"${route}${filter}>
       <div class="metric-top">
         <span class="metric-icon">${icon(options.icon || "users")}</span>
         ${options.route ? icon("chevron", "chevron-icon") : ""}
@@ -482,20 +493,87 @@ function metricCard(label, value, detail, options = {}) {
   `;
 }
 
-function bars(items = [], labelKey = "name") {
+function bars(items = [], options = {}) {
   const max = Math.max(1, ...items.map((item) => item.count || item.value || 0));
   if (!items.length) return `<div class="empty-state">No distribution data available yet.</div>`;
-  return items.map((item) => {
+  return items.map((item, index) => {
     const count = item.count ?? item.value ?? 0;
     const width = Math.max(3, Math.round((count / max) * 100));
+    const label = item[options.labelKey || "name"] || item.name || item.value || "Unknown";
+    const isActive = options.activeValue && label === options.activeValue;
+    const dataAttrs = options.filterType
+      ? ` data-chart-filter="${escapeHtml(options.filterType)}" data-filter-value="${escapeHtml(label)}"`
+      : "";
     return `
-      <div class="bar-row">
-        <span>${escapeHtml(item[labelKey] || item.name || item.value || "Unknown")}</span>
+      <button class="bar-row ${isActive ? "active" : ""}"${dataAttrs} type="button">
+        <span>${escapeHtml(label)}</span>
         <span class="bar-track"><span class="bar-fill" style="width:${width}%"></span></span>
         <strong>${escapeHtml(count)}</strong>
-      </div>
+      </button>
     `;
   }).join("");
+}
+
+function polarToCartesian(cx, cy, radius, angleInDegrees) {
+  const angleInRadians = (angleInDegrees - 90) * Math.PI / 180;
+  return {
+    x: cx + (radius * Math.cos(angleInRadians)),
+    y: cy + (radius * Math.sin(angleInRadians)),
+  };
+}
+
+function donutSegmentPath(cx, cy, radius, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, radius, endAngle);
+  const end = polarToCartesian(cx, cy, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return [
+    "M", start.x, start.y,
+    "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y,
+  ].join(" ");
+}
+
+function renderDonut(items = [], activeValue = "all") {
+  const total = items.reduce((sum, item) => sum + (item.count || item.value || 0), 0);
+  if (!items.length || total <= 0) return `<div class="empty-state">No region data available.</div>`;
+  const colors = ["#44803f", "#c85731", "#3d7f9d", "#a27b22", "#7862a8"];
+  let angle = 0;
+  const segments = items.map((item, index) => {
+    const value = item.count ?? item.value ?? 0;
+    const sweep = Math.min((value / total) * 360, 359.99);
+    const start = angle;
+    const end = angle + sweep;
+    angle = end;
+    const label = item.name || item.value || "Unknown";
+    return `
+      <path
+        class="donut-segment ${activeValue === label ? "active" : ""}"
+        d="${donutSegmentPath(80, 80, 58, start, end)}"
+        stroke="${colors[index % colors.length]}"
+        data-chart-filter="region"
+        data-filter-value="${escapeHtml(label)}"
+      ></path>
+    `;
+  }).join("");
+
+  const legend = items.slice(0, 4).map((item, index) => {
+    const label = item.name || item.value || "Unknown";
+    return `
+      <button class="donut-legend ${activeValue === label ? "active" : ""}" data-chart-filter="region" data-filter-value="${escapeHtml(label)}" type="button">
+        <span style="background:${colors[index % colors.length]}"></span>
+        ${escapeHtml(label)}
+      </button>
+    `;
+  }).join("");
+
+  return `
+    <div class="donut-wrap">
+      <svg class="donut-chart" viewBox="0 0 160 160" role="img" aria-label="Region distribution">
+        <circle cx="80" cy="80" r="58"></circle>
+        ${segments}
+      </svg>
+      <div class="donut-legend-row">${legend}</div>
+    </div>
+  `;
 }
 
 function distribution(items, getter) {
@@ -527,6 +605,14 @@ function signalTypeClass(value) {
   return "signal";
 }
 
+function signalMatchesFilter(signal, filterValue) {
+  if (!filterValue || filterValue === "all") return true;
+  const filter = String(filterValue).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const raw = String(signal.signal_type || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const label = signalTypeLabel(signal.signal_type).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return raw === filter || label === filter || raw.includes(filter) || label.includes(filter);
+}
+
 function priorityTier(value) {
   const normalized = priorityClass(value);
   if (normalized === "high") return "A";
@@ -548,14 +634,91 @@ function linkedSignalsForProspect(prospect) {
   return asList(state.data.signals).filter((signal) => signalBelongsToProspect(signal, prospect));
 }
 
+function setOverviewFilter(type, value) {
+  if (type === "priority") {
+    state.priorityFilter = value || "all";
+    state.industryFilter = "all";
+    state.regionFilter = "all";
+    state.signalTypeFilter = "all";
+  }
+  if (type === "industry") {
+    state.industryFilter = value || "all";
+    state.priorityFilter = "all";
+  }
+  if (type === "region") {
+    state.regionFilter = value || "all";
+    state.priorityFilter = "all";
+  }
+  if (type === "signal") {
+    state.signalTypeFilter = value || "all";
+    state.priorityFilter = "all";
+  }
+}
+
+function hasOverviewFilters() {
+  return (
+    state.priorityFilter !== "all" ||
+    state.industryFilter !== "all" ||
+    state.regionFilter !== "all" ||
+    state.signalTypeFilter !== "all"
+  );
+}
+
+function renderActiveFilters() {
+  if (!hasOverviewFilters()) return "";
+  const filters = [
+    state.priorityFilter !== "all" ? { type: "priority", label: "Priority: High", tone: "risk" } : null,
+    state.industryFilter !== "all" ? { type: "industry", label: `Industry: ${state.industryFilter}`, tone: "high" } : null,
+    state.regionFilter !== "all" ? { type: "region", label: `Region: ${state.regionFilter}`, tone: "blue" } : null,
+    state.signalTypeFilter !== "all" ? { type: "signal", label: `Signal: ${signalTypeLabel(state.signalTypeFilter)}`, tone: "medium" } : null,
+  ].filter(Boolean);
+
+  return `
+    <div class="active-filters" id="prospect-filter-anchor">
+      ${icon("filter")}
+      <span>Active filters:</span>
+      <div class="wrap">
+        ${filters.map((filter) => `
+          <button class="badge ${escapeHtml(filter.tone)} removable" data-clear-filter="${escapeHtml(filter.type)}">
+            ${escapeHtml(filter.label)}
+            <span aria-hidden="true">x</span>
+          </button>
+        `).join("")}
+      </div>
+      <button class="button ghost small" id="clear-filters">Clear all</button>
+    </div>
+  `;
+}
+
+function filteredOverviewProspects(items) {
+  return items
+    .filter((item) => {
+      if (state.priorityFilter === "high" && priorityClass(item.priority_level) !== "high") return false;
+      if (state.industryFilter !== "all" && !(item.industries || []).includes(state.industryFilter)) return false;
+      if (state.regionFilter !== "all" && item.region !== state.regionFilter) return false;
+      if (
+        state.signalTypeFilter !== "all" &&
+        !(item.focus_tags || []).some((tag) => String(tag).toLowerCase().includes(String(state.signalTypeFilter).toLowerCase())) &&
+        !(item.recommended_product_themes || []).some((tag) => String(tag).toLowerCase().includes(String(state.signalTypeFilter).toLowerCase())) &&
+        !linkedSignalsForProspect(item).some((signal) => signalMatchesFilter(signal, state.signalTypeFilter))
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0));
+}
+
 function renderOverview() {
   const summary = state.data.summary || mockData.summary;
   const market = state.data.marketOverview || mockData.marketOverview;
   const allProspects = asList(state.data.prospects);
   const allSignals = asList(state.data.signals);
-  const topProspects = asList(state.data.priorityProspects).length
+  const unfilteredTopProspects = asList(state.data.priorityProspects).length
     ? asList(state.data.priorityProspects)
     : getFilteredProspects().slice(0, 5);
+  const filteredProspects = filteredOverviewProspects(allProspects);
+  const topProspects = hasOverviewFilters() ? filteredProspects.slice(0, 8) : unfilteredTopProspects.slice(0, 8);
   const triggerSignals = asList(state.data.triggerSignals).length
     ? asList(state.data.triggerSignals)
     : asList(state.data.signals).slice(0, 5);
@@ -575,10 +738,10 @@ function renderOverview() {
         <span class="section-note">${icon("clock")} ${state.backendOnline ? "Live intelligence" : "Sample data"}</span>
       </div>
       <div class="grid metrics">
-        ${metricCard("Company profiles", summary.lead_pool ?? allProspects.length, "Current prospect universe", { icon: "users", route: "prospects" })}
-        ${metricCard("High-priority companies", summary.high_priority, "Prospects requiring RM review", { icon: "zap", tone: "danger", route: "prospects" })}
-        ${metricCard("Cross-border opportunities", summary.cross_border, "Signals and focus tags", { icon: "globe", tone: "blue", route: "prospects" })}
-        ${metricCard("Financing-linked signals", summary.financing_signals, "Liquidity and funding themes", { icon: "trending", tone: "orange", route: "signals" })}
+        ${metricCard("Company profiles", summary.lead_pool ?? allProspects.length, "Current prospect universe", { icon: "users", route: "overview", filter: "all" })}
+        ${metricCard("High-priority companies", summary.high_priority, "Prospects requiring RM review", { icon: "zap", tone: "danger", route: "overview", filter: "high" })}
+        ${metricCard("Cross-border opportunities", summary.cross_border, "Signals and focus tags", { icon: "globe", tone: "blue", route: "overview", filter: "crossborder" })}
+        ${metricCard("Financing-linked signals", summary.financing_signals, "Liquidity and funding themes", { icon: "trending", tone: "orange", route: "overview", filter: "financing" })}
       </div>
     </section>
 
@@ -613,31 +776,33 @@ function renderOverview() {
           <div class="panel-header">
             <h3 class="panel-title">By Industry</h3>
           </div>
-          <div class="panel-body">${bars(market.industry_breakdown)}</div>
+          <div class="panel-body">${bars(market.industry_breakdown, { filterType: "industry", activeValue: state.industryFilter !== "all" ? state.industryFilter : "" })}</div>
         </article>
         <article class="panel chart-card">
           <div class="panel-header">
             <h3 class="panel-title">By Region</h3>
           </div>
           <div class="panel-body">
-            <div class="mini-donut" aria-hidden="true"></div>
-            ${bars(market.region_breakdown)}
+            ${renderDonut(market.region_breakdown, state.regionFilter)}
+            ${bars(market.region_breakdown, { filterType: "region", activeValue: state.regionFilter !== "all" ? state.regionFilter : "" })}
           </div>
         </article>
         <article class="panel chart-card">
           <div class="panel-header">
             <h3 class="panel-title">By Signal Type</h3>
           </div>
-          <div class="panel-body">${bars(signalBreakdown)}</div>
+          <div class="panel-body">${bars(signalBreakdown, { filterType: "signal", activeValue: state.signalTypeFilter !== "all" ? state.signalTypeFilter : "" })}</div>
         </article>
       </div>
     </section>
+
+    ${renderActiveFilters()}
 
     <section class="panel section">
       <div class="panel-header">
         <div>
           <h2 class="panel-title">Top Priority Company Profiles</h2>
-          <p class="panel-subtitle">Company-first intelligence with evidence-backed engagement angles.</p>
+          <p class="panel-subtitle">Showing top ${escapeHtml(Math.min(topProspects.length, 8))} of ${escapeHtml(filteredProspects.length)} matching companies.</p>
         </div>
         <button class="button small" data-route="prospects">View all</button>
       </div>
@@ -646,15 +811,15 @@ function renderOverview() {
           <thead>
             <tr>
               <th>Company</th>
-              <th>Tier</th>
-              <th>Evidence</th>
-              <th>RM Conversation Focus</th>
-              <th>Next step</th>
+              <th>Priority assessment</th>
+              <th>Trigger evidence</th>
+              <th>Recommended approach</th>
+              <th>Relationship status</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            ${topProspects.map((item) => `
+            ${topProspects.slice(0, 8).map((item) => `
               <tr>
                 <td>
                   <div class="company-name">${escapeHtml(prospectName(item))}</div>
@@ -662,14 +827,19 @@ function renderOverview() {
                 </td>
                 <td>
                   <span class="badge ${escapeHtml(priorityTier(item.priority_level).toLowerCase())}">Tier ${escapeHtml(priorityTier(item.priority_level))}</span>
-                  <div class="muted">Score ${escapeHtml(item.priority_score ?? "N/A")}</div>
+                  <div class="muted">Priority score ${escapeHtml(item.priority_score ?? "N/A")}</div>
+                  <div class="muted">Evidence ${escapeHtml(item.evidence_confidence_score ?? "N/A")}</div>
                 </td>
                 <td>${formatTags(item.focus_tags || [], 3)}</td>
                 <td>${escapeHtml((item.why_prioritized || [])[0] || item.recommended_next_step || "Review linked evidence.")}</td>
-                <td>${escapeHtml(item.recommended_next_step || "Prepare evidence-backed outreach.")}</td>
+                <td>
+                  <div>${escapeHtml(item.workflow_state?.stage || "New prospect")}</div>
+                  <div class="muted">Owner: ${escapeHtml(item.workflow_state?.owner || "Unassigned")}</div>
+                  <div class="muted">${escapeHtml(item.recommended_next_step || "Prepare evidence-backed outreach.")}</div>
+                </td>
                 <td><button class="button small primary" data-open-prospect="${escapeHtml(prospectId(item))}">Open brief</button></td>
               </tr>
-            `).join("") || `<tr><td colspan="6"><div class="empty-state">No priority prospects available.</div></td></tr>`}
+            `).join("") || `<tr><td colspan="6"><div class="empty-state">No company profiles match filters.</div></td></tr>`}
           </tbody>
         </table>
       </div>
@@ -1296,7 +1466,7 @@ function render() {
   }
 
   const titleMap = {
-    overview: ["Dashboard", "Actionable intelligence from reports, signals, and market data."],
+    overview: ["Prospecting Intelligence", "Company-first intelligence with engagement angles"],
     prospects: ["Priority Prospects", "Evidence-backed company opportunities for RM review."],
     signals: ["Trigger Signals", "Market, policy, financing, and risk signals linked to companies."],
     companies: ["Companies", "Company fact layer, profile coverage, and linked activity."],
@@ -1385,11 +1555,59 @@ async function askCopilot(question, prospectId) {
 }
 
 document.addEventListener("click", (event) => {
+  const summaryFilter = event.target.closest("[data-summary-filter]");
+  if (summaryFilter) {
+    const value = summaryFilter.dataset.summaryFilter;
+    state.route = "overview";
+    state.search = "";
+    if (value === "all") {
+      state.priorityFilter = "all";
+      state.industryFilter = "all";
+      state.regionFilter = "all";
+      state.signalTypeFilter = "all";
+    } else if (value === "high") {
+      setOverviewFilter("priority", "high");
+    } else if (value === "crossborder") {
+      setOverviewFilter("signal", "Cross-border");
+    } else if (value === "financing") {
+      setOverviewFilter("signal", "Financing");
+    }
+    setHash("overview");
+    render();
+    document.querySelector("#prospect-filter-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const chartFilter = event.target.closest("[data-chart-filter]");
+  if (chartFilter) {
+    const type = chartFilter.dataset.chartFilter;
+    const value = chartFilter.dataset.filterValue;
+    const current = type === "industry"
+      ? state.industryFilter
+      : type === "region"
+        ? state.regionFilter
+        : state.signalTypeFilter;
+    setOverviewFilter(type, current === value ? "all" : value);
+    render();
+    document.querySelector("#prospect-filter-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const clearFilter = event.target.closest("[data-clear-filter]");
+  if (clearFilter) {
+    setOverviewFilter(clearFilter.dataset.clearFilter, "all");
+    render();
+    return;
+  }
+
   const routeButton = event.target.closest("[data-route]");
   if (routeButton) {
     state.route = routeButton.dataset.route;
     state.selectedProspectId = null;
     state.search = "";
+    if (state.route !== "overview") {
+      state.priorityFilter = "all";
+    }
     setHash(state.route);
     render();
     return;
@@ -1511,6 +1729,7 @@ document.addEventListener("click", (event) => {
     state.industryFilter = "all";
     state.regionFilter = "all";
     state.signalTypeFilter = "all";
+    state.priorityFilter = "all";
     render();
   }
 });

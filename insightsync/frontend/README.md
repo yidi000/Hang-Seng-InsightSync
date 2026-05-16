@@ -51,6 +51,10 @@ The app consumes the FastAPI contract documented in:
 insightsync/docs/frontend-api-guide.md
 ```
 
+The static build includes a local Geist latin font asset under `assets/fonts/`
+so the typography matches the RM Insight Pro reference UI without requiring a
+runtime Google Fonts request.
+
 ## Notes
 
 The app includes a small mock fallback dataset so frontend work can continue when
