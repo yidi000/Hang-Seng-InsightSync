@@ -28,18 +28,50 @@ export interface BackendWorkflowState {
 }
 
 interface BackendLinkageQuality {
+  linked_evidence_count?: number;
+  scoreable_evidence_count?: number;
+  direct_evidence_count?: number;
+  strong_linkage_count?: number;
+  context_only_count?: number;
   direct_evidence_ratio?: number;
   scoreable_evidence_ratio?: number;
-  context_only_count?: number;
   context_only_evidence_count?: number;
   linkage_type_counts?: Record<string, number>;
 }
 
 interface BackendScoreBreakdown {
   scorecard_version?: string;
+  scoring_method?: string;
   calibration_status?: string;
+  llm_score_assignment?: string;
+  priority_formula?: string;
   score_inputs?: Record<string, number>;
+  opportunity_components?: {
+    name: string;
+    category: string;
+    points: number;
+    detail: string;
+  }[];
+  risk_components?: {
+    name: string;
+    category: string;
+    points: number;
+    detail: string;
+  }[];
+  priority_components?: {
+    name: string;
+    category: string;
+    points: number;
+    detail: string;
+  }[];
   linkage_quality?: BackendLinkageQuality;
+  governance_flags?: {
+    flag_key: string;
+    severity: string;
+    area: string;
+    message: string;
+    suggested_action: string;
+  }[];
 }
 
 export interface BackendProspectSummary {
@@ -173,7 +205,7 @@ function mapWorkflowState(item?: BackendWorkflowState): Prospect["workflowState"
   };
 }
 
-function mapProspect(item: BackendProspectSummary): Prospect {
+export function mapProspect(item: BackendProspectSummary): Prospect {
   const companyName = item.display_name || item.canonical_name || item.company_id;
   const industry = item.industries?.[0] || "Market Intelligence";
   const scoreInputs = item.score_breakdown?.score_inputs;

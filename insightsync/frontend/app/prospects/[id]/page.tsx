@@ -6,10 +6,12 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ClipboardCheck,
   Edit3,
   ExternalLink,
   FileText,
   Globe,
+  ShieldCheck,
   MapPin,
   Sparkles,
   Target,
@@ -31,6 +33,7 @@ import {
   useInsightSyncData,
   type BackendWorkflowState,
 } from "@/lib/api-data";
+import { useProspectDetail } from "@/lib/prospect-detail-data";
 
 const tierColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
@@ -102,6 +105,22 @@ function evidenceExplorerHref(title: string) {
   return `/signals?search=${encodeURIComponent(title)}`;
 }
 
+function formatNumber(value?: number | null): string {
+  if (typeof value !== "number") return "0";
+  return value.toLocaleString("en-HK");
+}
+
+function formatRatio(value?: number | null): string {
+  if (typeof value !== "number") return "N/A";
+  return `${Math.round(value * 100)}%`;
+}
+
+function scoreSeverityClass(severity?: string | null) {
+  if (severity === "high") return "border-destructive/30 bg-destructive/10 text-destructive";
+  if (severity === "medium") return "border-chart-4/30 bg-chart-4/10 text-chart-4";
+  return "border-border bg-muted/40 text-muted-foreground";
+}
+
 export default function ProspectDetailPage({
   params,
 }: {
@@ -110,7 +129,9 @@ export default function ProspectDetailPage({
   const { id } = use(params);
   const decodedId = decodeURIComponent(id);
   const { prospects, triggerSignals, loading } = useInsightSyncData();
+  const detailState = useProspectDetail(decodedId);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotPrompt, setCopilotPrompt] = useState<string | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [draftStage, setDraftStage] = useState("");
   const [draftStatus, setDraftStatus] = useState("not_reviewed");
@@ -121,9 +142,10 @@ export default function ProspectDetailPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingWorkflow, setSavingWorkflow] = useState(false);
 
-  const prospect = prospects.find((p) => p.id === decodedId);
+  const summaryProspect = prospects.find((p) => p.id === decodedId);
+  const prospect = detailState.mappedProspect || summaryProspect;
 
-  if (!prospect && loading) {
+  if (!prospect && (loading || detailState.loading)) {
     return (
       <div className="min-h-screen bg-background">
         <AppSidebar />
@@ -159,6 +181,24 @@ export default function ProspectDetailPage({
     );
   }
 
+  const detail = detailState.detail;
+  const brief = detailState.brief;
+  const evidence = detailState.evidence;
+  const review = detailState.review;
+  const copilot = detailState.copilot;
+  const backendProspect = detail?.prospect;
+  const backendWorkflow = savedWorkflow || detail?.workflow_state;
+  const scoreBreakdown = backendProspect?.score_breakdown;
+  const linkageQuality = scoreBreakdown?.linkage_quality;
+  const governanceFlags = scoreBreakdown?.governance_flags || [];
+  const coverageFlags = evidence?.coverage_flags || detail?.latest_state.coverage_flags;
+  const evidenceSummary = evidence?.evidence_summary || detail?.latest_state.evidence_summary;
+  const parsedDocuments = evidence?.recent_documents || detail?.recent_documents || [];
+  const keyMetrics = evidence?.key_metrics || detail?.key_metrics || [];
+  const keyRiskFactors = evidence?.key_risk_factors || detail?.key_risk_factors || [];
+  const keyBusinessEvents = evidence?.key_business_events || detail?.key_business_events || [];
+  const suggestedQuestions = copilot?.suggested_questions || [];
+
   const relatedSignals = triggerSignals
     .filter((signal) => {
       const signalCompany = normalizeEntityName(signal.company);
@@ -187,7 +227,7 @@ export default function ProspectDetailPage({
     prospect.entryAngle;
   const currentStage =
     draftStage ||
-    savedWorkflow?.stage ||
+    backendWorkflow?.stage ||
     prospect.crm?.relationshipStage ||
     prospect.workflowState?.stage ||
     "new";
@@ -195,7 +235,7 @@ export default function ProspectDetailPage({
   const currentActionStatus =
     draftStatus !== "not_reviewed"
       ? draftStatus
-      : savedWorkflow?.review_status ||
+      : backendWorkflow?.review_status ||
         prospect.workflowState?.reviewStatus ||
         "not_reviewed";
   const topDiscussionPoints = (
@@ -209,22 +249,22 @@ export default function ProspectDetailPage({
   ).slice(0, 3);
   const primaryEvidence = relatedSignals[0] || readableNews[0];
 
-  const latestWorkflowNote = savedWorkflow?.notes || prospect.workflowState?.notes;
+  const latestWorkflowNote = backendWorkflow?.notes || prospect.workflowState?.notes;
 
   const openUpdateDrawer = () => {
-    setDraftStage(savedWorkflow?.stage || prospect.workflowState?.stage || "new");
+    setDraftStage(backendWorkflow?.stage || prospect.workflowState?.stage || "new");
     setDraftStatus(
-      savedWorkflow?.review_status ||
+      backendWorkflow?.review_status ||
         prospect.workflowState?.reviewStatus ||
         "not_reviewed"
     );
     setDraftLastAction(
-      savedWorkflow?.last_action || prospect.workflowState?.lastAction || ""
+      backendWorkflow?.last_action || prospect.workflowState?.lastAction || ""
     );
     setDraftNextAction(
-      savedWorkflow?.next_action || prospect.workflowState?.nextAction || ""
+      backendWorkflow?.next_action || prospect.workflowState?.nextAction || ""
     );
-    setDraftNote(savedWorkflow?.notes || prospect.workflowState?.notes || "");
+    setDraftNote(backendWorkflow?.notes || prospect.workflowState?.notes || "");
     setSaveError(null);
     setUpdateOpen(true);
   };
@@ -235,12 +275,13 @@ export default function ProspectDetailPage({
 
     try {
       const workflow = await updateProspectWorkflow(prospect.id, {
-        owner: savedWorkflow?.owner || prospect.workflowState?.owner || null,
+        owner: backendWorkflow?.owner || prospect.workflowState?.owner || null,
         stage: draftStage || currentStage,
-        status: savedWorkflow?.status || prospect.workflowState?.status || "open",
+        status: backendWorkflow?.status || prospect.workflowState?.status || "open",
         last_action: draftLastAction || null,
         next_action:
           draftNextAction ||
+          backendWorkflow?.next_action ||
           prospect.workflowState?.nextAction ||
           prospect.recommendedNextStep ||
           null,
@@ -287,7 +328,10 @@ export default function ProspectDetailPage({
                 Update RM Notes
               </Button>
               <Button
-                onClick={() => setCopilotOpen(true)}
+                onClick={() => {
+                  setCopilotPrompt(null);
+                  setCopilotOpen(true);
+                }}
                 className="bg-primary hover:bg-primary/90"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
@@ -342,16 +386,33 @@ export default function ProspectDetailPage({
                       Today&apos;s RM action
                     </p>
                     <p className="text-lg font-semibold text-foreground">
-                      {prospect.workflowState?.nextAction ||
+                      {backendWorkflow?.next_action ||
+                        prospect.workflowState?.nextAction ||
+                        brief?.recommended_next_step ||
                         prospect.recommendedNextStep ||
                         "Review linked evidence and prepare client outreach."}
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Start with <span className="font-medium text-foreground">{primaryConversationFocus}</span>.
-                      {primaryEvidence
-                        ? ` The strongest current evidence is "${primaryEvidence.title}".`
-                        : " No direct evidence is linked yet, so review broader signals before outreach."}
+                      {brief?.summary ? (
+                        brief.summary
+                      ) : (
+                        <>
+                          Start with{" "}
+                          <span className="font-medium text-foreground">
+                            {primaryConversationFocus}
+                          </span>
+                          .
+                          {primaryEvidence
+                            ? ` The strongest current evidence is "${primaryEvidence.title}".`
+                            : " No direct evidence is linked yet, so review broader signals before outreach."}
+                        </>
+                      )}
                     </p>
+                    {detailState.partialErrors.review && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        LLM review is not available for this record yet.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -364,20 +425,20 @@ export default function ProspectDetailPage({
                       {prospect.evidenceConfidenceScore ?? "N/A"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {viewableEvidenceCount} RM-readable records
+                      {formatNumber(evidenceSummary?.parsed_document_count || viewableEvidenceCount)} linked records
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg border border-border bg-card p-4">
                       <p className="text-xs text-muted-foreground">Opportunity</p>
                       <p className="mt-1 text-xl font-semibold text-foreground">
-                        {prospect.opportunityScore ?? "N/A"}
+                        {backendProspect?.opportunity_score ?? prospect.opportunityScore ?? "N/A"}
                       </p>
                     </div>
                     <div className="rounded-lg border border-border bg-card p-4">
                       <p className="text-xs text-muted-foreground">Risk</p>
                       <p className="mt-1 text-xl font-semibold text-foreground">
-                        {prospect.riskScore ?? "N/A"}
+                        {backendProspect?.risk_score ?? prospect.riskScore ?? "N/A"}
                       </p>
                     </div>
                   </div>
@@ -392,6 +453,12 @@ export default function ProspectDetailPage({
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             <div className="space-y-6">
+              {detailState.error && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  {detailState.error}
+                </div>
+              )}
+
               <Card
                 id="engagement"
                 className="border-primary/30 bg-gradient-to-r from-primary/5 to-transparent"
@@ -412,7 +479,7 @@ export default function ProspectDetailPage({
                         Primary topic
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
-                        {primaryConversationFocus}
+                        {brief?.recommended_entry_angles?.[0] || primaryConversationFocus}
                       </p>
                     </div>
                     <div className="rounded-lg border border-border bg-card p-3">
@@ -420,7 +487,9 @@ export default function ProspectDetailPage({
                         Why now
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
-                        {viewableEvidenceCount} linked evidence records
+                        {formatNumber(
+                          evidenceSummary?.parsed_document_count || viewableEvidenceCount
+                        )} linked evidence records
                       </p>
                     </div>
                     <div className="rounded-lg border border-border bg-card p-3">
@@ -462,7 +531,12 @@ export default function ProspectDetailPage({
                       Product angle to prepare
                     </p>
                     <div className="flex flex-wrap gap-1.5">
-                      {prospect.productFit.slice(0, 4).map((product) => (
+                      {(brief?.recommended_product_themes?.length
+                        ? brief.recommended_product_themes
+                        : prospect.productFit
+                      )
+                        .slice(0, 4)
+                        .map((product) => (
                         <Badge key={product} variant="secondary">
                           {product}
                         </Badge>
@@ -485,11 +559,185 @@ export default function ProspectDetailPage({
                       </p>
                     </div>
                     <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                      Raw backend records filtered
+                      Evidence API
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {evidenceSummary && (
+                    <div className="grid gap-2 md:grid-cols-4">
+                      <div className="rounded-lg border border-border bg-muted/30 p-3">
+                        <p className="text-[10px] text-muted-foreground">Documents</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">
+                          {formatNumber(evidenceSummary.parsed_document_count)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/30 p-3">
+                        <p className="text-[10px] text-muted-foreground">Metrics</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">
+                          {formatNumber(evidenceSummary.metric_count)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/30 p-3">
+                        <p className="text-[10px] text-muted-foreground">Risk factors</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">
+                          {formatNumber(evidenceSummary.risk_factor_count)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/30 p-3">
+                        <p className="text-[10px] text-muted-foreground">Business events</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">
+                          {formatNumber(evidenceSummary.business_event_count)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {coverageFlags && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(coverageFlags)
+                        .filter(([, value]) => value)
+                        .map(([key]) => (
+                          <Badge key={key} variant="outline" className="bg-primary/5 text-[10px]">
+                            {formatLabel(key.replace(/^has_/, ""))}
+                          </Badge>
+                        ))}
+                    </div>
+                  )}
+
+                  {parsedDocuments.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Parsed company documents
+                      </p>
+                      <div className="space-y-2">
+                        {parsedDocuments.slice(0, 4).map((document) => (
+                          <div
+                            key={document.id}
+                            className="rounded-lg border border-border bg-card p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {document.title || `${formatSource(document.source)} document`}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {document.summary ||
+                                    document.management_discussion_summary ||
+                                    "Parsed evidence available for audit."}
+                                </p>
+                              </div>
+                              {document.evidence_url && (
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                  aria-label={`Open source evidence for ${document.title || document.id}`}
+                                >
+                                  <Link href={document.evidence_url}>
+                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <Badge variant="outline" className="text-[10px]">
+                                {formatSource(document.source)}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px]">
+                                {document.parse_status}
+                              </Badge>
+                              {document.lang && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  {document.lang}
+                                </Badge>
+                              )}
+                              {document.genai_extraction?.accepted_count ? (
+                                <Badge className="bg-primary/10 text-primary text-[10px]">
+                                  GenAI accepted {document.genai_extraction.accepted_count}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(keyMetrics.length > 0 ||
+                    keyRiskFactors.length > 0 ||
+                    keyBusinessEvents.length > 0) && (
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Metrics
+                        </p>
+                        <div className="space-y-2">
+                          {keyMetrics.slice(0, 3).map((metric) => (
+                            <div key={`${metric.document_id}-${metric.name}`}>
+                              <p className="text-sm font-medium text-foreground">
+                                {metric.name}: {metric.value}
+                                {metric.unit ? ` ${metric.unit}` : ""}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {metric.period || metric.title || "Parsed metric"}
+                              </p>
+                            </div>
+                          ))}
+                          {keyMetrics.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No metrics parsed.</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Risks
+                        </p>
+                        <div className="space-y-2">
+                          {keyRiskFactors.slice(0, 3).map((risk) => (
+                            <div key={`${risk.document_id}-${risk.category}`}>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">
+                                  {risk.severity}
+                                </Badge>
+                                <p className="text-sm font-medium text-foreground">
+                                  {risk.category}
+                                </p>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+                                {risk.description}
+                              </p>
+                            </div>
+                          ))}
+                          {keyRiskFactors.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No risk factors parsed.</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Events
+                        </p>
+                        <div className="space-y-2">
+                          {keyBusinessEvents.slice(0, 3).map((event) => (
+                            <div key={`${event.document_id}-${event.summary}`}>
+                              <Badge variant="outline" className="mb-1 text-[10px]">
+                                {formatLabel(event.event_type)}
+                              </Badge>
+                              <p className="line-clamp-2 text-sm text-foreground">
+                                {event.summary}
+                              </p>
+                            </div>
+                          ))}
+                          {keyBusinessEvents.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No business events parsed.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {relatedSignals.length > 0 && (
                     <div>
                       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -589,6 +837,242 @@ export default function ProspectDetailPage({
                   )}
                 </CardContent>
               </Card>
+
+              {scoreBreakdown && (
+                <Card id="score-audit" className="border-border">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <ClipboardCheck className="h-5 w-5 text-primary" />
+                          Score Audit
+                        </CardTitle>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Transparent scoring inputs and evidence linkage controls from the backend scorecard.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="bg-muted/50 text-[10px]">
+                        {scoreBreakdown.scorecard_version || "scorecard"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-4">
+                      {Object.entries(scoreBreakdown.score_inputs || {}).map(([key, value]) => (
+                        <div key={key} className="rounded-lg border border-border bg-muted/30 p-3">
+                          <p className="text-[10px] text-muted-foreground">
+                            {formatLabel(key)}
+                          </p>
+                          <p className="mt-1 text-lg font-semibold text-foreground">
+                            {value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {linkageQuality && (
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-[10px] text-muted-foreground">Linked evidence</p>
+                          <p className="mt-1 text-lg font-semibold text-foreground">
+                            {formatNumber(linkageQuality.linked_evidence_count)}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-[10px] text-muted-foreground">Scoreable evidence</p>
+                          <p className="mt-1 text-lg font-semibold text-foreground">
+                            {formatNumber(linkageQuality.scoreable_evidence_count)}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-[10px] text-muted-foreground">Direct evidence ratio</p>
+                          <p className="mt-1 text-lg font-semibold text-foreground">
+                            {formatRatio(linkageQuality.direct_evidence_ratio)}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-[10px] text-muted-foreground">Scoreable ratio</p>
+                          <p className="mt-1 text-lg font-semibold text-foreground">
+                            {formatRatio(linkageQuality.scoreable_evidence_ratio)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      {[
+                        ["Opportunity", scoreBreakdown.opportunity_components || []],
+                        ["Risk", scoreBreakdown.risk_components || []],
+                        ["Priority", scoreBreakdown.priority_components || []],
+                      ].map(([title, components]) => (
+                        <div key={title as string} className="rounded-lg border border-border p-3">
+                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            {title as string}
+                          </p>
+                          <div className="space-y-2">
+                            {(components as NonNullable<typeof scoreBreakdown.opportunity_components>)
+                              .slice(0, 4)
+                              .map((component) => (
+                                <div key={`${component.name}-${component.points}`}>
+                                  <div className="flex items-center justify-between gap-3 text-xs">
+                                    <span className="font-medium text-foreground">
+                                      {formatLabel(component.name)}
+                                    </span>
+                                    <span className="font-semibold text-foreground">
+                                      {component.points}
+                                    </span>
+                                  </div>
+                                  <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                                    {component.detail}
+                                  </p>
+                                </div>
+                              ))}
+                            {(components as unknown[]).length === 0 && (
+                              <p className="text-xs text-muted-foreground">No components.</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {governanceFlags.length > 0 && (
+                      <div>
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Governance flags
+                        </p>
+                        <div className="space-y-2">
+                          {governanceFlags.map((flag) => (
+                            <div
+                              key={flag.flag_key}
+                              className={`rounded-lg border p-3 text-xs ${scoreSeverityClass(flag.severity)}`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-semibold">{formatLabel(flag.area)}</p>
+                                <Badge variant="outline" className="bg-background/70 text-[10px]">
+                                  {flag.severity}
+                                </Badge>
+                              </div>
+                              <p className="mt-1">{flag.message}</p>
+                              <p className="mt-1 opacity-80">{flag.suggested_action}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card id="llm-review" className="border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <ShieldCheck className="h-5 w-5 text-chart-3" />
+                        LLM Review
+                      </CardTitle>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Advisory review for linkage quality, subjectivity risk, and extraction gaps.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-muted/50 text-[10px]">
+                      {review?.model_name || review?.status || "advisory"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {review ? (
+                    <>
+                      <div className="rounded-lg border border-border bg-muted/30 p-4">
+                        <p className="text-sm text-foreground">{review.review_summary}</p>
+                      </div>
+
+                      {review.audit_findings?.length ? (
+                        <div>
+                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Audit findings
+                          </p>
+                          <div className="space-y-2">
+                            {review.audit_findings.slice(0, 4).map((finding) => (
+                              <div
+                                key={finding.finding_key}
+                                className={`rounded-lg border p-3 text-xs ${scoreSeverityClass(finding.severity)}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="font-semibold">{finding.issue}</p>
+                                  <Badge variant="outline" className="bg-background/70 text-[10px]">
+                                    {finding.severity}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1">{finding.reason}</p>
+                                <p className="mt-1 opacity-80">{finding.suggested_action}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {review.linkage_reviews?.length ? (
+                        <div>
+                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Linkage reviews
+                          </p>
+                          <div className="space-y-2">
+                            {review.linkage_reviews.slice(0, 4).map((item) => (
+                              <div key={item.item_key} className="rounded-lg border border-border p-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {formatLabel(item.review_status)}
+                                  </Badge>
+                                  {typeof item.confidence === "number" && (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      confidence {Math.round(item.confidence * 100)}%
+                                    </Badge>
+                                  )}
+                                  {typeof item.should_affect_scoring === "boolean" && (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {item.should_affect_scoring ? "scoreable" : "not scoreable"}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="mt-2 text-sm font-medium text-foreground">
+                                  {item.title || item.item_key}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {item.reason}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {review.extraction_opportunities?.length ? (
+                        <div>
+                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Extraction opportunities
+                          </p>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {review.extraction_opportunities.slice(0, 4).map((item) => (
+                              <div key={`${item.area}-${item.suggested_output}`} className="rounded-lg border border-border p-3">
+                                <p className="text-sm font-medium text-foreground">
+                                  {formatLabel(item.area)}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">{item.why}</p>
+                                <p className="mt-1 text-xs text-foreground">{item.suggested_output}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      LLM review is unavailable for this prospect. The score audit and linked evidence remain available.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
             <aside className="space-y-4">
@@ -658,6 +1142,29 @@ export default function ProspectDetailPage({
                   )}
                 </CardContent>
               </Card>
+
+              {suggestedQuestions.length > 0 && (
+                <Card className="border-primary/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Copilot Questions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {suggestedQuestions.map((question) => (
+                      <button
+                        key={question}
+                        onClick={() => {
+                          setCopilotPrompt(question);
+                          setCopilotOpen(true);
+                        }}
+                        className="w-full rounded-lg border border-border bg-muted/30 p-3 text-left text-xs text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5"
+                      >
+                        <Sparkles className="mr-1.5 inline h-3.5 w-3.5 text-primary" />
+                        {question}
+                      </button>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               <Card className="border-border">
                 <CardHeader className="pb-3">
@@ -915,9 +1422,17 @@ export default function ProspectDetailPage({
         isOpen={copilotOpen}
         onClose={() => setCopilotOpen(false)}
         prospectId={prospect.id}
+        autoPrompt={copilotPrompt}
       />
 
-      {!copilotOpen && <AICopilotButton onClick={() => setCopilotOpen(true)} />}
+      {!copilotOpen && (
+        <AICopilotButton
+          onClick={() => {
+            setCopilotPrompt(null);
+            setCopilotOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 }
