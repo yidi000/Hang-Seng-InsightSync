@@ -17,10 +17,10 @@ docker compose up --build
 In another terminal, initialize the backend database and load the bundled demo SQLite snapshot:
 
 ```bash
-docker compose exec api alembic upgrade head
-docker compose exec api python -m insightsync.backend.workflows.sync_from_sqlite --full
-docker compose exec api python -m insightsync.backend.workflows.build_rag_index --full
+docker compose exec api python -m insightsync.backend.workflows.init_dev_backend
 ```
+
+This runs migrations, syncs the bundled demo SQLite snapshot into PostgreSQL, and builds the local RAG index.
 
 Verify the service:
 
@@ -35,18 +35,52 @@ curl "http://127.0.0.1:8000/api/rag/index/status"
 curl "http://127.0.0.1:8000/api/metadata/filters"
 ```
 
+Frontend handover:
+
+- API guide: `insightsync/docs/frontend-api-guide.md`
+- Dev backend runbook: `insightsync/docs/dev-backend-handover.md`
+- Shared API deployment runbook: `insightsync/docs/shared-dev-api-runbook.md`
+- Frontend application: `insightsync/frontend/`
+- OpenAPI: `http://127.0.0.1:8000/openapi.json`
+
+Run the frontend application:
+
+```bash
+cd insightsync/frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Then open:
+
+```text
+http://127.0.0.1:3000
+```
+
+Run a live backend/frontend acceptance check after both services are up:
+
+```bash
+python -m insightsync.backend.workflows.acceptance_check --api-base http://127.0.0.1:8000 --frontend-base http://127.0.0.1:3000 --strict
+```
+
+Add `--include-review` to include the advisory prospect review endpoint, and `--include-rag` to include prospect-scoped RAG Q&A. Use `--timeout-seconds 45` when live GLM calls are enabled.
+
 RAG insight generation is evidence-gated. Without model API keys, the system uses deterministic local fallback embeddings and fallback explanations so the demo remains runnable.
 
 For real GLM 4.7 Flash generation, set:
 
 ```bash
 ENABLE_LLM_GENERATION=true
+ENABLE_LLM_BRIEF_GENERATION=false
 LLM_API_KEY=<your-bigmodel-api-key>
 LLM_BASE_URL=https://api.z.ai/api/paas/v4/
 LLM_CHAT_MODEL=glm-4.7-flash
 LLM_ENABLE_THINKING=false
 LLM_TIMEOUT_SECONDS=45
 ```
+
+`ENABLE_LLM_BRIEF_GENERATION=false` keeps frontend brief/detail pages fast and deterministic. Use `/review` and `/question` for live LLM-assisted review and RAG Q&A; set `ENABLE_LLM_BRIEF_GENERATION=true` only when you explicitly want every brief response to call the LLM.
 
 Then run a direct smoke check:
 
@@ -147,8 +181,10 @@ Current implementation focus is the data and backend intelligence foundation.
 - Implemented: company and prospect APIs, dashboard summary APIs, prospect evidence/brief/copilot/review/insight-history/workflow payloads, metadata filters, and frontend API handover guide
 - Implemented: prospect scorecard metadata, linkage-quality metrics, and governance flags to separate business score from evidence confidence
 - Implemented: bounded GLM-assisted prospect review for linkage quality, subjectivity risk, rule overreach, and extraction gaps; review is advisory and does not rewrite scores
+- Implemented: formal Next.js frontend application with dashboard, prospect list/detail, signal feed, Copilot panel, metadata-backed filters, score audit, evidence, review, workflow, timeline, and generated insight views
+- Implemented: live acceptance workflow for backend/frontend contract smoke checks
 - Added: multilingual parsing evaluation samples covering English, simplified Chinese, traditional Chinese, and Cantonese-style traditional Chinese text
-- Still maturing: score calibration, company identity resolution, generated insight evaluation, frontend dashboard implementation, and production handover runbooks
+- Still maturing: score calibration with labeled business cases, deeper company identity resolution, generated insight evaluation, and production handover runbooks
 
 ## Data Sources Integrated
 
@@ -270,6 +306,13 @@ Run company identity/linkage evaluation:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest insightsync/data/tests/test_company_identity_linkage_eval.py -q
 ```
 
+Run the broader deterministic backend/data acceptance suite:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ENABLE_LLM_GENERATION=false python -m pytest insightsync/backend/tests insightsync/data/tests -q
+python -m insightsync.backend.workflows.glm_extraction_demo --mock --strict --api-preview
+```
+
 ## Collaboration Workflow
 
 1. Sync main branch
@@ -302,8 +345,8 @@ git push
 1. Calibrate prospect scoring and linkage rules with labeled examples and RM/product review
 2. Expand multilingual evaluation cases for annual reports, announcements, market news, and Cantonese-style business text
 3. Improve company identity resolution across English, simplified Chinese, traditional Chinese, stock codes, aliases, and subsidiaries
-4. Add prospect task/activity history beyond the latest workflow state
-5. Add governance, evaluation logs, model/prompt configuration records, and backend handover runbooks
+4. Add prospect task/activity history beyond the latest workflow state if CRM integration becomes available
+5. Add governance dashboards, evaluation logs, and model/prompt configuration records
 
 ## Notes
 

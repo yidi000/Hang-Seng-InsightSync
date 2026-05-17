@@ -20,6 +20,9 @@ env/
 .env
 .env.*
 !.env.example
+node_modules/
+.next/
+insightsync/frontend/next-env.d.ts
 
 *.log
 *.tmp
@@ -28,6 +31,7 @@ env/
 .tmp_test/
 pytest-cache-files-*/
 tmp*/
+insightsync/outside_code/
 
 # Dev/prod SQLite artifacts are local — not the demo fixture.
 insightsync/data/storage/insightsync.db

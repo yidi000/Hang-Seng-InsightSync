@@ -20,6 +20,7 @@ class FusionExplainer:
         company: dict[str, Any],
         latest_state: dict[str, Any],
         prospect: dict[str, Any] | None = None,
+        allow_llm: bool = True,
     ) -> dict[str, Any]:
         fusion = latest_state.get("fusion") or {}
         prompt = {
@@ -45,7 +46,7 @@ class FusionExplainer:
                 "Return sections for headline, why_now, lens_summary, risk_note, and action_note.",
             ],
         }
-        if self.settings.llm_enabled:
+        if allow_llm and self.settings.llm_enabled:
             try:
                 payload = self.provider.chat_json(
                     system_prompt="You explain structured commercial banking fusion outputs as strict JSON.",

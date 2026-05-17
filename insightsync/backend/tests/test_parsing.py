@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 from insightsync.backend.services.rag_document_builder import RagDocumentBuilder
@@ -245,3 +246,49 @@ def test_rag_document_builder_uses_parsed_output() -> None:
     assert "Management discussion summary:" in document["content"]
     assert "Business events:" in document["content"]
     assert document["metadata_json"]["parse"]["parser_name"] == "json"
+
+
+def test_rag_document_builder_serializes_parsed_metadata_datetimes() -> None:
+    builder = RagDocumentBuilder(db=None)  # type: ignore[arg-type]
+    row = {
+        "source_table": "intelligence_records",
+        "source_id": 1,
+        "source": "hkex",
+        "dataset": "annual_report",
+        "record_key": "alpha-2025",
+        "signal_key": None,
+        "entity": "Alpha Holdings",
+        "company_id": "alpha",
+        "event_time": datetime(2026, 4, 1, tzinfo=timezone.utc),
+        "record_type": "document",
+        "signal_type": None,
+        "region": "Hong Kong",
+        "industry": "Financials",
+        "lang": "en",
+        "evidence_url": "https://example.com/report",
+        "title": "Alpha Holdings Annual Report",
+        "summary": "Annual report summary",
+        "payload_json": {},
+        "signal_text": None,
+    }
+    parsed_doc = {
+        "parser_name": "document",
+        "backend_name": "pymupdf",
+        "parse_status": "success",
+        "search_text": "Management highlights cross-border growth.",
+        "warnings_json": [],
+        "metadata_json": {},
+        "section_count": 1,
+        "table_count": 0,
+        "metric_count": 0,
+        "risk_factor_count": 0,
+        "business_event_count": 0,
+        "management_discussion_summary": "Cross-border growth.",
+        "parsed_at": datetime(2026, 4, 2, 8, 30, tzinfo=timezone.utc),
+        "parse_version": "test-v1",
+    }
+
+    document = builder._row_to_document(row, parsed_doc=parsed_doc)
+
+    assert document["metadata_json"]["event_time"] == "2026-04-01T00:00:00+00:00"
+    assert document["metadata_json"]["parse"]["parsed_at"] == "2026-04-02T08:30:00+00:00"

@@ -26,6 +26,18 @@ def _payload_to_text(payload: Any) -> str:
     return str(payload)
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 class RagDocumentBuilder:
     """Build RAG documents and chunks from synchronized backend tables."""
 
@@ -240,11 +252,8 @@ class RagDocumentBuilder:
         }
         # Row-level values keep native datetime (columns are TIMESTAMPTZ),
         # but metadata_json must be JSON-native.
-        metadata_json = {
-            k: (v.isoformat() if isinstance(v, (datetime, date)) else v)
-            for k, v in metadata.items()
-        }
-        metadata_json["parse"] = parse_summary
+        metadata_json = _json_safe(metadata)
+        metadata_json["parse"] = _json_safe(parse_summary)
         metadata_json["parse_version"] = parse_summary.get("parse_version") or "multisource-v2"
         return {
             **metadata,

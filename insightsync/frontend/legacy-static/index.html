@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RM Insight Pro | Hang Seng Bank</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path></svg>
+          </div>
+          <div>
+            <div class="brand-name">RM Insight Pro</div>
+            <div class="brand-subtitle">Hang Seng Bank</div>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Primary navigation">
+          <p class="nav-label">Prospecting Intelligence</p>
+          <button class="nav-item active" data-route="overview">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+            </span>
+            <span>
+              <strong>Overview</strong>
+              <small>Intelligence highlights</small>
+            </span>
+          </button>
+          <button class="nav-item" data-route="prospects">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            </span>
+            <span>
+              <strong>Priority Prospects</strong>
+              <small>High-potential companies</small>
+            </span>
+          </button>
+          <button class="nav-item" data-route="signals">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path></svg>
+            </span>
+            <span>
+              <strong>Trigger Signals</strong>
+              <small>Market &amp; news signals</small>
+            </span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-avatar">MC</div>
+          <div>
+            <strong>Michael Chan</strong>
+            <small>Senior RM, Commercial Banking</small>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="topbar-title">
+            <h1 id="page-title">Prospecting Intelligence</h1>
+            <p id="page-subtitle">Company-first intelligence with engagement angles.</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="connection-pill">
+              <span class="status-dot" id="sidebar-status-dot"></span>
+              <span>
+                <strong id="sidebar-status">Checking backend</strong>
+                <small id="sidebar-status-detail">FastAPI connection</small>
+              </span>
+            </div>
+            <button class="button primary" data-open-copilot>
+              <svg class="button-icon" viewBox="0 0 24 24"><path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path></svg>
+              Ask AI Copilot
+            </button>
+            <button class="button outline" id="refresh-data">
+              <svg class="button-icon" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M16 8h5V3"></path></svg>
+              Refresh
+            </button>
+            <details class="api-menu">
+              <summary class="button outline">API</summary>
+              <div class="api-controls">
+                <label>
+                  API base
+                  <input id="api-base-input" autocomplete="off" />
+                </label>
+                <label>
+                  API key
+                  <input id="api-key-input" type="password" autocomplete="off" placeholder="optional" />
+                </label>
+                <button class="button primary" id="save-api-settings">Save settings</button>
+              </div>
+            </details>
+          </div>
+        </header>
+
+        <section id="content" class="content">
+          <div class="loading-card">Loading InsightSync data...</div>
+        </section>
+      </main>
+    </div>
+
+    <div id="copilot-root"></div>
+    <button id="floating-copilot" class="floating-copilot" data-open-copilot aria-label="Open AI Copilot">
+      <svg viewBox="0 0 24 24"><path d="M11.02 2.81a1 1 0 0 1 1.96 0l1.05 5.56a2 2 0 0 0 1.6 1.6l5.56 1.05a1 1 0 0 1 0 1.96l-5.56 1.05a2 2 0 0 0-1.6 1.6l-1.05 5.56a1 1 0 0 1-1.96 0l-1.05-5.56a2 2 0 0 0-1.6-1.6l-5.56-1.05a1 1 0 0 1 0-1.96l5.56-1.05a2 2 0 0 0 1.6-1.6z"></path></svg>
+    </button>
+    <div id="toast" class="toast hidden"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
