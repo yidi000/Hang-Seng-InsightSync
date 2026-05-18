@@ -308,6 +308,226 @@ class ProspectService:
             "workflow_state": workflow_state,
         }
 
+    @staticmethod
+    def _compact_product_themes(focus_tags: list[str]) -> list[str]:
+        themes: list[str] = []
+        if any(tag in {"cross_border", "trade"} for tag in focus_tags):
+            themes.extend(["cross-border payments", "trade finance", "treasury"])
+        if any(tag in {"financing", "growth", "expansion", "acquisition", "m&a"} for tag in focus_tags):
+            themes.extend(["working capital", "term loan", "cash management"])
+        if "market" in focus_tags:
+            themes.append("capital markets")
+        if any(tag in {"risk", "regulatory", "compliance", "warning", "litigation", "risk_review"} for tag in focus_tags):
+            themes.append("risk review")
+
+        deduped: list[str] = []
+        for theme in themes or ["Corporate Banking"]:
+            if theme not in deduped:
+                deduped.append(theme)
+        return deduped[:4]
+
+    @classmethod
+    def _build_compact_prospect_summary(
+        cls,
+        company: dict[str, Any],
+        signals: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        prospect_id = cls._prospect_id(company["company_id"])
+        signal_types: list[str] = []
+        signal_titles: list[str] = []
+        for signal in signals:
+            signal_type = (signal.get("signal_type") or "").lower()
+            if signal_type and signal_type not in signal_types:
+                signal_types.append(signal_type)
+            title = signal.get("signal_text") or signal.get("value_text") or signal.get("indicator")
+            if title and title not in signal_titles:
+                signal_titles.append(title)
+
+        focus_tags = signal_types[:3]
+        signal_count = len(signals)
+        opportunity_signal_count = sum(
+            1
+            for signal in signals
+            if (signal.get("signal_type") or "").lower()
+            in {"growth", "cross_border", "market", "financing", "expansion", "acquisition", "m&a", "trade"}
+        )
+        risk_signal_count = sum(
+            1
+            for signal in signals
+            if (signal.get("signal_type") or "").lower() in {"risk", "regulatory", "compliance", "warning", "litigation"}
+        )
+        status = "monitor"
+        if signal_count:
+            status = "active"
+        if opportunity_signal_count >= 2 or risk_signal_count >= 2:
+            status = "actionable"
+
+        opportunity_score = min(100, opportunity_signal_count * 22 + signal_count * 5 + (8 if focus_tags else 0))
+        risk_score = min(100, risk_signal_count * 20)
+        evidence_confidence_score = min(100, signal_count * 15 + (20 if opportunity_signal_count else 0))
+        priority_score, priority_components = cls._build_priority_score(
+            opportunity_score=opportunity_score,
+            risk_score=risk_score,
+            evidence_confidence_score=evidence_confidence_score,
+            status=status,
+        )
+        priority_level = cls._priority_level(priority_score=priority_score, status=status)
+        product_themes = cls._compact_product_themes(focus_tags)
+        activity_at = signals[0].get("event_time") if signals else company.get("activity_at")
+        linkage_quality = {
+            "linked_evidence_count": signal_count,
+            "scoreable_evidence_count": signal_count,
+            "direct_evidence_count": signal_count,
+            "strong_linkage_count": signal_count,
+            "context_only_count": 0,
+            "direct_evidence_ratio": 1.0 if signal_count else 0.0,
+            "scoreable_evidence_ratio": 1.0 if signal_count else 0.0,
+            "linkage_type_counts": {"direct_company_link": signal_count} if signal_count else {},
+        }
+        latest_state = {
+            "recommended_next_step": (
+                f"review {product_themes[0]} angle and validate the linked evidence"
+                if product_themes
+                else "review linked evidence before outreach"
+            )
+        }
+        governance_flags = cls._governance_flags(
+            latest_state=latest_state,
+            priority_score=priority_score,
+            priority_level=priority_level,
+            opportunity_score=opportunity_score,
+            risk_score=risk_score,
+            evidence_confidence_score=evidence_confidence_score,
+            linkage_quality=linkage_quality,
+        )
+
+        return {
+            "prospect_id": prospect_id,
+            "company_id": company["company_id"],
+            "canonical_name": company["canonical_name"],
+            "display_name": company.get("display_name"),
+            "region": company.get("region"),
+            "city": company.get("city"),
+            "industries": company.get("industries", []),
+            "segments": company.get("segments", []),
+            "activity_at": activity_at,
+            "status": status,
+            "priority_level": priority_level,
+            "priority_score": priority_score,
+            "opportunity_score": opportunity_score,
+            "risk_score": risk_score,
+            "evidence_confidence_score": evidence_confidence_score,
+            "commercial_attractiveness_score": min(40, opportunity_signal_count * 16),
+            "immediacy_score": min(20, signal_count * 5),
+            "product_fit_score": 8 if product_themes else 0,
+            "risk_penalty_score": risk_score,
+            "focus_tags": focus_tags,
+            "why_prioritized": [
+                reason
+                for reason in [
+                    f"{signal_count} recent signals linked" if signal_count else None,
+                    signal_titles[0] if signal_titles else None,
+                ]
+                if reason
+            ],
+            "recommended_next_step": latest_state["recommended_next_step"],
+            "recommended_product_themes": product_themes,
+            "product_fit": [
+                {
+                    "product_name": product,
+                    "fit_score": max(60, 80 - index * 4),
+                    "rationale": "Recommended from recent company-linked trigger signals.",
+                    "supporting_signals": signal_titles[:3],
+                }
+                for index, product in enumerate(product_themes)
+            ],
+            "recommended_entry_angles": [
+                f"Lead with the company event: {signal_titles[0]}" if signal_titles else "Review recent company activity."
+            ],
+            "decision_features": [],
+            "decision_answers": [],
+            "fusion": None,
+            "score_breakdown": {
+                **scorecard_contract(),
+                "score_inputs": {
+                    "opportunity_score": opportunity_score,
+                    "risk_score": risk_score,
+                    "evidence_confidence_score": evidence_confidence_score,
+                    "priority_score": priority_score,
+                },
+                "opportunity_components": [],
+                "risk_components": [],
+                "priority_components": priority_components,
+                "linkage_quality": linkage_quality,
+                "governance_flags": governance_flags,
+            },
+            "workflow_state": {
+                "prospect_id": prospect_id,
+                "company_id": company["company_id"],
+                "owner": None,
+                "stage": "new",
+                "status": "open",
+                "last_action": None,
+                "next_action": None,
+                "review_status": "not_reviewed",
+                "notes": None,
+                "updated_at": None,
+            },
+        }
+
+    def list_compact_prospects(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+        region: str | None = None,
+        segment: str | None = None,
+        industry: str | None = None,
+        status: str | None = None,
+        priority_level: str | None = None,
+    ) -> dict[str, Any]:
+        companies = self.repo.list_companies(
+            limit=max(limit + offset + 200, 500),
+            offset=0,
+            q=q,
+            region=region,
+            segment=segment,
+            industry=industry,
+        )
+        company_ids = {company["company_id"] for company in companies}
+        signals_by_company: dict[str, list[dict[str, Any]]] = {company_id: [] for company_id in company_ids}
+        for signal in self.repo.list_signals(limit=10000, offset=0):
+            company_id = signal.get("company_id")
+            if company_id in signals_by_company:
+                signals_by_company[company_id].append(signal)
+
+        items = [
+            self._build_compact_prospect_summary(company, signals_by_company.get(company["company_id"], []))
+            for company in companies
+        ]
+        if status:
+            items = [item for item in items if item["status"] == status]
+        if priority_level:
+            items = [item for item in items if item["priority_level"] == priority_level]
+
+        items.sort(
+            key=lambda item: (
+                item["priority_score"],
+                item["opportunity_score"],
+                str(item["activity_at"] or ""),
+                item["company_id"],
+            ),
+            reverse=True,
+        )
+        total = len(items)
+        return {
+            "items": items[offset : offset + limit],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
     def list_prospects(
         self,
         *,

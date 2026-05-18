@@ -29,7 +29,7 @@ def overview(db: Session = Depends(get_db)) -> DashboardOverviewOut:
 def summary(db: Session = Depends(get_db)) -> DashboardSummaryOut:
     """Return homepage summary cards derived from current prospect state."""
 
-    prospects = ProspectService(db).list_prospects(limit=200, offset=0)["items"]
+    prospects = ProspectService(db).list_compact_prospects(limit=200, offset=0)["items"]
     lead_pool = len(prospects)
     high_priority = sum(1 for item in prospects if item["priority_level"] == "high")
     cross_border = sum(1 for item in prospects if "cross_border" in item.get("focus_tags", []))
@@ -52,7 +52,7 @@ def summary(db: Session = Depends(get_db)) -> DashboardSummaryOut:
 def priority_prospects(db: Session = Depends(get_db)) -> DashboardPriorityProspectsOut:
     """Return homepage priority prospects derived from the current prospect layer."""
 
-    items = ProspectService(db).list_prospects(limit=5, offset=0)["items"]
+    items = ProspectService(db).list_compact_prospects(limit=5, offset=0)["items"]
     compact_items = [
         {
             "prospect_id": item["prospect_id"],
@@ -112,7 +112,7 @@ def trigger_signals(db: Session = Depends(get_db)) -> DashboardTriggerSignalsOut
 def market_overview(db: Session = Depends(get_db)) -> DashboardMarketOverviewOut:
     """Return homepage market-overview blocks derived from current prospect state."""
 
-    prospects = ProspectService(db).list_prospects(limit=200, offset=0)["items"]
+    prospects = ProspectService(db).list_compact_prospects(limit=200, offset=0)["items"]
     industry_counts: dict[str, int] = {}
     region_counts: dict[str, int] = {}
 

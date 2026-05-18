@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -35,11 +37,14 @@ def list_prospects(
     industry: str | None = None,
     status: str | None = None,
     priority_level: str | None = None,
+    view: Literal["full", "compact"] = Query(default="full"),
     db: Session = Depends(get_db),
 ) -> ProspectListOut:
     """Return a business-facing prospect list derived from company state."""
 
-    payload = ProspectService(db).list_prospects(
+    service = ProspectService(db)
+    list_method = service.list_compact_prospects if view == "compact" else service.list_prospects
+    payload = list_method(
         limit=limit,
         offset=offset,
         q=q,

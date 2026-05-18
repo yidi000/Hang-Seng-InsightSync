@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from insightsync.backend.tests.test_company_api import _test_client
 
 
@@ -61,3 +63,16 @@ def test_dashboard_market_overview_returns_industry_and_region_breakdowns() -> N
     assert payload["region_breakdown"][0]["name"] == "Hong Kong"
     assert payload["region_breakdown"][0]["count"] == 2
     assert payload["company_size_breakdown"] == []
+
+
+def test_dashboard_summary_and_market_overview_avoid_full_prospect_list() -> None:
+    with _test_client() as client:
+        with patch(
+            "insightsync.backend.api.dashboard.ProspectService.list_prospects",
+            side_effect=AssertionError("full prospect list should not run for dashboard rollups"),
+        ):
+            summary_response = client.get("/api/dashboard/summary")
+            market_response = client.get("/api/dashboard/market-overview")
+
+    assert summary_response.status_code == 200
+    assert market_response.status_code == 200
