@@ -47,7 +47,7 @@ const CHART_COLORS = [
   "var(--muted-foreground)",
 ];
 
-const tierColors: Record<string, string> = {
+const priorityBandColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
   B: "bg-chart-2 text-white",
   C: "bg-muted text-muted-foreground",
@@ -129,29 +129,63 @@ function formatEvidenceConfidence(value?: number) {
   return `Evidence confidence: ${level} (${value}/100)`;
 }
 
+function formatPriorityReason(value?: string | null) {
+  const text = (value || "").trim();
+  const signalCount = text.match(/^(\d+)\s+recent signals linked(?:\s+to the company)?$/i);
+  if (signalCount) {
+    return `${signalCount[1]} recent evidence signals linked to this company`;
+  }
+  return text;
+}
+
+function isGenericRecommendedStep(value?: string | null) {
+  const normalized = (value || "").trim().toLowerCase().replace(/\.$/, "");
+  if (!normalized) return true;
+  return (
+    /^review .+ angle and validate the linked evidence$/.test(normalized) ||
+    [
+      "review linked evidence",
+      "review linked evidence before outreach",
+      "review linked evidence and prepare rm follow-up",
+    ].includes(normalized)
+  );
+}
+
+function recommendationSupportCopy(
+  recommendedNextStep: string | undefined,
+  primaryReason: string,
+  displayAngle: string
+) {
+  const normalizedDisplayAngle = displayAngle.trim().toLowerCase();
+  if (
+    recommendedNextStep &&
+    !isGenericRecommendedStep(recommendedNextStep) &&
+    recommendedNextStep.trim().toLowerCase() !== normalizedDisplayAngle
+  ) {
+    return recommendedNextStep;
+  }
+
+  const formattedReason = formatPriorityReason(primaryReason);
+  if (
+    formattedReason &&
+    !/^\d+\s+recent evidence signals linked to this company$/i.test(formattedReason) &&
+    formattedReason.trim().toLowerCase() !== normalizedDisplayAngle
+  ) {
+    return formattedReason;
+  }
+
+  return "";
+}
+
 function formatStage(value?: string | null) {
   if (!value) return "New prospect";
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatRelationshipContext(prospect: {
-  workflowState?: {
-    stage?: string | null;
-    reviewStatus?: string | null;
-    nextAction?: string | null;
-  };
-  productFit: string[];
-  recommendedNextStep?: string;
-}) {
-  const reviewStatus =
-    prospect.workflowState?.reviewStatus?.replace(/_/g, " ") || "not reviewed";
-  const productLabel = `Suggested products: ${prospect.productFit.length}`;
-  const nextAction =
-    prospect.workflowState?.nextAction ||
-    prospect.recommendedNextStep ||
-    "Review linked evidence";
-
-  return { reviewStatus, productLabel, nextAction };
+function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium";
+  return "Low";
 }
 
 export default function OverviewPage() {
@@ -792,22 +826,22 @@ export default function OverviewPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      <th className="w-[22%] px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      <th className="w-[22%] px-4 py-3 text-left text-sm font-semibold text-muted-foreground">
                         Company
                       </th>
-                      <th className="w-[14%] px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      <th className="w-[14%] px-4 py-3 text-left text-sm font-semibold text-muted-foreground">
                         Priority assessment
                       </th>
-                      <th className="w-[24%] px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      <th className="w-[24%] px-4 py-3 text-left text-sm font-semibold text-muted-foreground">
                         Trigger evidence
                       </th>
-                      <th className="w-[22%] px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      <th className="w-[22%] px-4 py-3 text-left text-sm font-semibold text-muted-foreground">
                         Recommended approach
                       </th>
-                      <th className="w-[14%] px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      <th className="w-[14%] px-4 py-3 text-left text-sm font-semibold text-muted-foreground">
                         Relationship status
                       </th>
-                      <th className="w-[10%] px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                      <th className="w-[10%] px-4 py-3 text-right text-sm font-semibold text-muted-foreground">
                         Action
                       </th>
                     </tr>
@@ -840,6 +874,11 @@ export default function OverviewPage() {
                         prospect.whyPrioritized?.[0] ||
                         prospect.expansionSignals?.[0] ||
                         prospect.entryAngle;
+                      const supportingRecommendation = recommendationSupportCopy(
+                        prospect.recommendedNextStep,
+                        primaryReason,
+                        displayAngle
+                      );
                       const visibleProducts = preferredProducts.slice(0, 2);
                       const remainingProductCount = Math.max(
                         preferredProducts.length - visibleProducts.length,
@@ -852,8 +891,6 @@ export default function OverviewPage() {
                           : signalBelongsToProspect(signal, prospect)
                       );
                       const evidencePreview = latestSignal || prospect.news[0];
-                      const relationshipContext =
-                        formatRelationshipContext(prospect);
                       return (
                         <tr
                           key={prospect.id}
@@ -861,10 +898,10 @@ export default function OverviewPage() {
                         >
                           <td className="px-4 py-4 align-top">
                             <div className="space-y-1">
-                              <p className="text-sm font-semibold leading-snug text-foreground">
+                              <p className="text-base font-semibold leading-snug text-foreground">
                                 {prospect.name}
                               </p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-sm text-muted-foreground">
                                 {prospect.nameZh}
                               </p>
                               <div className="flex flex-wrap gap-1.5 pt-1">
@@ -879,13 +916,16 @@ export default function OverviewPage() {
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div className="space-y-1.5">
-                              <Badge className={tierColors[prospect.tier]}>
-                                Tier {prospect.tier}
+                              <Badge className={priorityBandColors[prospect.tier]}>
+                                {priorityBandLabel(prospect)}
                               </Badge>
-                              <p className="text-xs text-foreground">
+                              <Link
+                                href={`/prospects/${prospect.id}#score-audit`}
+                                className="text-sm font-medium text-primary hover:underline"
+                              >
                                 Priority score {prospect.score}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
+                              </Link>
+                              <p className="text-xs text-muted-foreground">
                                 {formatEvidenceConfidence(
                                   prospect.evidenceConfidenceScore
                                 )}
@@ -903,18 +943,18 @@ export default function OverviewPage() {
                                     ? `${evidencePreview.type} signal`
                                     : "evidence record"}
                                 </Badge>
-                                <p className="line-clamp-2 text-xs text-foreground">
+                                <p className="line-clamp-2 text-sm leading-5 text-foreground">
                                   {evidencePreview.title}
                                 </p>
-                                <p className="text-[11px] text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                   {evidencePreview.source || "InsightSync"} ·{" "}
                                   {formatDate(evidencePreview.date)}
                                 </p>
                               </div>
                             ) : (
                               <div className="space-y-1.5">
-                                <p className="line-clamp-3 text-xs text-foreground">
-                                  {primaryReason}
+                                <p className="line-clamp-3 text-sm leading-5 text-foreground">
+                                  {formatPriorityReason(primaryReason)}
                                 </p>
                               </div>
                             )}
@@ -923,9 +963,11 @@ export default function OverviewPage() {
                             <p className="text-sm font-medium leading-snug text-foreground">
                               {displayAngle}
                             </p>
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                              {prospect.recommendedNextStep || primaryReason}
-                            </p>
+                            {supportingRecommendation && (
+                              <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
+                                {supportingRecommendation}
+                              </p>
+                            )}
                             <div className="mt-2 flex flex-wrap gap-1">
                               {visibleProducts.map((product) => (
                                 <Badge
@@ -944,18 +986,9 @@ export default function OverviewPage() {
                             </div>
                           </td>
                           <td className="px-4 py-4 align-top">
-                            <div className="space-y-1.5 text-xs">
+                            <div className="space-y-1.5 text-sm">
                               <p className="font-medium text-foreground">
                                 {formatStage(prospect.workflowState?.stage)}
-                              </p>
-                              <p className="text-muted-foreground">
-                                Review: {relationshipContext.reviewStatus}
-                              </p>
-                              <p className="text-muted-foreground">
-                                {relationshipContext.productLabel}
-                              </p>
-                              <p className="text-muted-foreground">
-                                Next: {relationshipContext.nextAction}
                               </p>
                             </div>
                           </td>

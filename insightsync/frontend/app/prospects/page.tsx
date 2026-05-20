@@ -32,7 +32,7 @@ import {
 import { useInsightSyncData } from "@/lib/api-data";
 import { useMetadataFilters } from "@/lib/metadata-data";
 
-const tierColors: Record<string, string> = {
+const priorityBandColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
   B: "bg-chart-2 text-white",
   C: "bg-muted text-muted-foreground",
@@ -49,6 +49,12 @@ function normalizeSource(value: string | undefined) {
 function formatLabel(value: string | undefined | null) {
   if (!value) return "Unassigned";
   return value.replace(/[_-]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium";
+  return "Low";
 }
 
 function signalBelongsToProspect(
@@ -240,10 +246,6 @@ export default function ProspectsPage() {
               const latestSignal = triggerSignals.find((signal) =>
                 signalBelongsToProspect(signal, prospect)
               );
-              const linkedEvidenceCount =
-                triggerSignals.filter((signal) =>
-                  signalBelongsToProspect(signal, prospect)
-                ).length + prospect.news.length;
 
               return (
                 <Card
@@ -269,12 +271,15 @@ export default function ProspectsPage() {
                               <h3 className="text-base font-semibold text-foreground">
                                 {prospect.name}
                               </h3>
-                              <Badge className={tierColors[prospect.tier]}>
-                                Tier {prospect.tier}
+                              <Badge className={priorityBandColors[prospect.tier]}>
+                                {priorityBandLabel(prospect)}
                               </Badge>
-                              <span className="text-sm text-muted-foreground">
+                              <Link
+                                href={`/prospects/${prospect.id}#score-audit`}
+                                className="text-sm font-medium text-primary hover:underline"
+                              >
                                 Score: {prospect.score}
-                              </span>
+                              </Link>
                             </div>
                             <p className="mt-0.5 text-sm text-muted-foreground">
                               {prospect.nameZh}
@@ -361,9 +366,6 @@ export default function ProspectsPage() {
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
-                            <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                              Evidence: {linkedEvidenceCount}
-                            </Badge>
                             <Badge variant="outline" className="bg-muted/50 text-[10px]">
                               Owner: {prospect.workflowState?.owner || "Unassigned"}
                             </Badge>

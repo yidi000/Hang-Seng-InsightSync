@@ -51,6 +51,15 @@ const samplePrompts = [
   },
 ];
 
+const companyPrompts = [
+  {
+    icon: FileText,
+    prompt:
+      "Review the score audit, evidence linkage, and extraction gaps for this company. What should I trust, and what should I verify before outreach?",
+    label: "Review scoring quality",
+  },
+];
+
 export function AICopilotPanel({
   isOpen,
   onClose,
@@ -63,6 +72,7 @@ export function AICopilotPanel({
   >([]);
   const [isLoading, setIsLoading] = useState(false);
   const lastAutoPromptRef = useRef<string | null>(null);
+  const prompts = prospectId ? [...companyPrompts, ...samplePrompts] : samplePrompts;
 
   const handleSubmit = useCallback(async (prompt: string) => {
     if (!prompt.trim()) return;
@@ -181,7 +191,7 @@ export function AICopilotPanel({
 
               {/* Sample Prompts */}
               <div className="w-full space-y-2">
-                {samplePrompts.map((item, index) => (
+                {prompts.map((item, index) => (
                   <button
                     key={index}
                     onClick={() => handlePromptClick(item.prompt)}

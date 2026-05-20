@@ -224,41 +224,6 @@ export interface BackendProspectEvidence {
   key_business_events?: BackendBusinessEvent[];
 }
 
-export interface BackendProspectReview {
-  prospect_id: string;
-  company_id: string;
-  status: string;
-  review_summary: string;
-  linkage_reviews?: {
-    item_key: string;
-    title?: string | null;
-    evidence_text?: string | null;
-    current_linkage_type?: string | null;
-    current_linkage_strength?: string | null;
-    suggested_linkage_type?: string | null;
-    suggested_linkage_strength?: string | null;
-    review_status: string;
-    confidence?: number | null;
-    reason: string;
-    should_affect_scoring?: boolean | null;
-  }[];
-  audit_findings?: {
-    finding_key: string;
-    severity: string;
-    area: string;
-    issue: string;
-    reason: string;
-    affected_feature_keys?: string[];
-    suggested_action: string;
-  }[];
-  extraction_opportunities?: {
-    area: string;
-    why: string;
-    suggested_output: string;
-  }[];
-  model_name?: string | null;
-}
-
 export interface BackendProspectCopilot {
   suggested_questions?: string[];
 }
@@ -268,7 +233,6 @@ interface ProspectDetailState {
   detail?: BackendProspectDetail;
   brief?: BackendProspectBrief;
   evidence?: BackendProspectEvidence;
-  review?: BackendProspectReview;
   copilot?: BackendProspectCopilot;
   loading: boolean;
   error: string | null;
@@ -299,12 +263,11 @@ export function useProspectDetail(prospectId: string | null): ProspectDetailStat
     async function load() {
       setState((current) => ({ ...current, loading: true, error: null }));
 
-      const [detailResult, briefResult, evidenceResult, reviewResult, copilotResult] =
+      const [detailResult, briefResult, evidenceResult, copilotResult] =
         await Promise.allSettled([
           getJson<BackendProspectDetail>(`/api/prospects/${encodedId}`),
           getJson<BackendProspectBrief>(`/api/prospects/${encodedId}/brief`),
           getJson<BackendProspectEvidence>(`/api/prospects/${encodedId}/evidence`),
-          getJson<BackendProspectReview>(`/api/prospects/${encodedId}/review`),
           getJson<BackendProspectCopilot>(`/api/prospects/${encodedId}/copilot`),
         ]);
 
@@ -323,10 +286,6 @@ export function useProspectDetail(prospectId: string | null): ProspectDetailStat
         evidenceResult.status === "fulfilled"
           ? evidenceResult.value
           : (partialErrors.evidence = errorMessage(evidenceResult.reason), undefined);
-      const review =
-        reviewResult.status === "fulfilled"
-          ? reviewResult.value
-          : (partialErrors.review = errorMessage(reviewResult.reason), undefined);
       const copilot =
         copilotResult.status === "fulfilled"
           ? copilotResult.value
@@ -337,7 +296,6 @@ export function useProspectDetail(prospectId: string | null): ProspectDetailStat
         detail,
         brief,
         evidence,
-        review,
         copilot,
         loading: false,
         error: detail ? null : partialErrors.detail || "Unable to load prospect detail",

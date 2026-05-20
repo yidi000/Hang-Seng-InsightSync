@@ -87,6 +87,36 @@ function normalizeEntityName(value: string | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeDisplayText(value: string | undefined) {
+  return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function shouldShowSummary(title: string, summary: string | undefined) {
+  const normalizedTitle = normalizeDisplayText(title);
+  const normalizedSummary = normalizeDisplayText(summary);
+  return Boolean(
+    normalizedSummary &&
+      normalizedSummary !== normalizedTitle &&
+      !normalizedSummary.includes(normalizedTitle)
+  );
+}
+
+function formatEntityLabel(value: string | undefined, linkedCompany?: string) {
+  if (linkedCompany) return `Linked company: ${linkedCompany}`;
+  const normalized = (value || "").toUpperCase();
+  if (normalized === "HKG" || normalized === "HK") return "Market context: Hong Kong";
+  if (normalized === "CN" || normalized === "CHN") return "Market context: Mainland China";
+  if (!value || value === "Market portfolio") return "Market context";
+  return `Market context: ${value}`;
+}
+
+function formatSignalBadge(signal: { type: string; source?: string }) {
+  const source = normalizeSource(signal.source);
+  if (source === "hkma") return "Market indicator";
+  if (source.includes("szse")) return "Company filing";
+  return formatSignalType(signal.type);
+}
+
 function isOperationalCompany(name: string) {
   const normalized = name.toLowerCase();
   return ![
@@ -135,7 +165,8 @@ export default function SignalsPage() {
 
   // Filter signals
   const filteredSignals = triggerSignals.filter((s) => {
-    if (searchQuery && !s.title.toLowerCase().includes(searchQuery.toLowerCase()) && !s.company.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    const searchText = `${s.title} ${s.company} ${s.summary}`.toLowerCase();
+    if (searchQuery && !searchText.includes(searchQuery.toLowerCase())) return false;
     if (typeFilter !== "All" && s.type !== typeFilter) return false;
     if (
       sourceFilter !== "All" &&
@@ -153,8 +184,8 @@ export default function SignalsPage() {
       [
         `Explain this trigger signal for an RM.`,
         `Signal: ${signal.title}`,
-        `Company/entity: ${signal.company}`,
-        `Type: ${signal.type}`,
+        `Entity context: ${formatEntityLabel(signal.company, relatedProspect?.name)}`,
+        `Record type: ${formatSignalBadge(signal)}`,
         `Date: ${formatDate(signal.date)}`,
         `Summary: ${signal.summary}`,
         relatedProspect
@@ -183,7 +214,7 @@ export default function SignalsPage() {
                   Trigger Signals
                 </h1>
                 <p className="text-xs text-muted-foreground">
-                  Market, news, and policy signals
+                  RM-readable company filings, market indicators, and policy context
                 </p>
               </div>
             </div>
@@ -258,7 +289,7 @@ export default function SignalsPage() {
             </DropdownMenu>
 
             <div className="ml-auto text-xs text-muted-foreground">
-              {filteredSignals.length} actionable signals ·{" "}
+              {filteredSignals.length} signal records ·{" "}
               {backendOnline ? "live intelligence" : "sample data"}
             </div>
           </div>
@@ -272,6 +303,7 @@ export default function SignalsPage() {
               const relatedProspect = companyProspects.find((prospect) =>
                 signalBelongsToProspect(signal, prospect)
               );
+              const showSummary = shouldShowSummary(signal.title, signal.summary);
 
               return (
                 <Card
@@ -293,12 +325,12 @@ export default function SignalsPage() {
                               {signal.title}
                             </h3>
                             <p className="mt-0.5 text-xs text-muted-foreground">
-                              {signal.company}
+                              {formatEntityLabel(signal.company, relatedProspect?.name)}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <Badge variant="outline" className="text-[10px] capitalize">
-                              {signal.type}
+                              {formatSignalBadge(signal)}
                             </Badge>
                             <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                               <Clock className="h-3 w-3" />
@@ -307,9 +339,11 @@ export default function SignalsPage() {
                           </div>
                         </div>
 
-                        <p className="mt-2 text-sm text-foreground">
-                          {signal.summary}
-                        </p>
+                        {showSummary && (
+                          <p className="mt-2 max-w-3xl text-sm leading-6 text-foreground">
+                            {signal.summary}
+                          </p>
+                        )}
 
                         {/* Evidence and Actions */}
                         <div className="mt-3 flex items-center justify-between">

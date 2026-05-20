@@ -169,7 +169,38 @@ function tierFromPriority(priority: BackendProspectSummary["priority_level"]): P
   return "C";
 }
 
-function signalType(type?: string): TriggerSignal["type"] {
+function parseRawIndicatorText(value?: string | null) {
+  const match = (value || "").trim().match(/^([a-z0-9_]+):\s*([+-]?\d+(?:\.\d+)?)$/i);
+  if (!match) return null;
+  return {
+    key: match[1].toLowerCase(),
+    value: match[2],
+  };
+}
+
+function indicatorLabel(key: string) {
+  const labels: Record<string, string> = {
+    neeri_2020_trade_wgt: "NEERI trade-weighted index",
+    neeri_2020_import_wgt: "NEERI import-weighted index",
+    neeri_2020_export_wgt: "NEERI export-weighted index",
+    zar: "South African rand FX reference",
+    idr: "Indonesian rupiah FX reference",
+    inr: "Indian rupee FX reference",
+    usd: "US dollar FX reference",
+    eur: "Euro FX reference",
+    cny: "Renminbi FX reference",
+    jpy: "Japanese yen FX reference",
+    gbp: "British pound FX reference",
+    aud: "Australian dollar FX reference",
+    cad: "Canadian dollar FX reference",
+    sgd: "Singapore dollar FX reference",
+  };
+  return labels[key] || titleCase(key);
+}
+
+function signalType(type?: string, item?: BackendSignal): TriggerSignal["type"] {
+  const rawIndicator = parseRawIndicatorText(item?.title || item?.signal_text || item?.value_text);
+  if (rawIndicator && normalizeSource(item?.source) === "hkma") return "crossborder";
   if (type === "financing" || type === "funding") return "funding";
   if (type === "policy") return "policy";
   if (type === "cross_border" || type === "crossborder") return "crossborder";
@@ -193,11 +224,57 @@ function titleCase(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function normalizeSource(source: string | undefined) {
+  return (source || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function signalDisplayText(item: BackendSignal) {
+  const rawText = item.title || item.signal_text || item.value_text;
+  const rawIndicator = parseRawIndicatorText(rawText);
+  if (rawIndicator) {
+    const label = indicatorLabel(rawIndicator.key);
+    const isMarketIndicator = normalizeSource(item.source) === "hkma";
+    return {
+      title: `${label} updated`,
+      summary: isMarketIndicator
+        ? `HKMA reported ${label} at ${rawIndicator.value}. Use this as market context for clients with relevant FX or cross-border exposure.`
+        : `${label}: ${rawIndicator.value}`,
+    };
+  }
+
+  return {
+    title: item.title || item.signal_text || "Backend signal",
+    summary:
+      item.signal_text ||
+      item.value_text ||
+      `${item.source || "InsightSync"} ${item.signal_level || "signal"}`,
+  };
+}
+
 function businessBackgroundFallback(item: BackendProspectSummary, companyName: string) {
   const industry = titleCase(item.industries?.[0] || "commercial banking");
   const region = item.region || "Hong Kong / GBA";
   const themes = item.recommended_product_themes?.slice(0, 3).join(", ");
   return `${companyName} is a ${industry.toLowerCase()} company operating in ${region}. The brief highlights current client conversation themes and likely banking needs${themes ? ` around ${themes}` : ""}.`;
+}
+
+function meaningfulRecommendedStep(value?: string | null) {
+  const text = (value || "").trim();
+  if (!text) return undefined;
+  const normalized = text.toLowerCase().replace(/\.$/, "");
+  if (/^review .+ angle and validate the linked evidence$/.test(normalized)) {
+    return undefined;
+  }
+  if (
+    [
+      "review linked evidence",
+      "review linked evidence before outreach",
+      "review linked evidence and prepare rm follow-up",
+    ].includes(normalized)
+  ) {
+    return undefined;
+  }
+  return text;
 }
 
 function mapWorkflowState(item?: BackendWorkflowState): Prospect["workflowState"] {
@@ -218,6 +295,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
   const industry = item.industries?.[0] || "Market Intelligence";
   const scoreInputs = item.score_breakdown?.score_inputs;
   const linkageQuality = item.score_breakdown?.linkage_quality;
+  const recommendedNextStep = meaningfulRecommendedStep(item.recommended_next_step);
 
   return {
     id: item.prospect_id,
@@ -237,11 +315,10 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
     engagementAngles: item.recommended_entry_angles?.map((label, index) => ({
       label,
       tag: item.focus_tags?.[index] || "signal",
-      recommendedTalkTrack:
-        item.recommended_next_step || "Review linked evidence before outreach.",
+      recommendedTalkTrack: recommendedNextStep || label,
     })),
     whyPrioritized: item.why_prioritized,
-    recommendedNextStep: item.recommended_next_step || undefined,
+    recommendedNextStep,
     scoreBreakdown: scoreInputs,
     linkageQuality: linkageQuality
       ? {
@@ -258,7 +335,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
       ? item.recommended_product_themes
       : ["Corporate Banking", "Cross-border Banking"],
     entryAngle:
-      item.recommended_next_step ||
+      recommendedNextStep ||
       item.why_prioritized?.join("; ") ||
       "Review evidence and prepare outreach note.",
     revenue: `Opportunity ${item.opportunity_score ?? "--"}`,
@@ -285,7 +362,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
       product,
       potential: `Score ${item.opportunity_score ?? item.priority_score}`,
       rationale:
-        item.recommended_next_step ||
+        recommendedNextStep ||
         "Recommended by backend prioritization and evidence linkage.",
     })),
   };
@@ -293,16 +370,14 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
 
 function mapSignal(item: BackendSignal, prospectById: Map<string, Prospect>): TriggerSignal {
   const prospect = item.prospect_id ? prospectById.get(item.prospect_id) : undefined;
+  const displayText = signalDisplayText(item);
   return {
     id: String(item.signal_id || item.id),
-    type: signalType(item.signal_type),
-    title: item.title || item.signal_text || "Backend signal",
+    type: signalType(item.signal_type, item),
+    title: displayText.title,
     company: prospect?.name || item.entity || item.company_id || "Market portfolio",
     date: item.event_time || new Date().toISOString(),
-    summary:
-      item.signal_text ||
-      item.value_text ||
-      `${item.source || "InsightSync"} ${item.signal_level || "signal"}`,
+    summary: displayText.summary,
     source: item.source,
     dataset: item.dataset,
     signalLevel: item.signal_level,
@@ -358,7 +433,7 @@ export function useInsightSyncData(): InsightSyncData {
     async function load() {
       try {
         const [prospectsResponse, signalsResponse, summary, market] = await Promise.all([
-          getJson<{ items: BackendProspectSummary[] }>("/api/prospects?limit=100&view=compact"),
+          getJson<{ items: BackendProspectSummary[] }>("/api/prospects?limit=100&view=full"),
           getJson<{ items: BackendSignal[] }>("/api/signals?limit=100"),
           getJson<BackendDashboardSummary>("/api/dashboard/summary"),
           getJson<BackendMarketOverview>("/api/dashboard/market-overview"),
