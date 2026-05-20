@@ -10,7 +10,6 @@ import {
   Edit3,
   ExternalLink,
   FileText,
-  Globe,
   MapPin,
   Sparkles,
   Target,
@@ -313,7 +312,6 @@ export default function ProspectDetailPage({
   const evidence = detailState.evidence;
   const backendProspect = detail?.prospect;
   const backendWorkflow = savedWorkflow || detail?.workflow_state;
-  const company = detail?.company;
   const scoreBreakdown = backendProspect?.score_breakdown;
   const linkageQuality = scoreBreakdown?.linkage_quality;
   const governanceFlags = scoreBreakdown?.governance_flags || [];
@@ -367,12 +365,6 @@ export default function ProspectDetailPage({
     ...(scoreBreakdown?.opportunity_components || []),
     ...(scoreBreakdown?.risk_components || []),
   ];
-  const companyDescription =
-    company?.profile_summary ||
-    company?.description ||
-    detail?.latest_state.state_summary ||
-    prospect.description;
-
   const relatedSignals = triggerSignals
     .filter((signal) => {
       const signalCompany = normalizeEntityName(signal.company);
@@ -1365,70 +1357,6 @@ export default function ProspectDetailPage({
                         </Badge>
                       ))}
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Company Background</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-foreground">{companyDescription}</p>
-                  {company?.website_url && (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="h-8 w-full justify-start text-xs"
-                    >
-                      <Link href={company.website_url}>
-                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        Company website
-                      </Link>
-                    </Button>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {[
-                      company?.city,
-                      company?.region,
-                      company?.country,
-                      ...prospect.crossBorderFootprint,
-                    ]
-                      .filter((location): location is string => Boolean(location))
-                      .slice(0, 6)
-                      .map((location) => (
-                      <Badge
-                        key={location}
-                        variant="outline"
-                        className="border-chart-3/20 bg-chart-3/10 text-chart-3"
-                      >
-                        <Globe className="mr-1 h-3 w-3" />
-                        {location}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[...(company?.industries || []), ...(company?.segments || [])]
-                      .slice(0, 6)
-                      .map((item) => (
-                        <Badge key={item} variant="secondary" className="text-[10px]">
-                          {formatLabel(item)}
-                        </Badge>
-                      ))}
-                  </div>
-                  {prospect.scoreBreakdown && (
-                    <div className="mt-4 space-y-2 border-t border-border pt-3">
-                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Score basis
-                      </p>
-                      {Object.entries(prospect.scoreBreakdown).map(([key, value]) => (
-                        <div key={key} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{formatLabel(key)}</span>
-                          <span className="font-medium text-foreground">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </aside>

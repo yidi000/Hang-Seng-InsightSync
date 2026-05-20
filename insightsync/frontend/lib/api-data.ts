@@ -258,6 +258,25 @@ function businessBackgroundFallback(item: BackendProspectSummary, companyName: s
   return `${companyName} is a ${industry.toLowerCase()} company operating in ${region}. The brief highlights current client conversation themes and likely banking needs${themes ? ` around ${themes}` : ""}.`;
 }
 
+function meaningfulRecommendedStep(value?: string | null) {
+  const text = (value || "").trim();
+  if (!text) return undefined;
+  const normalized = text.toLowerCase().replace(/\.$/, "");
+  if (/^review .+ angle and validate the linked evidence$/.test(normalized)) {
+    return undefined;
+  }
+  if (
+    [
+      "review linked evidence",
+      "review linked evidence before outreach",
+      "review linked evidence and prepare rm follow-up",
+    ].includes(normalized)
+  ) {
+    return undefined;
+  }
+  return text;
+}
+
 function mapWorkflowState(item?: BackendWorkflowState): Prospect["workflowState"] {
   if (!item) return undefined;
   return {
@@ -276,6 +295,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
   const industry = item.industries?.[0] || "Market Intelligence";
   const scoreInputs = item.score_breakdown?.score_inputs;
   const linkageQuality = item.score_breakdown?.linkage_quality;
+  const recommendedNextStep = meaningfulRecommendedStep(item.recommended_next_step);
 
   return {
     id: item.prospect_id,
@@ -295,11 +315,10 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
     engagementAngles: item.recommended_entry_angles?.map((label, index) => ({
       label,
       tag: item.focus_tags?.[index] || "signal",
-      recommendedTalkTrack:
-        item.recommended_next_step || "Review linked evidence before outreach.",
+      recommendedTalkTrack: recommendedNextStep || label,
     })),
     whyPrioritized: item.why_prioritized,
-    recommendedNextStep: item.recommended_next_step || undefined,
+    recommendedNextStep,
     scoreBreakdown: scoreInputs,
     linkageQuality: linkageQuality
       ? {
@@ -316,7 +335,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
       ? item.recommended_product_themes
       : ["Corporate Banking", "Cross-border Banking"],
     entryAngle:
-      item.recommended_next_step ||
+      recommendedNextStep ||
       item.why_prioritized?.join("; ") ||
       "Review evidence and prepare outreach note.",
     revenue: `Opportunity ${item.opportunity_score ?? "--"}`,
@@ -343,7 +362,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
       product,
       potential: `Score ${item.opportunity_score ?? item.priority_score}`,
       rationale:
-        item.recommended_next_step ||
+        recommendedNextStep ||
         "Recommended by backend prioritization and evidence linkage.",
     })),
   };
