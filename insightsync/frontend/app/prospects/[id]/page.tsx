@@ -90,6 +90,43 @@ function cleanEvidenceSummary(summary: string | undefined, title: string) {
   return cleaned;
 }
 
+function isRawFilingCategoryCode(value?: string | null) {
+  return /^\d{6,}(\|\|\d{3,})+$/.test((value || "").trim());
+}
+
+function cleanDocumentSummary(
+  summary?: string | null,
+  title?: string | null,
+  managementSummary?: string | null
+) {
+  const candidates = [summary, managementSummary]
+    .map((value) => (value || "").replace(/^title:\s*/i, "").trim())
+    .filter(Boolean);
+  const normalizedTitle = (title || "").trim();
+  const meaningful = candidates.find(
+    (value) => value !== normalizedTitle && !isRawFilingCategoryCode(value)
+  );
+  return meaningful || "";
+}
+
+function formatEvidenceSource(source?: string | null) {
+  const normalized = (source || "").toLowerCase();
+  if (normalized === "szse_cninfo") return "SZSE filing";
+  if (normalized === "hkma") return "HKMA";
+  return formatSource(source || undefined);
+}
+
+function formatEvidenceLanguage(lang?: string | null) {
+  const normalized = (lang || "").toLowerCase();
+  if (["zh", "zho", "cn", "zh-cn"].includes(normalized)) return "Chinese";
+  if (["zh-hk", "zh-tw", "tc", "traditional_chinese"].includes(normalized)) {
+    return "Traditional Chinese";
+  }
+  if (["yue", "cantonese"].includes(normalized)) return "Cantonese";
+  if (normalized === "en") return "English";
+  return lang || "Language unknown";
+}
+
 function evidenceExplorerHref(title: string) {
   return `/signals?search=${encodeURIComponent(title)}`;
 }
@@ -689,39 +726,48 @@ export default function ProspectDetailPage({
                         Evidence Supporting This Action
                       </CardTitle>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Filtered to RM-readable records linked to this company brief.
+                        Source reports and extracted facts used to support this brief. Raw exchange classification codes are hidden from RM view.
                       </p>
                     </div>
-                    <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                      Evidence API
-                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {evidenceSummary && (
                     <div className="grid gap-2 md:grid-cols-4">
                       <div className="rounded-lg border border-border bg-muted/30 p-3">
-                        <p className="text-[10px] text-muted-foreground">Documents</p>
+                        <p className="text-[10px] text-muted-foreground">Source documents</p>
                         <p className="mt-1 text-lg font-semibold text-foreground">
                           {formatNumber(evidenceSummary.parsed_document_count)}
                         </p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-muted/30 p-3">
-                        <p className="text-[10px] text-muted-foreground">Metrics</p>
-                        <p className="mt-1 text-lg font-semibold text-foreground">
-                          {formatNumber(evidenceSummary.metric_count)}
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Filings and reports available as source evidence.
                         </p>
                       </div>
                       <div className="rounded-lg border border-border bg-muted/30 p-3">
-                        <p className="text-[10px] text-muted-foreground">Risk factors</p>
+                        <p className="text-[10px] text-muted-foreground">Extracted metrics</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">
+                          {formatNumber(evidenceSummary.metric_count)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Structured financial figures found in reports.
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/30 p-3">
+                        <p className="text-[10px] text-muted-foreground">Risk disclosures</p>
                         <p className="mt-1 text-lg font-semibold text-foreground">
                           {formatNumber(evidenceSummary.risk_factor_count)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Risk language extracted for RM review.
                         </p>
                       </div>
                       <div className="rounded-lg border border-border bg-muted/30 p-3">
                         <p className="text-[10px] text-muted-foreground">Business events</p>
                         <p className="mt-1 text-lg font-semibold text-foreground">
                           {formatNumber(evidenceSummary.business_event_count)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Events that may support outreach angles.
                         </p>
                       </div>
                     </div>
@@ -742,59 +788,77 @@ export default function ProspectDetailPage({
                   {parsedDocuments.length > 0 && (
                     <div>
                       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Parsed company documents
+                        Source company documents
                       </p>
                       <div className="space-y-2">
-                        {parsedDocuments.slice(0, 4).map((document) => (
-                          <div
-                            key={document.id}
-                            className="rounded-lg border border-border bg-card p-3"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-medium text-foreground">
-                                  {document.title || `${formatSource(document.source)} document`}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {document.summary ||
-                                    document.management_discussion_summary ||
-                                    "Parsed evidence available for audit."}
-                                </p>
+                        {parsedDocuments.slice(0, 4).map((document) => {
+                          const documentSummary = cleanDocumentSummary(
+                            document.summary,
+                            document.title,
+                            document.management_discussion_summary
+                          );
+                          const parsedFacts =
+                            (document.metric_count || 0) +
+                            (document.risk_factor_count || 0) +
+                            (document.business_event_count || 0);
+
+                          return (
+                            <div
+                              key={document.id}
+                              className="rounded-lg border border-border bg-card p-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-foreground">
+                                    {document.title || `${formatEvidenceSource(document.source)} document`}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {documentSummary ||
+                                      "Source filing available. No narrative summary was extracted yet."}
+                                  </p>
+                                </div>
+                                {document.evidence_url && (
+                                  <Button
+                                    asChild
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0"
+                                    aria-label={`Open source evidence for ${document.title || document.id}`}
+                                  >
+                                    <Link href={document.evidence_url}>
+                                      <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                    </Link>
+                                  </Button>
+                                )}
                               </div>
-                              {document.evidence_url && (
-                                <Button
-                                  asChild
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0"
-                                  aria-label={`Open source evidence for ${document.title || document.id}`}
-                                >
-                                  <Link href={document.evidence_url}>
-                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              <Badge variant="outline" className="text-[10px]">
-                                {formatSource(document.source)}
-                              </Badge>
-                              <Badge variant="outline" className="text-[10px]">
-                                {document.parse_status}
-                              </Badge>
-                              {document.lang && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
                                 <Badge variant="outline" className="text-[10px]">
-                                  {document.lang}
+                                  {formatEvidenceSource(document.source)}
                                 </Badge>
-                              )}
-                              {document.genai_extraction?.accepted_count ? (
-                                <Badge className="bg-primary/10 text-primary text-[10px]">
-                                  GenAI accepted {document.genai_extraction.accepted_count}
-                                </Badge>
-                              ) : null}
+                                {document.lang && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {formatEvidenceLanguage(document.lang)}
+                                  </Badge>
+                                )}
+                                {parsedFacts > 0 && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {parsedFacts} extracted facts
+                                  </Badge>
+                                )}
+                                {document.parse_status !== "success" && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Parser review needed
+                                  </Badge>
+                                )}
+                                {document.genai_extraction?.accepted_count ? (
+                                  <Badge className="bg-primary/10 text-primary text-[10px]">
+                                    GenAI facts {document.genai_extraction.accepted_count}
+                                  </Badge>
+                                ) : null}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -964,7 +1028,11 @@ export default function ProspectDetailPage({
                     </div>
                   )}
 
-                  {viewableEvidenceCount === 0 && (
+                  {parsedDocuments.length === 0 &&
+                    keyMetrics.length === 0 &&
+                    keyRiskFactors.length === 0 &&
+                    keyBusinessEvents.length === 0 &&
+                    viewableEvidenceCount === 0 && (
                     <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
                       No RM-readable evidence is linked to this company yet. Review the signal feed or ask Copilot to inspect broader market context.
                     </div>
