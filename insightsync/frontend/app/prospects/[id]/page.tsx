@@ -271,24 +271,32 @@ export default function ProspectDetailPage({
   const summaryProspect = prospects.find((p) => p.id === decodedId);
   const prospect = detailState.mappedProspect || summaryProspect;
 
+  const scrollToScoreAudit = () => {
+    const target = document.getElementById("score-audit");
+    if (!target) return;
+
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}#score-audit`
+    );
+    const top = target.getBoundingClientRect().top + window.scrollY - 76;
+    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+  };
+
   useEffect(() => {
     if (detailState.loading || loading || window.location.hash !== "#score-audit") {
       return;
     }
 
-    window.setTimeout(() => {
-      document
-        .getElementById("score-audit")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
-  }, [decodedId, detailState.loading, loading, prospect]);
+    const timers = [100, 350, 700].map((delay) =>
+      window.setTimeout(scrollToScoreAudit, delay)
+    );
 
-  const scrollToScoreAudit = () => {
-    window.history.replaceState(null, "", "#score-audit");
-    document
-      .getElementById("score-audit")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [decodedId, detailState.loading, loading, prospect]);
 
   if (!prospect && (loading || detailState.loading)) {
     return (
