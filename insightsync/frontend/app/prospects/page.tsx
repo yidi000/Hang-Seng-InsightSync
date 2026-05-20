@@ -52,9 +52,9 @@ function formatLabel(value: string | undefined | null) {
 }
 
 function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
-  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High Priority";
-  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium Priority";
-  return "Watchlist";
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium";
+  return "Low";
 }
 
 function signalBelongsToProspect(
@@ -274,9 +274,12 @@ export default function ProspectsPage() {
                               <Badge className={priorityBandColors[prospect.tier]}>
                                 {priorityBandLabel(prospect)}
                               </Badge>
-                              <span className="text-sm text-muted-foreground">
+                              <Link
+                                href={`/prospects/${prospect.id}#score-audit`}
+                                className="text-sm font-medium text-primary hover:underline"
+                              >
                                 Score: {prospect.score}
-                              </span>
+                              </Link>
                             </div>
                             <p className="mt-0.5 text-sm text-muted-foreground">
                               {prospect.nameZh}

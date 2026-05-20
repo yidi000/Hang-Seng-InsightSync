@@ -111,9 +111,9 @@ function scoreSeverityClass(severity?: string | null) {
 }
 
 function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
-  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High Priority";
-  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium Priority";
-  return "Watchlist";
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium";
+  return "Low";
 }
 
 function scoreBand(score: number, kind: "opportunity" | "risk" | "confidence" | "priority") {
@@ -123,9 +123,9 @@ function scoreBand(score: number, kind: "opportunity" | "risk" | "confidence" | 
     return "Elevated risk";
   }
   if (kind === "priority") {
-    if (score >= 50) return "High priority";
-    if (score >= 38) return "Medium priority";
-    return "Watchlist";
+    if (score >= 50) return "High";
+    if (score >= 38) return "Medium";
+    return "Low";
   }
   if (score >= 70) return "Strong";
   if (score >= 40) return "Moderate";
@@ -174,12 +174,12 @@ function scoreNarrative(
   }
 
   if (score >= 50) {
-    return "Ranked high because business opportunity and evidence support are strong enough after risk adjustment.";
+    return "Ranked High because business opportunity and evidence support are strong enough after risk adjustment.";
   }
   if (score >= 38) {
-    return "Worth keeping on the watchlist or preparing for outreach, but not yet a top-priority RM action.";
+    return "Ranked Medium. Worth preparing for outreach, but not yet a top-priority RM action.";
   }
-  return "Keep on watchlist. The current score does not yet justify high-priority outreach.";
+  return "Ranked Low. The current score does not yet justify high-priority outreach.";
 }
 
 function priorityComponentLabel(name: string) {
@@ -488,8 +488,8 @@ export default function ProspectDetailPage({
                     <Badge className={priorityBandColors[prospect.tier]}>
                       {priorityBandLabel(prospect)}
                     </Badge>
-                    <Badge variant="outline">
-                      Priority score {prospect.score}
+                    <Badge asChild variant="outline">
+                      <Link href="#score-audit">Priority score {prospect.score}</Link>
                     </Badge>
                     <Badge variant="outline" className="capitalize">
                       {formatLabel(currentActionStatus)}

@@ -135,9 +135,9 @@ function formatStage(value?: string | null) {
 }
 
 function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
-  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High Priority";
-  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium Priority";
-  return "Watchlist";
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium";
+  return "Low";
 }
 
 export default function OverviewPage() {
@@ -866,9 +866,12 @@ export default function OverviewPage() {
                               <Badge className={priorityBandColors[prospect.tier]}>
                                 {priorityBandLabel(prospect)}
                               </Badge>
-                              <p className="text-xs text-foreground">
+                              <Link
+                                href={`/prospects/${prospect.id}#score-audit`}
+                                className="text-xs font-medium text-primary hover:underline"
+                              >
                                 Priority score {prospect.score}
-                              </p>
+                              </Link>
                               <p className="text-[11px] text-muted-foreground">
                                 {formatEvidenceConfidence(
                                   prospect.evidenceConfidenceScore
