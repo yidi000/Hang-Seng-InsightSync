@@ -32,14 +32,11 @@ import {
 import { useInsightSyncData } from "@/lib/api-data";
 import { useMetadataFilters } from "@/lib/metadata-data";
 
-const tierColors: Record<string, string> = {
+const priorityBandColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
   B: "bg-chart-2 text-white",
   C: "bg-muted text-muted-foreground",
 };
-
-const tierExplanation =
-  "Tier A/B/C maps to backend priority level: A high (actionable + score >= 50), B medium (score >= 38), C monitor.";
 
 function normalizeEntityName(value: string | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -52,6 +49,12 @@ function normalizeSource(value: string | undefined) {
 function formatLabel(value: string | undefined | null) {
   if (!value) return "Unassigned";
   return value.replace(/[_-]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High Priority";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium Priority";
+  return "Watchlist";
 }
 
 function signalBelongsToProspect(
@@ -238,10 +241,6 @@ export default function ProspectsPage() {
             </div>
           </div>
 
-          <p className="-mt-3 mb-4 text-xs text-muted-foreground">
-            {tierExplanation}
-          </p>
-
           <div className="space-y-4">
             {filteredProspects.map((prospect) => {
               const latestSignal = triggerSignals.find((signal) =>
@@ -272,8 +271,8 @@ export default function ProspectsPage() {
                               <h3 className="text-base font-semibold text-foreground">
                                 {prospect.name}
                               </h3>
-                              <Badge className={tierColors[prospect.tier]} title={tierExplanation}>
-                                Tier {prospect.tier}
+                              <Badge className={priorityBandColors[prospect.tier]}>
+                                {priorityBandLabel(prospect)}
                               </Badge>
                               <span className="text-sm text-muted-foreground">
                                 Score: {prospect.score}

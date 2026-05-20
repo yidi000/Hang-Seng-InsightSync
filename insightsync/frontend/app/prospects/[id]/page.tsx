@@ -34,14 +34,11 @@ import {
 } from "@/lib/api-data";
 import { useProspectDetail } from "@/lib/prospect-detail-data";
 
-const tierColors: Record<string, string> = {
+const priorityBandColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
   B: "bg-chart-2 text-white",
   C: "bg-muted text-muted-foreground",
 };
-
-const tierExplanation =
-  "Tier A/B/C maps to backend priority level: A high (actionable + score >= 50), B medium (score >= 38), C monitor.";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-HK", {
@@ -113,6 +110,12 @@ function scoreSeverityClass(severity?: string | null) {
   return "border-border bg-muted/40 text-muted-foreground";
 }
 
+function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High Priority";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium Priority";
+  return "Watchlist";
+}
+
 function scoreBand(score: number, kind: "opportunity" | "risk" | "confidence" | "priority") {
   if (kind === "risk") {
     if (score <= 10) return "Low friction";
@@ -174,7 +177,7 @@ function scoreNarrative(
     return "Ranked high because business opportunity and evidence support are strong enough after risk adjustment.";
   }
   if (score >= 38) {
-    return "Worth monitoring or preparing for outreach, but not yet a top-priority RM action.";
+    return "Worth keeping on the watchlist or preparing for outreach, but not yet a top-priority RM action.";
   }
   return "Keep on watchlist. The current score does not yet justify high-priority outreach.";
 }
@@ -482,8 +485,8 @@ export default function ProspectDetailPage({
               <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <div>
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Badge className={tierColors[prospect.tier]} title={tierExplanation}>
-                      Tier {prospect.tier}
+                    <Badge className={priorityBandColors[prospect.tier]}>
+                      {priorityBandLabel(prospect)}
                     </Badge>
                     <Badge variant="outline">
                       Priority score {prospect.score}
@@ -492,9 +495,6 @@ export default function ProspectDetailPage({
                       {formatLabel(currentActionStatus)}
                     </Badge>
                   </div>
-                  <p className="mb-3 text-xs text-muted-foreground">
-                    {tierExplanation}
-                  </p>
                   <h2 className="text-2xl font-bold text-foreground">
                     {prospect.name}
                   </h2>

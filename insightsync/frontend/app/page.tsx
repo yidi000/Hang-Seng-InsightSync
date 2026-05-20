@@ -47,14 +47,11 @@ const CHART_COLORS = [
   "var(--muted-foreground)",
 ];
 
-const tierColors: Record<string, string> = {
+const priorityBandColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
   B: "bg-chart-2 text-white",
   C: "bg-muted text-muted-foreground",
 };
-
-const tierExplanation =
-  "Tier A/B/C maps to backend priority level: A high (actionable + score >= 50), B medium (score >= 38), C monitor.";
 
 const signalTypeIcons: Record<string, typeof Building2> = {
   expansion: Building2,
@@ -135,6 +132,12 @@ function formatEvidenceConfidence(value?: number) {
 function formatStage(value?: string | null) {
   if (!value) return "New prospect";
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
+  if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High Priority";
+  if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium Priority";
+  return "Watchlist";
 }
 
 export default function OverviewPage() {
@@ -761,9 +764,6 @@ export default function OverviewPage() {
                   Showing top {Math.min(topProspects.length, 8)} of{" "}
                   {filteredProspects.length} matching companies
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {tierExplanation}
-                </p>
               </div>
               <Link href="/prospects">
                 <Button variant="outline" size="sm" className="h-8 text-xs">
@@ -863,8 +863,8 @@ export default function OverviewPage() {
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div className="space-y-1.5">
-                              <Badge className={tierColors[prospect.tier]} title={tierExplanation}>
-                                Tier {prospect.tier}
+                              <Badge className={priorityBandColors[prospect.tier]}>
+                                {priorityBandLabel(prospect)}
                               </Badge>
                               <p className="text-xs text-foreground">
                                 Priority score {prospect.score}
