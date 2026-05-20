@@ -111,6 +111,100 @@ function scoreSeverityClass(severity?: string | null) {
   return "border-border bg-muted/40 text-muted-foreground";
 }
 
+function scoreBand(score: number, kind: "opportunity" | "risk" | "confidence" | "priority") {
+  if (kind === "risk") {
+    if (score <= 10) return "Low friction";
+    if (score <= 35) return "Manageable risk";
+    return "Elevated risk";
+  }
+  if (kind === "priority") {
+    if (score >= 50) return "High priority";
+    if (score >= 38) return "Medium priority";
+    return "Watchlist";
+  }
+  if (score >= 70) return "Strong";
+  if (score >= 40) return "Moderate";
+  if (score > 0) return "Early signal";
+  return "No clear signal";
+}
+
+function scoreNarrative(
+  kind: "opportunity" | "risk" | "confidence" | "priority",
+  score: number
+) {
+  if (kind === "opportunity") {
+    if (score >= 70) {
+      return "Strong business opening supported by multiple commercial signals.";
+    }
+    if (score >= 40) {
+      return "Meaningful business opening, but more evidence or a sharper product angle would strengthen prioritization.";
+    }
+    if (score > 0) {
+      return "Early opportunity signal. The company is visible, but the business angle is still developing.";
+    }
+    return "No clear opportunity signal has been detected from linked evidence yet.";
+  }
+
+  if (kind === "risk") {
+    if (score <= 10) {
+      return "No material risk friction is visible in the linked evidence. This does not by itself make the lead high priority.";
+    }
+    if (score <= 35) {
+      return "Some risk friction is present, so RM outreach should include a focused review of the flagged issues.";
+    }
+    return "Risk evidence may constrain outreach and should be reviewed before prioritizing this company.";
+  }
+
+  if (kind === "confidence") {
+    if (score >= 70) {
+      return "Evidence is strong enough to support confident triage and follow-up planning.";
+    }
+    if (score >= 40) {
+      return "Evidence is usable, but more diverse or structured support would make the recommendation stronger.";
+    }
+    if (score > 0) {
+      return "Evidence support is thin. Treat the recommendation as a lead to inspect, not a firm conclusion.";
+    }
+    return "No reliable evidence support is available for scoring yet.";
+  }
+
+  if (score >= 50) {
+    return "Ranked high because business opportunity and evidence support are strong enough after risk adjustment.";
+  }
+  if (score >= 38) {
+    return "Worth monitoring or preparing for outreach, but not yet a top-priority RM action.";
+  }
+  return "Keep on watchlist. The current score does not yet justify high-priority outreach.";
+}
+
+function priorityComponentLabel(name: string) {
+  const labels: Record<string, string> = {
+    opportunity_weighted: "Opportunity contribution",
+    evidence_confidence_weighted: "Evidence confidence contribution",
+    risk_buffer: "Low-risk buffer",
+    actionable_status_gate: "Actionability gate",
+  };
+  return labels[name] || formatLabel(name);
+}
+
+function priorityComponentNarrative(name: string, fallback: string) {
+  const narratives: Record<string, string> = {
+    opportunity_weighted:
+      "Business opportunity carries the largest weight in final RM ordering.",
+    evidence_confidence_weighted:
+      "Evidence quality contributes so weakly supported leads do not rank too high.",
+    risk_buffer:
+      "Adds limited points when linked risk evidence is low. Low risk alone cannot make a company high priority.",
+    actionable_status_gate:
+      "Confirms the company can qualify for RM action; it does not add points by itself.",
+  };
+  return narratives[name] || fallback;
+}
+
+function signedPoints(points: number) {
+  return points > 0 ? `+${points}` : `${points}`;
+}
+
 export default function ProspectDetailPage({
   params,
 }: {
@@ -188,6 +282,49 @@ export default function ProspectDetailPage({
   const keyRiskFactors = evidence?.key_risk_factors || detail?.key_risk_factors || [];
   const keyBusinessEvents = evidence?.key_business_events || detail?.key_business_events || [];
   const productFits = detail?.latest_state.product_fit || [];
+  const scoreInputs = scoreBreakdown?.score_inputs || {};
+  const auditOpportunityScore =
+    scoreInputs.opportunity_score ?? backendProspect?.opportunity_score ?? prospect.opportunityScore ?? 0;
+  const auditRiskScore =
+    scoreInputs.risk_score ?? backendProspect?.risk_score ?? prospect.riskScore ?? 0;
+  const auditEvidenceConfidenceScore =
+    scoreInputs.evidence_confidence_score ??
+    backendProspect?.evidence_confidence_score ??
+    prospect.evidenceConfidenceScore ??
+    0;
+  const auditPriorityScore =
+    scoreInputs.priority_score ?? backendProspect?.priority_score ?? prospect.score ?? 0;
+  const auditPriorityBand = scoreBand(auditPriorityScore, "priority");
+  const scoreAuditCards = [
+    {
+      title: "Business Opportunity",
+      value: auditOpportunityScore,
+      kind: "opportunity" as const,
+      description: scoreNarrative("opportunity", auditOpportunityScore),
+    },
+    {
+      title: "Risk Friction",
+      value: auditRiskScore,
+      kind: "risk" as const,
+      description: scoreNarrative("risk", auditRiskScore),
+    },
+    {
+      title: "Evidence Confidence",
+      value: auditEvidenceConfidenceScore,
+      kind: "confidence" as const,
+      description: scoreNarrative("confidence", auditEvidenceConfidenceScore),
+    },
+    {
+      title: "RM Priority",
+      value: auditPriorityScore,
+      kind: "priority" as const,
+      description: scoreNarrative("priority", auditPriorityScore),
+    },
+  ];
+  const scoreDrivers = [
+    ...(scoreBreakdown?.opportunity_components || []),
+    ...(scoreBreakdown?.risk_components || []),
+  ];
   const companyDescription =
     company?.profile_summary ||
     company?.description ||
@@ -852,83 +989,156 @@ export default function ProspectDetailPage({
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-3 md:grid-cols-4">
-                      {Object.entries(scoreBreakdown.score_inputs || {}).map(([key, value]) => (
-                        <div key={key} className="rounded-lg border border-border bg-muted/30 p-3">
-                          <p className="text-[10px] text-muted-foreground">
-                            {formatLabel(key)}
+                  <CardContent className="space-y-5">
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div className="max-w-3xl">
+                          <p className="text-xs font-medium uppercase tracking-wider text-primary">
+                            Priority readout
                           </p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            {value}
+                          <p className="mt-1 text-base font-semibold text-foreground">
+                            {auditPriorityBand} for RM action
+                          </p>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Priority combines business opportunity, evidence confidence, and a limited
+                            low-risk buffer. Low risk helps the ranking only when there is also a
+                            credible opportunity signal; it is not a credit rating or sales prediction.
+                          </p>
+                        </div>
+                        <div className="shrink-0 rounded-lg border border-primary/20 bg-background px-4 py-3 text-left md:text-right">
+                          <p className="text-xs text-muted-foreground">RM priority score</p>
+                          <p className="mt-1 text-2xl font-semibold text-foreground">
+                            {auditPriorityScore}
+                            <span className="text-sm font-normal text-muted-foreground"> / 100</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      {scoreAuditCards.map((card) => (
+                        <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-medium text-foreground">{card.title}</p>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {scoreBand(card.value, card.kind)}
+                              </p>
+                            </div>
+                            <p className="text-lg font-semibold text-foreground">
+                              {card.value}
+                              <span className="text-xs font-normal text-muted-foreground">/100</span>
+                            </p>
+                          </div>
+                          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                            {card.description}
                           </p>
                         </div>
                       ))}
                     </div>
 
                     {linkageQuality && (
-                      <div className="grid gap-3 md:grid-cols-4">
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-[10px] text-muted-foreground">Linked evidence</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            {formatNumber(linkageQuality.linked_evidence_count)}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-[10px] text-muted-foreground">Scoreable evidence</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            {formatNumber(linkageQuality.scoreable_evidence_count)}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-[10px] text-muted-foreground">Direct evidence ratio</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            {formatRatio(linkageQuality.direct_evidence_ratio)}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-[10px] text-muted-foreground">Scoreable ratio</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            {formatRatio(linkageQuality.scoreable_evidence_ratio)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid gap-3 lg:grid-cols-3">
-                      {[
-                        ["Opportunity", scoreBreakdown.opportunity_components || []],
-                        ["Risk", scoreBreakdown.risk_components || []],
-                        ["Priority", scoreBreakdown.priority_components || []],
-                      ].map(([title, components]) => (
-                        <div key={title as string} className="rounded-lg border border-border p-3">
-                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                            {title as string}
-                          </p>
-                          <div className="space-y-2">
-                            {(components as NonNullable<typeof scoreBreakdown.opportunity_components>)
-                              .slice(0, 4)
-                              .map((component) => (
-                                <div key={`${component.name}-${component.points}`}>
-                                  <div className="flex items-center justify-between gap-3 text-xs">
-                                    <span className="font-medium text-foreground">
-                                      {formatLabel(component.name)}
-                                    </span>
-                                    <span className="font-semibold text-foreground">
-                                      {component.points}
-                                    </span>
-                                  </div>
-                                  <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-                                    {component.detail}
-                                  </p>
-                                </div>
-                              ))}
-                            {(components as unknown[]).length === 0 && (
-                              <p className="text-xs text-muted-foreground">No components.</p>
-                            )}
+                      <details className="rounded-lg border border-border bg-muted/20 p-3">
+                        <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Evidence quality details
+                        </summary>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {formatNumber(linkageQuality.scoreable_evidence_count)} of{" "}
+                          {formatNumber(linkageQuality.linked_evidence_count)} linked evidence records
+                          are eligible for scoring; {formatRatio(linkageQuality.direct_evidence_ratio)} are
+                          directly about this company.
+                        </p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-4">
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <p className="text-[10px] text-muted-foreground">Evidence records found</p>
+                            <p className="mt-1 text-lg font-semibold text-foreground">
+                              {formatNumber(linkageQuality.linked_evidence_count)}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <p className="text-[10px] text-muted-foreground">Used in scoring</p>
+                            <p className="mt-1 text-lg font-semibold text-foreground">
+                              {formatNumber(linkageQuality.scoreable_evidence_count)}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <p className="text-[10px] text-muted-foreground">Directly about this company</p>
+                            <p className="mt-1 text-lg font-semibold text-foreground">
+                              {formatRatio(linkageQuality.direct_evidence_ratio)}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <p className="text-[10px] text-muted-foreground">Eligible evidence coverage</p>
+                            <p className="mt-1 text-lg font-semibold text-foreground">
+                              {formatRatio(linkageQuality.scoreable_evidence_ratio)}
+                            </p>
                           </div>
                         </div>
-                      ))}
+                        {scoreBreakdown.priority_formula && (
+                          <p className="mt-3 text-[11px] text-muted-foreground">
+                            Formula: {scoreBreakdown.priority_formula}
+                          </p>
+                        )}
+                      </details>
+                    )}
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Main score drivers
+                        </p>
+                        <div className="space-y-3">
+                          {scoreDrivers.slice(0, 5).map((component) => (
+                            <div key={`${component.category}-${component.name}-${component.points}`}>
+                              <div className="flex items-start justify-between gap-3 text-sm">
+                                <span className="font-medium text-foreground">
+                                  {formatLabel(component.name)}
+                                </span>
+                                <span className="font-semibold text-foreground">
+                                  {signedPoints(component.points)}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                {component.detail}
+                              </p>
+                            </div>
+                          ))}
+                          {scoreDrivers.length === 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              No score drivers are linked yet. Review the evidence section before using this
+                              company as an outreach target.
+                            </p>
+                          )}
+                          {(scoreBreakdown.risk_components || []).length === 0 && (
+                            <p className="rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground">
+                              No material risk signal is detected in the linked evidence.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Priority calculation
+                        </p>
+                        <div className="space-y-3">
+                          {(scoreBreakdown.priority_components || []).map((component) => (
+                            <div key={`${component.name}-${component.points}`}>
+                              <div className="flex items-start justify-between gap-3 text-sm">
+                                <span className="font-medium text-foreground">
+                                  {priorityComponentLabel(component.name)}
+                                </span>
+                                <span className="font-semibold text-foreground">
+                                  {signedPoints(component.points)}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                {priorityComponentNarrative(component.name, component.detail)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {governanceFlags.length > 0 && (
