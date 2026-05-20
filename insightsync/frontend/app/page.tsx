@@ -205,6 +205,17 @@ export default function OverviewPage() {
     () => prospects.filter(isOperationalCompanyProfile),
     [prospects]
   );
+  const industryRankings = useMemo(() => {
+    const items = marketOverview.industryDistribution
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
+      .slice(0, 7);
+    const maxValue = Math.max(...items.map((item) => item.value), 1);
+    return items.map((item) => ({
+      ...item,
+      percentage: Math.max(8, Math.round((item.value / maxValue) * 100)),
+    }));
+  }, [marketOverview.industryDistribution]);
   const signalTypeData = useMemo(() => {
     const counts = triggerSignals.reduce<Record<string, number>>((acc, signal) => {
       const label =
@@ -525,68 +536,49 @@ export default function OverviewPage() {
               {/* By Industry */}
               <Card className="border-border">
                 <CardHeader className="pb-2 pt-4 px-4">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    By Industry
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">
+                      By Industry
+                    </CardTitle>
+                    <span className="text-[10px] text-muted-foreground">
+                      Top {industryRankings.length}
+                    </span>
+                  </div>
                 </CardHeader>
                 <CardContent className="px-4 pb-4">
-                  <div className="h-[180px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={marketOverview.industryDistribution}
-                        layout="vertical"
-                        margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                  <div className="space-y-2.5">
+                    {industryRankings.map((item, index) => (
+                      <button
+                        key={item.name}
+                        onClick={() => handleIndustryClick(item)}
+                        className={`group w-full rounded-md px-2 py-1.5 text-left transition-colors ${
+                          industryFilter === item.name
+                            ? "bg-primary/10"
+                            : "hover:bg-muted/50"
+                        }`}
                       >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          horizontal={true}
-                          vertical={false}
-                          stroke="var(--border)"
-                        />
-                        <XAxis
-                          type="number"
-                          tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={80}
-                          tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "var(--card)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "6px",
-                            fontSize: "11px",
-                          }}
-                        />
-                        <Bar
-                          dataKey="value"
-                          radius={[0, 4, 4, 0]}
-                          cursor="pointer"
-                          onClick={(data) => handleIndustryClick(data)}
-                        >
-                          {marketOverview.industryDistribution.map(
-                            (entry, index) => (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={
-                                  industryFilter === entry.name
-                                    ? "var(--primary)"
-                                    : CHART_COLORS[index % CHART_COLORS.length]
-                                }
-                                className="transition-all hover:opacity-80"
-                              />
-                            )
-                          )}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="truncate text-xs font-medium text-foreground">
+                            {item.name}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {item.value}
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-muted">
+                          <div
+                            className="h-2 rounded-full transition-all group-hover:opacity-85"
+                            style={{
+                              width: `${item.percentage}%`,
+                              backgroundColor:
+                                industryFilter === item.name
+                                  ? "var(--primary)"
+                                  : CHART_COLORS[index % CHART_COLORS.length],
+                            }}
+                          />
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -915,15 +907,15 @@ export default function OverviewPage() {
                             </div>
                           </td>
                           <td className="px-4 py-4 align-top">
-                            <div className="space-y-1.5">
-                              <Badge className={priorityBandColors[prospect.tier]}>
+                            <div className="flex flex-col items-start gap-1.5">
+                              <Badge className={`${priorityBandColors[prospect.tier]} w-fit`}>
                                 {priorityBandLabel(prospect)}
                               </Badge>
                               <Link
                                 href={`/prospects/${prospect.id}#score-audit`}
-                                className="text-sm font-medium text-primary hover:underline"
+                                className="block text-sm font-medium leading-tight text-primary hover:underline"
                               >
-                                Priority score {prospect.score}
+                                Score {prospect.score}
                               </Link>
                               <p className="text-xs text-muted-foreground">
                                 {formatEvidenceConfidence(

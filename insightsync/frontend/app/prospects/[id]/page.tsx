@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -271,6 +271,25 @@ export default function ProspectDetailPage({
   const summaryProspect = prospects.find((p) => p.id === decodedId);
   const prospect = detailState.mappedProspect || summaryProspect;
 
+  useEffect(() => {
+    if (detailState.loading || loading || window.location.hash !== "#score-audit") {
+      return;
+    }
+
+    window.setTimeout(() => {
+      document
+        .getElementById("score-audit")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }, [decodedId, detailState.loading, loading, prospect]);
+
+  const scrollToScoreAudit = () => {
+    window.history.replaceState(null, "", "#score-audit");
+    document
+      .getElementById("score-audit")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   if (!prospect && (loading || detailState.loading)) {
     return (
       <div className="min-h-screen bg-background">
@@ -517,9 +536,13 @@ export default function ProspectDetailPage({
                     <Badge className={priorityBandColors[prospect.tier]}>
                       {priorityBandLabel(prospect)}
                     </Badge>
-                    <Badge asChild variant="outline">
-                      <Link href="#score-audit">Priority score {prospect.score}</Link>
-                    </Badge>
+                    <button
+                      type="button"
+                      onClick={scrollToScoreAudit}
+                      className="inline-flex h-6 items-center rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted hover:text-primary"
+                    >
+                      Priority score {prospect.score}
+                    </button>
                     <Badge variant="outline" className="capitalize">
                       {formatLabel(currentActionStatus)}
                     </Badge>
@@ -1032,8 +1055,7 @@ export default function ProspectDetailPage({
                 </CardContent>
               </Card>
 
-              {scoreBreakdown && (
-                <Card id="score-audit" className="border-border">
+              <Card id="score-audit" className="scroll-mt-20 border-border">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1046,7 +1068,7 @@ export default function ProspectDetailPage({
                         </p>
                       </div>
                       <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                        {scoreBreakdown.scorecard_version || "scorecard"}
+                        {scoreBreakdown?.scorecard_version || "sample score"}
                       </Badge>
                     </div>
                   </CardHeader>
@@ -1135,7 +1157,7 @@ export default function ProspectDetailPage({
                             </p>
                           </div>
                         </div>
-                        {scoreBreakdown.priority_formula && (
+                        {scoreBreakdown?.priority_formula && (
                           <p className="mt-3 text-[11px] text-muted-foreground">
                             Formula: {scoreBreakdown.priority_formula}
                           </p>
@@ -1170,7 +1192,7 @@ export default function ProspectDetailPage({
                               company as an outreach target.
                             </p>
                           )}
-                          {(scoreBreakdown.risk_components || []).length === 0 && (
+                          {(scoreBreakdown?.risk_components || []).length === 0 && (
                             <p className="rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground">
                               No material risk signal is detected in the linked evidence.
                             </p>
@@ -1183,7 +1205,7 @@ export default function ProspectDetailPage({
                           Priority calculation
                         </p>
                         <div className="space-y-3">
-                          {(scoreBreakdown.priority_components || []).map((component) => (
+                          {(scoreBreakdown?.priority_components || []).map((component) => (
                             <div key={`${component.name}-${component.points}`}>
                               <div className="flex items-start justify-between gap-3 text-sm">
                                 <span className="font-medium text-foreground">
@@ -1198,6 +1220,12 @@ export default function ProspectDetailPage({
                               </p>
                             </div>
                           ))}
+                          {(scoreBreakdown?.priority_components || []).length === 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Detailed priority components are not available for this sample company.
+                              Use the headline score and linked evidence for directional review only.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1228,7 +1256,6 @@ export default function ProspectDetailPage({
                     )}
                   </CardContent>
                 </Card>
-              )}
 
             </div>
 
