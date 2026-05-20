@@ -271,7 +271,7 @@ export default function ProspectsPage() {
                               <h3 className="text-base font-semibold text-foreground">
                                 {prospect.name}
                               </h3>
-                              <Badge className={priorityBandColors[prospect.tier]}>
+                              <Badge className={`${priorityBandColors[prospect.tier]} w-fit`}>
                                 {priorityBandLabel(prospect)}
                               </Badge>
                               <Link
