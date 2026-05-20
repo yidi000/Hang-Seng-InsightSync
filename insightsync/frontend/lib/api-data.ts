@@ -169,7 +169,38 @@ function tierFromPriority(priority: BackendProspectSummary["priority_level"]): P
   return "C";
 }
 
-function signalType(type?: string): TriggerSignal["type"] {
+function parseRawIndicatorText(value?: string | null) {
+  const match = (value || "").trim().match(/^([a-z0-9_]+):\s*([+-]?\d+(?:\.\d+)?)$/i);
+  if (!match) return null;
+  return {
+    key: match[1].toLowerCase(),
+    value: match[2],
+  };
+}
+
+function indicatorLabel(key: string) {
+  const labels: Record<string, string> = {
+    neeri_2020_trade_wgt: "NEERI trade-weighted index",
+    neeri_2020_import_wgt: "NEERI import-weighted index",
+    neeri_2020_export_wgt: "NEERI export-weighted index",
+    zar: "South African rand FX reference",
+    idr: "Indonesian rupiah FX reference",
+    inr: "Indian rupee FX reference",
+    usd: "US dollar FX reference",
+    eur: "Euro FX reference",
+    cny: "Renminbi FX reference",
+    jpy: "Japanese yen FX reference",
+    gbp: "British pound FX reference",
+    aud: "Australian dollar FX reference",
+    cad: "Canadian dollar FX reference",
+    sgd: "Singapore dollar FX reference",
+  };
+  return labels[key] || titleCase(key);
+}
+
+function signalType(type?: string, item?: BackendSignal): TriggerSignal["type"] {
+  const rawIndicator = parseRawIndicatorText(item?.title || item?.signal_text || item?.value_text);
+  if (rawIndicator && normalizeSource(item?.source) === "hkma") return "crossborder";
   if (type === "financing" || type === "funding") return "funding";
   if (type === "policy") return "policy";
   if (type === "cross_border" || type === "crossborder") return "crossborder";
@@ -191,6 +222,33 @@ function titleCase(value: string) {
   return value
     .replace(/[_-]/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeSource(source: string | undefined) {
+  return (source || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function signalDisplayText(item: BackendSignal) {
+  const rawText = item.title || item.signal_text || item.value_text;
+  const rawIndicator = parseRawIndicatorText(rawText);
+  if (rawIndicator) {
+    const label = indicatorLabel(rawIndicator.key);
+    const isMarketIndicator = normalizeSource(item.source) === "hkma";
+    return {
+      title: `${label} updated`,
+      summary: isMarketIndicator
+        ? `HKMA reported ${label} at ${rawIndicator.value}. Use this as market context for clients with relevant FX or cross-border exposure.`
+        : `${label}: ${rawIndicator.value}`,
+    };
+  }
+
+  return {
+    title: item.title || item.signal_text || "Backend signal",
+    summary:
+      item.signal_text ||
+      item.value_text ||
+      `${item.source || "InsightSync"} ${item.signal_level || "signal"}`,
+  };
 }
 
 function businessBackgroundFallback(item: BackendProspectSummary, companyName: string) {
@@ -293,16 +351,14 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
 
 function mapSignal(item: BackendSignal, prospectById: Map<string, Prospect>): TriggerSignal {
   const prospect = item.prospect_id ? prospectById.get(item.prospect_id) : undefined;
+  const displayText = signalDisplayText(item);
   return {
     id: String(item.signal_id || item.id),
-    type: signalType(item.signal_type),
-    title: item.title || item.signal_text || "Backend signal",
+    type: signalType(item.signal_type, item),
+    title: displayText.title,
     company: prospect?.name || item.entity || item.company_id || "Market portfolio",
     date: item.event_time || new Date().toISOString(),
-    summary:
-      item.signal_text ||
-      item.value_text ||
-      `${item.source || "InsightSync"} ${item.signal_level || "signal"}`,
+    summary: displayText.summary,
     source: item.source,
     dataset: item.dataset,
     signalLevel: item.signal_level,
