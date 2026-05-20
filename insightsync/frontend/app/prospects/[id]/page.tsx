@@ -11,7 +11,6 @@ import {
   ExternalLink,
   FileText,
   Globe,
-  ShieldCheck,
   MapPin,
   Sparkles,
   Target,
@@ -269,7 +268,6 @@ export default function ProspectDetailPage({
   const detail = detailState.detail;
   const brief = detailState.brief;
   const evidence = detailState.evidence;
-  const review = detailState.review;
   const backendProspect = detail?.prospect;
   const backendWorkflow = savedWorkflow || detail?.workflow_state;
   const company = detail?.company;
@@ -542,11 +540,6 @@ export default function ProspectDetailPage({
                         </>
                       )}
                     </p>
-                    {detailState.partialErrors.review && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        LLM review is not available for this record yet.
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -1171,116 +1164,6 @@ export default function ProspectDetailPage({
                 </Card>
               )}
 
-              <Card id="llm-review" className="border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <ShieldCheck className="h-5 w-5 text-chart-3" />
-                        LLM Review
-                      </CardTitle>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Advisory review for linkage quality, subjectivity risk, and extraction gaps.
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                      {review?.model_name || review?.status || "advisory"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {review ? (
-                    <>
-                      <div className="rounded-lg border border-border bg-muted/30 p-4">
-                        <p className="text-sm text-foreground">{review.review_summary}</p>
-                      </div>
-
-                      {review.audit_findings?.length ? (
-                        <div>
-                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                            Audit findings
-                          </p>
-                          <div className="space-y-2">
-                            {review.audit_findings.slice(0, 4).map((finding) => (
-                              <div
-                                key={finding.finding_key}
-                                className={`rounded-lg border p-3 text-xs ${scoreSeverityClass(finding.severity)}`}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="font-semibold">{finding.issue}</p>
-                                  <Badge variant="outline" className="bg-background/70 text-[10px]">
-                                    {finding.severity}
-                                  </Badge>
-                                </div>
-                                <p className="mt-1">{finding.reason}</p>
-                                <p className="mt-1 opacity-80">{finding.suggested_action}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {review.linkage_reviews?.length ? (
-                        <div>
-                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                            Linkage reviews
-                          </p>
-                          <div className="space-y-2">
-                            {review.linkage_reviews.slice(0, 4).map((item) => (
-                              <div key={item.item_key} className="rounded-lg border border-border p-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="text-[10px]">
-                                    {formatLabel(item.review_status)}
-                                  </Badge>
-                                  {typeof item.confidence === "number" && (
-                                    <Badge variant="outline" className="text-[10px]">
-                                      confidence {Math.round(item.confidence * 100)}%
-                                    </Badge>
-                                  )}
-                                  {typeof item.should_affect_scoring === "boolean" && (
-                                    <Badge variant="outline" className="text-[10px]">
-                                      {item.should_affect_scoring ? "scoreable" : "not scoreable"}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="mt-2 text-sm font-medium text-foreground">
-                                  {item.title || item.item_key}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {item.reason}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {review.extraction_opportunities?.length ? (
-                        <div>
-                          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                            Extraction opportunities
-                          </p>
-                          <div className="grid gap-2 md:grid-cols-2">
-                            {review.extraction_opportunities.slice(0, 4).map((item) => (
-                              <div key={`${item.area}-${item.suggested_output}`} className="rounded-lg border border-border p-3">
-                                <p className="text-sm font-medium text-foreground">
-                                  {formatLabel(item.area)}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">{item.why}</p>
-                                <p className="mt-1 text-xs text-foreground">{item.suggested_output}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      LLM review is unavailable for this prospect. The score audit and linked evidence remain available.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             </div>
 
             <aside className="space-y-4">

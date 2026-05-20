@@ -134,21 +134,6 @@ function formatStage(value?: string | null) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatRelationshipContext(prospect: {
-  workflowState?: {
-    stage?: string | null;
-    nextAction?: string | null;
-  };
-  recommendedNextStep?: string;
-}) {
-  const nextAction =
-    prospect.workflowState?.nextAction ||
-    prospect.recommendedNextStep ||
-    "Review linked evidence";
-
-  return { nextAction };
-}
-
 export default function OverviewPage() {
   const {
     prospects,
@@ -847,8 +832,6 @@ export default function OverviewPage() {
                           : signalBelongsToProspect(signal, prospect)
                       );
                       const evidencePreview = latestSignal || prospect.news[0];
-                      const relationshipContext =
-                        formatRelationshipContext(prospect);
                       return (
                         <tr
                           key={prospect.id}
@@ -942,9 +925,6 @@ export default function OverviewPage() {
                             <div className="space-y-1.5 text-xs">
                               <p className="font-medium text-foreground">
                                 {formatStage(prospect.workflowState?.stage)}
-                              </p>
-                              <p className="line-clamp-2 text-muted-foreground">
-                                Next: {relationshipContext.nextAction}
                               </p>
                             </div>
                           </td>
