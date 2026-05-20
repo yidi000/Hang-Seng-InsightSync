@@ -40,6 +40,9 @@ const tierColors: Record<string, string> = {
   C: "bg-muted text-muted-foreground",
 };
 
+const tierExplanation =
+  "Tier A/B/C maps to backend priority level: A high (actionable + score >= 50), B medium (score >= 38), C monitor.";
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-HK", {
     month: "short",
@@ -479,7 +482,7 @@ export default function ProspectDetailPage({
               <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <div>
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Badge className={tierColors[prospect.tier]}>
+                    <Badge className={tierColors[prospect.tier]} title={tierExplanation}>
                       Tier {prospect.tier}
                     </Badge>
                     <Badge variant="outline">
@@ -489,6 +492,9 @@ export default function ProspectDetailPage({
                       {formatLabel(currentActionStatus)}
                     </Badge>
                   </div>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    {tierExplanation}
+                  </p>
                   <h2 className="text-2xl font-bold text-foreground">
                     {prospect.name}
                   </h2>

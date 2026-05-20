@@ -53,6 +53,9 @@ const tierColors: Record<string, string> = {
   C: "bg-muted text-muted-foreground",
 };
 
+const tierExplanation =
+  "Tier A/B/C maps to backend priority level: A high (actionable + score >= 50), B medium (score >= 38), C monitor.";
+
 const signalTypeIcons: Record<string, typeof Building2> = {
   expansion: Building2,
   funding: TrendingUp,
@@ -758,6 +761,9 @@ export default function OverviewPage() {
                   Showing top {Math.min(topProspects.length, 8)} of{" "}
                   {filteredProspects.length} matching companies
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {tierExplanation}
+                </p>
               </div>
               <Link href="/prospects">
                 <Button variant="outline" size="sm" className="h-8 text-xs">
@@ -857,7 +863,7 @@ export default function OverviewPage() {
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div className="space-y-1.5">
-                              <Badge className={tierColors[prospect.tier]}>
+                              <Badge className={tierColors[prospect.tier]} title={tierExplanation}>
                                 Tier {prospect.tier}
                               </Badge>
                               <p className="text-xs text-foreground">

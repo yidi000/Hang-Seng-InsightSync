@@ -38,6 +38,9 @@ const tierColors: Record<string, string> = {
   C: "bg-muted text-muted-foreground",
 };
 
+const tierExplanation =
+  "Tier A/B/C maps to backend priority level: A high (actionable + score >= 50), B medium (score >= 38), C monitor.";
+
 function normalizeEntityName(value: string | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -235,6 +238,10 @@ export default function ProspectsPage() {
             </div>
           </div>
 
+          <p className="-mt-3 mb-4 text-xs text-muted-foreground">
+            {tierExplanation}
+          </p>
+
           <div className="space-y-4">
             {filteredProspects.map((prospect) => {
               const latestSignal = triggerSignals.find((signal) =>
@@ -265,7 +272,7 @@ export default function ProspectsPage() {
                               <h3 className="text-base font-semibold text-foreground">
                                 {prospect.name}
                               </h3>
-                              <Badge className={tierColors[prospect.tier]}>
+                              <Badge className={tierColors[prospect.tier]} title={tierExplanation}>
                                 Tier {prospect.tier}
                               </Badge>
                               <span className="text-sm text-muted-foreground">
