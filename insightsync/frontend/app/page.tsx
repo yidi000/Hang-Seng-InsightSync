@@ -137,21 +137,16 @@ function formatStage(value?: string | null) {
 function formatRelationshipContext(prospect: {
   workflowState?: {
     stage?: string | null;
-    reviewStatus?: string | null;
     nextAction?: string | null;
   };
-  productFit: string[];
   recommendedNextStep?: string;
 }) {
-  const reviewStatus =
-    prospect.workflowState?.reviewStatus?.replace(/_/g, " ") || "not reviewed";
-  const productLabel = `Suggested products: ${prospect.productFit.length}`;
   const nextAction =
     prospect.workflowState?.nextAction ||
     prospect.recommendedNextStep ||
     "Review linked evidence";
 
-  return { reviewStatus, productLabel, nextAction };
+  return { nextAction };
 }
 
 export default function OverviewPage() {
@@ -948,13 +943,7 @@ export default function OverviewPage() {
                               <p className="font-medium text-foreground">
                                 {formatStage(prospect.workflowState?.stage)}
                               </p>
-                              <p className="text-muted-foreground">
-                                Review: {relationshipContext.reviewStatus}
-                              </p>
-                              <p className="text-muted-foreground">
-                                {relationshipContext.productLabel}
-                              </p>
-                              <p className="text-muted-foreground">
+                              <p className="line-clamp-2 text-muted-foreground">
                                 Next: {relationshipContext.nextAction}
                               </p>
                             </div>

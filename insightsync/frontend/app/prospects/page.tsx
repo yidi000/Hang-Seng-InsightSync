@@ -240,10 +240,6 @@ export default function ProspectsPage() {
               const latestSignal = triggerSignals.find((signal) =>
                 signalBelongsToProspect(signal, prospect)
               );
-              const linkedEvidenceCount =
-                triggerSignals.filter((signal) =>
-                  signalBelongsToProspect(signal, prospect)
-                ).length + prospect.news.length;
 
               return (
                 <Card
@@ -361,9 +357,6 @@ export default function ProspectsPage() {
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
-                            <Badge variant="outline" className="bg-muted/50 text-[10px]">
-                              Evidence: {linkedEvidenceCount}
-                            </Badge>
                             <Badge variant="outline" className="bg-muted/50 text-[10px]">
                               Owner: {prospect.workflowState?.owner || "Unassigned"}
                             </Badge>

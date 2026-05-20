@@ -217,6 +217,7 @@ export default function ProspectDetailPage({
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotPrompt, setCopilotPrompt] = useState<string | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [draftOwner, setDraftOwner] = useState("");
   const [draftStage, setDraftStage] = useState("");
   const [draftStatus, setDraftStatus] = useState("not_reviewed");
   const [draftLastAction, setDraftLastAction] = useState("");
@@ -384,6 +385,7 @@ export default function ProspectDetailPage({
   const latestWorkflowNote = backendWorkflow?.notes || prospect.workflowState?.notes;
 
   const openUpdateDrawer = () => {
+    setDraftOwner(backendWorkflow?.owner || prospect.workflowState?.owner || "");
     setDraftStage(backendWorkflow?.stage || prospect.workflowState?.stage || "new");
     setDraftStatus(
       backendWorkflow?.review_status ||
@@ -407,7 +409,7 @@ export default function ProspectDetailPage({
 
     try {
       const workflow = await updateProspectWorkflow(prospect.id, {
-        owner: backendWorkflow?.owner || prospect.workflowState?.owner || null,
+        owner: draftOwner.trim() || null,
         stage: draftStage || currentStage,
         status: backendWorkflow?.status || prospect.workflowState?.status || "open",
         last_action: draftLastAction || null,
@@ -1500,6 +1502,18 @@ export default function ProspectDetailPage({
             </div>
 
             <div className="space-y-4 p-5">
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-foreground">
+                  Owner
+                </span>
+                <input
+                  value={draftOwner}
+                  onChange={(event) => setDraftOwner(event.target.value)}
+                  placeholder="e.g. Michael Chan"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </label>
+
               <label className="block space-y-1.5">
                 <span className="text-sm font-medium text-foreground">
                   Relationship stage
