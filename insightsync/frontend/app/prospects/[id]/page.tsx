@@ -175,7 +175,6 @@ export default function ProspectDetailPage({
   const brief = detailState.brief;
   const evidence = detailState.evidence;
   const review = detailState.review;
-  const copilot = detailState.copilot;
   const backendProspect = detail?.prospect;
   const backendWorkflow = savedWorkflow || detail?.workflow_state;
   const company = detail?.company;
@@ -188,23 +187,12 @@ export default function ProspectDetailPage({
   const keyMetrics = evidence?.key_metrics || detail?.key_metrics || [];
   const keyRiskFactors = evidence?.key_risk_factors || detail?.key_risk_factors || [];
   const keyBusinessEvents = evidence?.key_business_events || detail?.key_business_events || [];
-  const recentTimeline = detail?.recent_timeline || [];
-  const recentInsights = detail?.recent_insights || [];
-  const decisionAnswers =
-    brief?.decision_answers?.length
-      ? brief.decision_answers
-      : detail?.latest_state.decision_answers?.length
-      ? detail.latest_state.decision_answers
-      : detail?.latest_state.fusion?.decision_answers?.length
-      ? detail.latest_state.fusion.decision_answers
-      : backendProspect?.decision_answers || [];
   const productFits = detail?.latest_state.product_fit || [];
   const companyDescription =
     company?.profile_summary ||
     company?.description ||
     detail?.latest_state.state_summary ||
     prospect.description;
-  const suggestedQuestions = copilot?.suggested_questions || [];
 
   const relatedSignals = triggerSignals
     .filter((signal) => {
@@ -551,37 +539,6 @@ export default function ProspectDetailPage({
                     </div>
                   </div>
 
-                  {decisionAnswers.length > 0 && (
-                    <div>
-                      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Decision answers
-                      </p>
-                      <div className="space-y-2">
-                        {decisionAnswers.slice(0, 4).map((answer) => (
-                          <div
-                            key={answer.question_key}
-                            className="rounded-lg border border-border bg-card p-3"
-                          >
-                            <p className="text-sm font-medium text-foreground">
-                              {answer.question}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {answer.answer}
-                            </p>
-                            {answer.supporting_evidence?.length ? (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {answer.supporting_evidence.slice(0, 3).map((item) => (
-                                  <Badge key={item} variant="outline" className="text-[10px]">
-                                    {item}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
 
@@ -876,110 +833,6 @@ export default function ProspectDetailPage({
                   )}
                 </CardContent>
               </Card>
-
-              {(recentTimeline.length > 0 || recentInsights.length > 0) && (
-                <Card id="activity" className="border-border">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2">
-                      <Calendar className="h-5 w-5 text-chart-4" />
-                      Timeline & Generated Insights
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      Recent company events and backend-generated intelligence previews.
-                    </p>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 lg:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Recent timeline
-                      </p>
-                      {recentTimeline.length ? (
-                        recentTimeline.slice(0, 5).map((event) => (
-                          <div
-                            key={event.id}
-                            className="rounded-lg border border-border bg-muted/30 p-3"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="text-[10px]">
-                                    {formatLabel(event.event_type)}
-                                  </Badge>
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {formatShortDate(event.event_time)}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-sm font-medium text-foreground">
-                                  {event.headline}
-                                </p>
-                                {event.detail && (
-                                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                    {event.detail}
-                                  </p>
-                                )}
-                              </div>
-                              {event.evidence_url && (
-                                <Button
-                                  asChild
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0"
-                                >
-                                  <Link href={event.evidence_url}>
-                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                          No timeline events are linked yet.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Generated insights
-                      </p>
-                      {recentInsights.length ? (
-                        recentInsights.slice(0, 5).map((insight) => (
-                          <div
-                            key={insight.id}
-                            className="rounded-lg border border-border bg-card p-3"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge className="bg-primary/10 text-primary text-[10px]">
-                                {formatLabel(insight.insight_type)}
-                              </Badge>
-                              {typeof insight.confidence === "number" && (
-                                <Badge variant="outline" className="text-[10px]">
-                                  confidence {Math.round(insight.confidence * 100)}%
-                                </Badge>
-                              )}
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatShortDate(insight.generated_at)}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm font-medium text-foreground">
-                              {insight.title}
-                            </p>
-                            <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">
-                              {insight.summary}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                          No generated insight previews are available yet.
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
 
               {scoreBreakdown && (
                 <Card id="score-audit" className="border-border">
@@ -1288,29 +1141,6 @@ export default function ProspectDetailPage({
                 </CardContent>
               </Card>
 
-              {suggestedQuestions.length > 0 && (
-                <Card className="border-primary/20">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Copilot Questions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {suggestedQuestions.map((question) => (
-                      <button
-                        key={question}
-                        onClick={() => {
-                          setCopilotPrompt(question);
-                          setCopilotOpen(true);
-                        }}
-                        className="w-full rounded-lg border border-border bg-muted/30 p-3 text-left text-xs text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5"
-                      >
-                        <Sparkles className="mr-1.5 inline h-3.5 w-3.5 text-primary" />
-                        {question}
-                      </button>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
               <Card id="products" className="border-border">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm">Recommended Products</CardTitle>
@@ -1366,41 +1196,6 @@ export default function ProspectDetailPage({
                         </Badge>
                       ))}
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Recent Backend Activity</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {recentTimeline.length ? (
-                    recentTimeline.slice(0, 3).map((activity) => (
-                      <div
-                        key={activity.id}
-                        className="rounded-lg border border-border p-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant="outline" className="text-[10px] capitalize">
-                            {formatLabel(activity.event_type)}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatShortDate(activity.event_time)}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-foreground">{activity.headline}</p>
-                        {activity.detail && (
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                            {activity.detail}
-                          </p>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No backend timeline events are linked yet.
-                    </p>
-                  )}
                 </CardContent>
               </Card>
 
