@@ -8,14 +8,15 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Edit3,
-  ExternalLink,
   FileText,
   MapPin,
+  Search,
   Sparkles,
   Target,
   TrendingUp,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -815,7 +816,7 @@ export default function ProspectDetailPage({
                   {parsedDocuments.length > 0 && (
                     <div>
                       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Source company documents
+                        Source files
                       </p>
                       <div className="space-y-2">
                         {parsedDocuments.slice(0, 4).map((document) => {
@@ -847,13 +848,18 @@ export default function ProspectDetailPage({
                                 {document.evidence_url && (
                                   <Button
                                     asChild
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 shrink-0"
-                                    aria-label={`Open source evidence for ${document.title || document.id}`}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 shrink-0 px-2 text-xs"
+                                    aria-label={`Open source file for ${document.title || document.id}`}
                                   >
-                                    <Link href={document.evidence_url}>
-                                      <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                    <Link
+                                      href={document.evidence_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <FileText className="mr-1 h-3.5 w-3.5" />
+                                      Open source file
                                     </Link>
                                   </Button>
                                 )}
@@ -966,7 +972,7 @@ export default function ProspectDetailPage({
                   {relatedSignals.length > 0 && (
                     <div>
                       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Company trigger evidence
+                        Linked trigger signals
                       </p>
                       <div className="space-y-2">
                         {relatedSignals.map((signal) => (
@@ -999,13 +1005,14 @@ export default function ProspectDetailPage({
                             </div>
                             <Button
                               asChild
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              aria-label={`Open signal evidence for ${signal.title}`}
+                              variant="outline"
+                              size="sm"
+                              className="h-8 shrink-0 px-2 text-xs"
+                              aria-label={`View signal detail for ${signal.title}`}
                             >
                               <Link href={signalDetailHref(signal.id)}>
-                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                <Zap className="mr-1 h-3.5 w-3.5" />
+                                View signal
                               </Link>
                             </Button>
                           </div>
@@ -1017,7 +1024,7 @@ export default function ProspectDetailPage({
                   {readableNews.length > 0 && (
                     <div>
                       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Evidence records
+                        Other evidence records
                       </p>
                       <div className="space-y-2">
                         {readableNews.map((item, index) => (
@@ -1040,13 +1047,14 @@ export default function ProspectDetailPage({
                             </div>
                             <Button
                               asChild
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              aria-label={`Open evidence record for ${item.title}`}
+                              variant="outline"
+                              size="sm"
+                              className="h-8 shrink-0 px-2 text-xs"
+                              aria-label={`Search signal records for ${item.title}`}
                             >
                               <Link href={evidenceExplorerHref(item.title)}>
-                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                <Search className="mr-1 h-3.5 w-3.5" />
+                                Search signals
                               </Link>
                             </Button>
                           </div>
