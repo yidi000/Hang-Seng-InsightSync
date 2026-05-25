@@ -57,6 +57,13 @@ class ReadRepository:
             "extra": self._json_field(row.get("extra_json"), {}),
         }
 
+    def _hydrate_signal_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **row,
+            "evidence_refs": self._json_field(row.get("evidence_refs_json"), []),
+            "extra": self._json_field(row.get("extra_json"), {}),
+        }
+
     def list_signals(
         self,
         *,
@@ -99,7 +106,22 @@ class ReadRepository:
             ),
             params,
         ).mappings()
-        return [dict(row) for row in rows]
+        return [self._hydrate_signal_row(dict(row)) for row in rows]
+
+    def get_signal(self, signal_id: int) -> dict[str, Any] | None:
+        row = self.db.execute(
+            text(
+                """
+                SELECT id, source, dataset, signal_key, signal_type, company_id, entity, event_time,
+                       indicator, value_num, value_text, unit, signal_text, signal_score, signal_level,
+                       evidence_refs_json, extra_json
+                FROM trigger_signals
+                WHERE id = :signal_id
+                """
+            ),
+            {"signal_id": signal_id},
+        ).mappings().first()
+        return self._hydrate_signal_row(dict(row)) if row else None
 
     def list_companies(
         self,
