@@ -11,7 +11,6 @@ import {
   ChevronDown,
   Clock,
   Sparkles,
-  ExternalLink,
   X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,7 +29,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import Link from "next/link";
 
 const signalTypeIcons: Record<string, typeof Building2> = {
   expansion: Building2,
@@ -84,10 +82,6 @@ function formatTimeAgo(dateStr: string): string {
   return formatDate(dateStr);
 }
 
-function normalizeEntityName(value: string | undefined) {
-  return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
 function normalizeDisplayText(value: string | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -102,43 +96,19 @@ function shouldShowSummary(title: string, summary: string | undefined) {
   );
 }
 
-function formatEntityLabel(value: string | undefined, linkedCompany?: string) {
-  if (linkedCompany) return `Linked company: ${linkedCompany}`;
+function formatEntityLabel(value: string | undefined) {
   const normalized = (value || "").toUpperCase();
-  if (normalized === "HKG" || normalized === "HK") return "Market context: Hong Kong";
-  if (normalized === "CN" || normalized === "CHN") return "Market context: Mainland China";
-  if (!value || value === "Market portfolio") return "Market context";
-  return `Market context: ${value}`;
+  if (normalized === "HKG" || normalized === "HK") return "Scope: Hong Kong market";
+  if (normalized === "CN" || normalized === "CHN") return "Scope: Mainland China market";
+  if (!value || value === "Market portfolio") return "Scope: Market-wide signal";
+  return `Scope: ${value}`;
 }
 
 function formatSignalBadge(signal: { type: string; source?: string }) {
   const source = normalizeSource(signal.source);
   if (source === "hkma") return "Market indicator";
-  if (source.includes("szse")) return "Company filing";
+  if (source.includes("szse") || source.includes("cninfo")) return "Exchange filing";
   return formatSignalType(signal.type);
-}
-
-function isOperationalCompany(name: string) {
-  const normalized = name.toLowerCase();
-  return ![
-    "portfolio",
-    "intelligence profile",
-    "cluster",
-    "sector",
-    "national accounts",
-  ].some((term) => normalized.includes(term));
-}
-
-function signalBelongsToProspect(
-  signal: { prospectId?: string; company: string },
-  prospect: { id: string; name: string; nameZh?: string }
-) {
-  const signalCompany = normalizeEntityName(signal.company);
-  return (
-    signal.prospectId === prospect.id ||
-    signalCompany === normalizeEntityName(prospect.name) ||
-    signalCompany === normalizeEntityName(prospect.nameZh)
-  );
 }
 
 export default function SignalsPage() {
@@ -150,9 +120,6 @@ export default function SignalsPage() {
   const [typeFilter, setTypeFilter] = useState("All");
   const [sourceFilter, setSourceFilter] = useState("All");
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null);
-  const companyProspects = prospects.filter((prospect) =>
-    isOperationalCompany(prospect.name)
-  );
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -183,9 +150,6 @@ export default function SignalsPage() {
   const selectedSignal = selectedSignalId
     ? triggerSignals.find((signal) => signal.id === selectedSignalId)
     : undefined;
-  const selectedSignalProspect = selectedSignal
-    ? companyProspects.find((prospect) => signalBelongsToProspect(selectedSignal, prospect))
-    : undefined;
 
   const openSignalDetail = (signal: (typeof triggerSignals)[number]) => {
     const params = new URLSearchParams(window.location.search);
@@ -202,24 +166,16 @@ export default function SignalsPage() {
     setSelectedSignalId(null);
   };
 
-  const explainSignal = (
-    signal: (typeof triggerSignals)[number],
-    relatedProspect?: (typeof prospects)[number]
-  ) => {
+  const explainSignal = (signal: (typeof triggerSignals)[number]) => {
     setCopilotPrompt(
       [
         `Explain this trigger signal for an RM.`,
         `Signal: ${signal.title}`,
-        `Entity context: ${formatEntityLabel(signal.company, relatedProspect?.name)}`,
+        `Signal scope: ${formatEntityLabel(signal.company)}`,
         `Record type: ${formatSignalBadge(signal)}`,
         `Date: ${formatDate(signal.date)}`,
         `Summary: ${signal.summary}`,
-        relatedProspect
-          ? `Linked company profile: ${relatedProspect.name}. Primary engagement angle: ${
-              relatedProspect.engagementAngles?.[0]?.label || "not available"
-            }.`
-          : `No linked company profile was found.`,
-        `Please explain why it matters, which engagement angle it supports, and what the RM should do next.`,
+        `Please explain why it matters, what market or filing context it provides, and what an RM should check before using it in client outreach.`,
       ].join("\n")
     );
     setCopilotOpen(true);
@@ -240,7 +196,7 @@ export default function SignalsPage() {
                   Trigger Signals
                 </h1>
                 <p className="text-xs text-muted-foreground">
-                  RM-readable company filings, market indicators, and policy context
+                  RM-readable market, filing, and policy intelligence
                 </p>
               </div>
             </div>
@@ -315,7 +271,7 @@ export default function SignalsPage() {
             </DropdownMenu>
 
             <div className="ml-auto text-xs text-muted-foreground">
-              {filteredSignals.length} signal records ·{" "}
+              {filteredSignals.length} signal records -{" "}
               {backendOnline ? "live intelligence" : "sample data"}
             </div>
           </div>
@@ -326,9 +282,6 @@ export default function SignalsPage() {
               const Icon = signalTypeIcons[signal.type] || Zap;
               const colorClass = signalTypeColors[signal.type] || "bg-muted/50 text-muted-foreground";
               
-              const relatedProspect = companyProspects.find((prospect) =>
-                signalBelongsToProspect(signal, prospect)
-              );
               const showSummary = shouldShowSummary(signal.title, signal.summary);
 
               return (
@@ -352,7 +305,7 @@ export default function SignalsPage() {
                               {signal.title}
                             </h3>
                             <p className="mt-0.5 text-xs text-muted-foreground">
-                              {formatEntityLabel(signal.company, relatedProspect?.name)}
+                              {formatEntityLabel(signal.company)}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -386,11 +339,6 @@ export default function SignalsPage() {
                             <Badge variant="outline" className="bg-muted/50 text-[10px]">
                               Freshness: {formatDate(signal.date)}
                             </Badge>
-                            {relatedProspect && (
-                              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-                                Linked company profile
-                              </Badge>
-                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
@@ -398,29 +346,13 @@ export default function SignalsPage() {
                               size="sm"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                explainSignal(signal, relatedProspect);
+                                explainSignal(signal);
                               }}
                               className="h-7 px-2 text-xs"
                             >
                               <Sparkles className="mr-1 h-3 w-3" />
                               Explain
                             </Button>
-                            {relatedProspect && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                className="h-7 px-2 text-xs"
-                              >
-                                <Link
-                                  href={`/prospects/${relatedProspect.id}`}
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  Open Company Brief
-                                  <ExternalLink className="ml-1 h-3 w-3" />
-                                </Link>
-                              </Button>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -457,7 +389,7 @@ export default function SignalsPage() {
                   {selectedSignal.title}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatEntityLabel(selectedSignal.company, selectedSignalProspect?.name)}
+                  {formatEntityLabel(selectedSignal.company)}
                 </p>
               </div>
               <Button
@@ -537,20 +469,12 @@ export default function SignalsPage() {
 
               <div className="flex flex-wrap gap-2 border-t border-border pt-4">
                 <Button
-                  onClick={() => explainSignal(selectedSignal, selectedSignalProspect)}
+                  onClick={() => explainSignal(selectedSignal)}
                   className="bg-primary hover:bg-primary/90"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Explain with Copilot
                 </Button>
-                {selectedSignalProspect && (
-                  <Button variant="outline" asChild>
-                    <Link href={`/prospects/${selectedSignalProspect.id}`}>
-                      Open Company Brief
-                      <ExternalLink className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
-                )}
               </div>
             </div>
           </aside>

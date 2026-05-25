@@ -1083,7 +1083,7 @@ function signalTitle(item) {
 }
 
 function signalCompany(item) {
-  return item.company_id || item.entity || "Market signal";
+  return item.entity || item.company_id || "Market signal";
 }
 
 function renderSignalCard(item) {
@@ -1107,11 +1107,9 @@ function renderSignalCard(item) {
         <div class="prospect-meta">
           <span class="badge monitor">Source: ${escapeHtml(item.source || "InsightSync")}</span>
           ${item.signal_level ? `<span class="badge ${escapeHtml(levelClass)}">Level: ${escapeHtml(item.signal_level)}</span>` : ""}
-          ${item.prospect_id ? `<span class="badge high">Linked company profile</span>` : ""}
         </div>
         <div class="wrap mt">
           <button class="button ghost small" data-ask-signal="${escapeHtml(signalTitle(item))}">${icon("sparkles", "button-icon")} Explain</button>
-          ${item.prospect_id ? `<button class="button small" data-open-prospect="${escapeHtml(item.prospect_id)}">Open Company Brief ${icon("external", "button-icon")}</button>` : ""}
         </div>
       </div>
     </article>
