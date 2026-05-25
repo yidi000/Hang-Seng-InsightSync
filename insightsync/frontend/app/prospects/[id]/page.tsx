@@ -130,6 +130,10 @@ function evidenceExplorerHref(title: string) {
   return `/signals?search=${encodeURIComponent(title)}`;
 }
 
+function signalDetailHref(signalId: string) {
+  return `/signals?signal=${encodeURIComponent(signalId)}`;
+}
+
 function formatNumber(value?: number | null): string {
   if (typeof value !== "number") return "0";
   return value.toLocaleString("en-HK");
@@ -1000,7 +1004,7 @@ export default function ProspectDetailPage({
                               className="h-8 w-8 shrink-0"
                               aria-label={`Open signal evidence for ${signal.title}`}
                             >
-                              <Link href={evidenceExplorerHref(signal.title)}>
+                              <Link href={signalDetailHref(signal.id)}>
                                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
                               </Link>
                             </Button>

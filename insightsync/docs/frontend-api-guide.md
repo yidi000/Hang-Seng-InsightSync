@@ -74,7 +74,7 @@ Backend responses use `snake_case`. The frontend can either use `snake_case` dir
 | Prospect workflow | `GET /api/prospects/{prospect_id}/workflow`, `PUT /api/prospects/{prospect_id}/workflow` |
 | Company explorer | `GET /api/companies`, `GET /api/metadata/filters` |
 | Company detail | `GET /api/companies/{company_id}` |
-| Signal/timeline debug views | `GET /api/signals`, `GET /api/timeline` |
+| Signal/timeline debug views | `GET /api/signals`, `GET /api/signals/{signal_id}`, `GET /api/timeline` |
 | Admin/debug | `GET /api/dashboard/overview`, `GET /api/rag/index/status` |
 
 ### First Integration Smoke Test
@@ -828,6 +828,22 @@ Frontend note:
 - usable now for signal pages and debug/detail experiences
 - current `id` can be treated as `signalId` for UI state and list rendering
 
+### `GET /api/signals/{signal_id}`
+
+Status:
+
+- `Available now`
+
+Purpose:
+
+- retrieve one trigger signal for signal detail views and direct links
+
+Frontend note:
+
+- use this for deep links such as `/signals?signal=11`
+- response shape matches a single item from `GET /api/signals`
+- returns `404` when the signal no longer exists
+
 ### `GET /api/timeline`
 
 Status:
@@ -890,6 +906,7 @@ Frontend can connect now:
 Frontend can connect now:
 
 - `GET /api/signals`
+- `GET /api/signals/{signal_id}`
 
 ### Timeline Page
 

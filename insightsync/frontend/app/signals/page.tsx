@@ -12,6 +12,7 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
+  X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +149,7 @@ export default function SignalsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [sourceFilter, setSourceFilter] = useState("All");
+  const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null);
   const companyProspects = prospects.filter((prospect) =>
     isOperationalCompany(prospect.name)
   );
@@ -155,9 +157,12 @@ export default function SignalsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const query = params.get("search");
-    if (!query) return;
+    const signalId = params.get("signal");
 
-    const frame = window.requestAnimationFrame(() => setSearchQuery(query));
+    const frame = window.requestAnimationFrame(() => {
+      if (query) setSearchQuery(query);
+      if (signalId) setSelectedSignalId(signalId);
+    });
     return () => window.cancelAnimationFrame(frame);
   }, []);
   const typeOptions = metadataFilters.signalTypes;
@@ -175,6 +180,27 @@ export default function SignalsPage() {
       return false;
     return true;
   });
+  const selectedSignal = selectedSignalId
+    ? triggerSignals.find((signal) => signal.id === selectedSignalId)
+    : undefined;
+  const selectedSignalProspect = selectedSignal
+    ? companyProspects.find((prospect) => signalBelongsToProspect(selectedSignal, prospect))
+    : undefined;
+
+  const openSignalDetail = (signal: (typeof triggerSignals)[number]) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("signal", signal.id);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    setSelectedSignalId(signal.id);
+  };
+
+  const closeSignalDetail = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("signal");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
+    setSelectedSignalId(null);
+  };
 
   const explainSignal = (
     signal: (typeof triggerSignals)[number],
@@ -308,7 +334,8 @@ export default function SignalsPage() {
               return (
                 <Card
                   key={signal.id}
-                  className="border-border transition-all hover:shadow-sm"
+                  className="cursor-pointer border-border transition-all hover:shadow-sm"
+                  onClick={() => openSignalDetail(signal)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
@@ -369,7 +396,10 @@ export default function SignalsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => explainSignal(signal, relatedProspect)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                explainSignal(signal, relatedProspect);
+                              }}
                               className="h-7 px-2 text-xs"
                             >
                               <Sparkles className="mr-1 h-3 w-3" />
@@ -382,7 +412,10 @@ export default function SignalsPage() {
                                 asChild
                                 className="h-7 px-2 text-xs"
                               >
-                                <Link href={`/prospects/${relatedProspect.id}`}>
+                                <Link
+                                  href={`/prospects/${relatedProspect.id}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
                                   Open Company Brief
                                   <ExternalLink className="ml-1 h-3 w-3" />
                                 </Link>
@@ -411,6 +444,118 @@ export default function SignalsPage() {
           )}
         </div>
       </main>
+
+      {selectedSignal && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/35">
+          <aside className="h-full w-full max-w-xl overflow-y-auto border-l border-border bg-background shadow-xl">
+            <div className="flex items-start justify-between border-b border-border p-5">
+              <div className="min-w-0">
+                <Badge variant="outline" className="mb-3 text-[10px]">
+                  {formatSignalBadge(selectedSignal)}
+                </Badge>
+                <h2 className="text-lg font-semibold leading-snug text-foreground">
+                  {selectedSignal.title}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatEntityLabel(selectedSignal.company, selectedSignalProspect?.name)}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={closeSignalDetail}
+                className="h-8 w-8 shrink-0"
+                aria-label="Close signal detail"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Source
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {formatSource(selectedSignal.source)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Signal date
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {formatDate(selectedSignal.date)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Signal type
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {formatSignalType(selectedSignal.type)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Level
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {selectedSignal.signalLevel || "Not specified"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Signal Summary
+                </p>
+                <p className="text-sm leading-6 text-foreground">
+                  {selectedSignal.summary || "No additional summary is available for this signal."}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Evidence References
+                </p>
+                {selectedSignal.evidenceRefs?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedSignal.evidenceRefs.map((reference) => (
+                      <Badge key={reference} variant="outline" className="bg-muted/50 text-[10px]">
+                        {reference}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No explicit evidence references are attached to this signal.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                <Button
+                  onClick={() => explainSignal(selectedSignal, selectedSignalProspect)}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Explain with Copilot
+                </Button>
+                {selectedSignalProspect && (
+                  <Button variant="outline" asChild>
+                    <Link href={`/prospects/${selectedSignalProspect.id}`}>
+                      Open Company Brief
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* AI Copilot Panel */}
       <AICopilotPanel

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from insightsync.backend.db.session import get_db
@@ -39,10 +39,26 @@ def list_signals(
         SignalOut(
             **{
                 **row,
-                "evidence_refs": row.get("evidence_refs_json") or [],
-                "extra": row.get("extra_json") or {},
+                "evidence_refs": row.get("evidence_refs") or [],
+                "extra": row.get("extra") or {},
             }
         )
         for row in rows
     ]
     return SignalListOut(items=items, limit=limit, offset=offset)
+
+
+@router.get("/{signal_id}", response_model=SignalOut)
+def get_signal(signal_id: int, db: Session = Depends(get_db)) -> SignalOut:
+    """Return one trigger signal by id."""
+
+    row = ReadRepository(db).get_signal(signal_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
+    return SignalOut(
+        **{
+            **row,
+            "evidence_refs": row.get("evidence_refs") or [],
+            "extra": row.get("extra") or {},
+        }
+    )
