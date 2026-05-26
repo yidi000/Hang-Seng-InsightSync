@@ -193,6 +193,7 @@ export default function OverviewPage() {
     prospects,
     triggerSignals,
     marketOverview,
+    dashboardStats,
     backendOnline,
   } = useInsightSyncData();
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -242,18 +243,22 @@ export default function OverviewPage() {
     ).length;
 
     return {
-      companyProfiles: companyProspects.length,
-      highPriorityCompanies: companyProspects.filter(
-        (prospect) => prospect.priorityLevel === "high" || prospect.tier === "A"
-      ).length,
-      crossBorderOpportunities: companyProspects.filter((prospect) =>
-        prospect.focusTags?.some((tag) =>
-          normalizeFilterValue(tag).includes("crossborder")
-        )
-      ).length,
+      companyProfiles: dashboardStats.leadPoolSize || companyProspects.length,
+      highPriorityCompanies:
+        dashboardStats.highPriorityProspects ||
+        companyProspects.filter(
+          (prospect) => prospect.priorityLevel === "high" || prospect.tier === "A"
+        ).length,
+      crossBorderOpportunities:
+        dashboardStats.crossBorderOpportunities ||
+        companyProspects.filter((prospect) =>
+          prospect.focusTags?.some((tag) =>
+            normalizeFilterValue(tag).includes("crossborder")
+          )
+        ).length,
       financingLinkedSignals: financingSignalCount || financingCompanyCount,
     };
-  }, [companyProspects, triggerSignals]);
+  }, [companyProspects, dashboardStats, triggerSignals]);
 
   const scrollToProspects = () => {
     prospectListRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -297,6 +302,14 @@ export default function OverviewPage() {
       ),
     [companyProspects]
   );
+  const focusScore = morningReviewItems.length
+    ? Math.round(
+        morningReviewItems
+          .slice(0, 8)
+          .reduce((total, prospect) => total + prospect.score, 0) /
+          Math.min(morningReviewItems.length, 8)
+      )
+    : 0;
   const primaryMorningTheme =
     portfolioStats.crossBorderOpportunities >= portfolioStats.financingLinkedSignals
       ? "cross-border activity"
@@ -500,8 +513,8 @@ export default function OverviewPage() {
                   onClick={reviewMorningActions}
                   className="hidden min-w-[190px] rounded-xl bg-sidebar px-8 py-7 text-center text-sidebar-foreground transition-colors hover:bg-sidebar/90 lg:block"
                 >
-                  <p className="text-sm text-sidebar-foreground/70">RM review queue</p>
-                  <p className="mt-2 text-5xl font-semibold">{morningReviewItems.length}</p>
+                  <p className="text-sm text-sidebar-foreground/70">Focus score</p>
+                  <p className="mt-2 text-5xl font-semibold">{focusScore}</p>
                   <p className="mt-2 text-sm text-sidebar-foreground/70">
                     {portfolioStats.highPriorityCompanies} high priority clients
                   </p>
