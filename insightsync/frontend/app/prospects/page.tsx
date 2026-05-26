@@ -70,7 +70,10 @@ function signalBelongsToProspect(
 }
 
 export default function ProspectsPage() {
-  const { prospects, triggerSignals, backendOnline } = useInsightSyncData();
+  const { prospects, triggerSignals, loading, backendOnline } = useInsightSyncData({
+    includeSummary: false,
+    includeMarketOverview: false,
+  });
   const metadataFilters = useMetadataFilters(prospects, triggerSignals);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,13 +239,41 @@ export default function ProspectsPage() {
             </DropdownMenu>
 
             <div className="ml-auto text-xs text-muted-foreground">
-              {filteredProspects.length} company profiles -{" "}
-              {backendOnline ? "live intelligence" : "sample data"}
+              {loading
+                ? "Loading company profiles..."
+                : `${filteredProspects.length} company profiles - ${
+                    backendOnline ? "live intelligence" : "sample data"
+                  }`}
             </div>
           </div>
 
-          <div className="space-y-4">
-            {filteredProspects.map((prospect) => {
+          {loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} className="border-border">
+                  <CardContent className="p-4">
+                    <div className="animate-pulse space-y-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="h-4 w-56 rounded bg-muted" />
+                          <div className="h-3 w-40 rounded bg-muted" />
+                        </div>
+                        <div className="h-8 w-24 rounded bg-muted" />
+                      </div>
+                      <div className="h-16 rounded bg-muted" />
+                      <div className="flex gap-2">
+                        <div className="h-5 w-20 rounded bg-muted" />
+                        <div className="h-5 w-24 rounded bg-muted" />
+                        <div className="h-5 w-16 rounded bg-muted" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredProspects.map((prospect) => {
               const latestSignal = triggerSignals.find((signal) =>
                 signalBelongsToProspect(signal, prospect)
               );
@@ -392,10 +423,11 @@ export default function ProspectsPage() {
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
+              })}
+            </div>
+          )}
 
-          {filteredProspects.length === 0 && (
+          {!loading && filteredProspects.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Users className="mb-4 h-12 w-12 text-muted-foreground" />
               <h3 className="mb-1 text-lg font-semibold text-foreground">

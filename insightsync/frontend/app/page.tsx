@@ -193,6 +193,7 @@ export default function OverviewPage() {
     prospects,
     triggerSignals,
     marketOverview,
+    loading,
     backendOnline,
   } = useInsightSyncData();
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -405,7 +406,7 @@ export default function OverviewPage() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
                   <p className="mt-3 text-2xl font-semibold text-foreground">
-                    {portfolioStats.companyProfiles.toLocaleString()}
+                    {loading ? "--" : portfolioStats.companyProfiles.toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Company profiles
@@ -425,7 +426,7 @@ export default function OverviewPage() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
                   <p className="mt-3 text-2xl font-semibold text-destructive">
-                    {portfolioStats.highPriorityCompanies}
+                    {loading ? "--" : portfolioStats.highPriorityCompanies}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     High-priority companies
@@ -445,7 +446,7 @@ export default function OverviewPage() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
                   <p className="mt-3 text-2xl font-semibold text-foreground">
-                    {portfolioStats.crossBorderOpportunities}
+                    {loading ? "--" : portfolioStats.crossBorderOpportunities}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Cross-border opportunities
@@ -465,7 +466,7 @@ export default function OverviewPage() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
                   <p className="mt-3 text-2xl font-semibold text-foreground">
-                    {portfolioStats.financingLinkedSignals}
+                    {loading ? "--" : portfolioStats.financingLinkedSignals}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Financing-linked signals
@@ -484,7 +485,9 @@ export default function OverviewPage() {
                     Morning Brief
                   </Badge>
                   <h2 className="text-2xl font-semibold leading-tight text-foreground">
-                    {morningReviewItems.length} client relationships need RM review
+                    {loading
+                      ? "Loading client relationships"
+                      : `${morningReviewItems.length} client relationships need RM review`}
                   </h2>
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
                     Portfolio activity is led by {primaryMorningTheme}. Start with
@@ -509,9 +512,9 @@ export default function OverviewPage() {
                   className="hidden min-w-[190px] rounded-xl bg-sidebar px-8 py-7 text-center text-sidebar-foreground transition-colors hover:bg-sidebar/90 lg:block"
                 >
                   <p className="text-sm text-sidebar-foreground/70">Focus score</p>
-                  <p className="mt-2 text-5xl font-semibold">{focusScore}</p>
+                  <p className="mt-2 text-5xl font-semibold">{loading ? "--" : focusScore}</p>
                   <p className="mt-2 text-sm text-sidebar-foreground/70">
-                    {portfolioStats.highPriorityCompanies} high priority clients
+                    {loading ? "Loading" : portfolioStats.highPriorityCompanies} high priority clients
                   </p>
                   <p className="mt-1 text-xs text-sidebar-foreground/50">
                     Click to review
@@ -801,13 +804,14 @@ export default function OverviewPage() {
                   Top Priority Company Profiles
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Showing top {Math.min(topProspects.length, 8)} of{" "}
-                  {filteredProspects.length} matching companies
+                  {loading
+                    ? "Loading company profiles"
+                    : `Showing top ${Math.min(topProspects.length, 8)} of ${filteredProspects.length} matching companies`}
                 </p>
               </div>
               <Link href="/prospects">
                 <Button variant="outline" size="sm" className="h-8 text-xs">
-                  View All {companyProspects.length}
+                  View All {loading ? "" : companyProspects.length}
                   <ExternalLink className="ml-1.5 h-3 w-3" />
                 </Button>
               </Link>
