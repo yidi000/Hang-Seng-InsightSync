@@ -28,11 +28,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  mapSignal,
   updateProspectWorkflow,
   useInsightSyncData,
   type BackendWorkflowState,
 } from "@/lib/api-data";
 import { useProspectDetail } from "@/lib/prospect-detail-data";
+import type { Prospect, TriggerSignal } from "@/lib/mock-data";
 
 const priorityBandColors: Record<string, string> = {
   A: "bg-primary text-primary-foreground",
@@ -155,6 +157,23 @@ function priorityBandLabel(prospect: { priorityLevel?: string; tier: string }) {
   if (prospect.priorityLevel === "high" || prospect.tier === "A") return "High";
   if (prospect.priorityLevel === "medium" || prospect.tier === "B") return "Medium";
   return "Low";
+}
+
+function backendSignalsForProspect(
+  prospect: Prospect,
+  detailSignals: NonNullable<ReturnType<typeof useProspectDetail>["detail"]>["recent_signals"] | undefined
+): TriggerSignal[] {
+  if (!detailSignals?.length) return [];
+  const prospectById = new Map([[prospect.id, prospect]]);
+  return detailSignals.map((signal) =>
+    mapSignal(
+      {
+        ...signal,
+        prospect_id: prospect.id,
+      },
+      prospectById
+    )
+  );
 }
 
 function scoreBand(score: number, kind: "opportunity" | "risk" | "confidence" | "priority") {
@@ -402,7 +421,8 @@ export default function ProspectDetailPage({
     ...(scoreBreakdown?.opportunity_components || []),
     ...(scoreBreakdown?.risk_components || []),
   ];
-  const relatedSignals = triggerSignals
+  const detailLinkedSignals = backendSignalsForProspect(prospect, detail?.recent_signals);
+  const globalRelatedSignals = triggerSignals
     .filter((signal) => {
       const signalCompany = normalizeEntityName(signal.company);
       return (
@@ -411,7 +431,9 @@ export default function ProspectDetailPage({
           signalCompany === normalizeEntityName(prospect.nameZh)) &&
         isReadableEvidenceTitle(signal.title)
       );
-    })
+    });
+  const relatedSignals = (detailLinkedSignals.length ? detailLinkedSignals : globalRelatedSignals)
+    .filter((signal) => isReadableEvidenceTitle(signal.title))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const readableNews = prospect.news
     .filter((item) => isReadableEvidenceTitle(item.title))
