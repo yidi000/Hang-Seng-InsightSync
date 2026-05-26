@@ -295,7 +295,16 @@ export default function OverviewPage() {
     return true;
   });
   const topProspects = [...filteredProspects].sort(
-    (a, b) => (officialScores[b.id]?.score ?? b.score) - (officialScores[a.id]?.score ?? a.score)
+    (a, b) => {
+      const scoreA = officialScores[a.id]?.score;
+      const scoreB = officialScores[b.id]?.score;
+      if (typeof scoreA === "number" && typeof scoreB === "number") {
+        return scoreB - scoreA;
+      }
+      if (typeof scoreA === "number") return -1;
+      if (typeof scoreB === "number") return 1;
+      return 0;
+    }
   );
   const visibleTopProspects = useMemo(() => topProspects.slice(0, 8), [topProspects]);
   const visibleTopProspectIds = visibleTopProspects.map((prospect) => prospect.id).join("|");
@@ -305,7 +314,7 @@ export default function OverviewPage() {
     let isMounted = true;
     const missingProspects = visibleTopProspects
       .filter((prospect) => !officialScores[prospect.id] && !/^p\d+$/i.test(prospect.id))
-      .slice(0, 4);
+      .slice(0, 8);
 
     if (!missingProspects.length) return;
 
