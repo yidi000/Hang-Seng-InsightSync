@@ -424,52 +424,70 @@ export function updateProspectWorkflow(prospectId: string, body: WorkflowUpdateI
   );
 }
 
-export function useInsightSyncData(): InsightSyncData {
+export function useInsightSyncData(options: { prospectLimit?: number } = {}): InsightSyncData {
+  const prospectLimit = options.prospectLimit ?? 50;
   const [data, setData] = useState<InsightSyncData>(defaultData);
 
   useEffect(() => {
     let isMounted = true;
 
     async function load() {
-      try {
-        const [prospectsResponse, signalsResponse, summary, market] = await Promise.all([
-          getJson<{ items: BackendProspectSummary[] }>("/api/prospects?limit=8&view=compact"),
+      const [prospectsResult, signalsResult, summaryResult, marketResult] =
+        await Promise.allSettled([
+          getJson<{ items: BackendProspectSummary[] }>(
+            `/api/prospects?limit=${prospectLimit}&view=compact`
+          ),
           getJson<{ items: BackendSignal[] }>("/api/signals?limit=100"),
           getJson<BackendDashboardSummary>("/api/dashboard/summary"),
           getJson<BackendMarketOverview>("/api/dashboard/market-overview"),
         ]);
 
-        const prospects = prospectsResponse.items
-          .map(mapProspect)
-          .filter((prospect) => isOperationalCompanyProfile(prospect.name));
-        const prospectById = new Map(prospects.map((prospect) => [prospect.id, prospect]));
-        const triggerSignals = signalsResponse.items
-          .map((signal) => mapSignal(signal, prospectById))
-          .slice(0, 100);
+      if (!isMounted) return;
 
-        if (isMounted) {
-          setData({
-            prospects,
-            triggerSignals,
-            marketOverview: mapMarketOverview(market),
-            dashboardStats: mapDashboardStats(summary),
-            loading: false,
-            backendOnline: true,
-            error: null,
-          });
-        }
-      } catch (error) {
-        if (isMounted) {
-          setData({
-            ...defaultData,
-            loading: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Unable to load InsightSync backend",
-          });
-        }
-      }
+      const prospects =
+        prospectsResult.status === "fulfilled"
+          ? prospectsResult.value.items
+              .map(mapProspect)
+              .filter((prospect) => isOperationalCompanyProfile(prospect.name))
+          : defaultData.prospects;
+      const prospectById = new Map(prospects.map((prospect) => [prospect.id, prospect]));
+      const triggerSignals =
+        signalsResult.status === "fulfilled"
+          ? signalsResult.value.items
+              .map((signal) => mapSignal(signal, prospectById))
+              .slice(0, 100)
+          : defaultData.triggerSignals;
+      const dashboardStats =
+        summaryResult.status === "fulfilled"
+          ? mapDashboardStats(summaryResult.value)
+          : defaultData.dashboardStats;
+      const marketOverview =
+        marketResult.status === "fulfilled"
+          ? mapMarketOverview(marketResult.value)
+          : defaultData.marketOverview;
+
+      const errors = [
+        prospectsResult,
+        signalsResult,
+        summaryResult,
+        marketResult,
+      ]
+        .filter((result) => result.status === "rejected")
+        .map((result) =>
+          result.status === "rejected" && result.reason instanceof Error
+            ? result.reason.message
+            : "Unable to load part of InsightSync backend"
+        );
+
+      setData({
+        prospects,
+        triggerSignals,
+        marketOverview,
+        dashboardStats,
+        loading: false,
+        backendOnline: errors.length < 4,
+        error: errors[0] || null,
+      });
     }
 
     load();
@@ -477,7 +495,7 @@ export function useInsightSyncData(): InsightSyncData {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [prospectLimit]);
 
   return data;
 }

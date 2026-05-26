@@ -195,7 +195,7 @@ export default function OverviewPage() {
     marketOverview,
     dashboardStats,
     backendOnline,
-  } = useInsightSyncData();
+  } = useInsightSyncData({ prospectLimit: 8 });
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [industryFilter, setIndustryFilter] = useState<string | null>(null);
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
