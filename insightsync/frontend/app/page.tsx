@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Zap,
   Sparkles,
@@ -24,7 +24,8 @@ import {
   AICopilotPanel,
   AICopilotButton,
 } from "@/components/ai-copilot-panel";
-import { useInsightSyncData } from "@/lib/api-data";
+import { useInsightSyncData, mapProspect, type BackendProspectSummary } from "@/lib/api-data";
+import { getJson } from "@/lib/api-client";
 import {
   BarChart,
   Bar,
@@ -200,6 +201,19 @@ export default function OverviewPage() {
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
   const [signalTypeFilter, setSignalTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<"high" | null>(null);
+  const [officialScores, setOfficialScores] = useState<
+    Record<
+      string,
+      {
+        score: number;
+        opportunityScore?: number;
+        riskScore?: number;
+        evidenceConfidenceScore?: number;
+        priorityLevel?: string;
+        tier: "A" | "B" | "C";
+      }
+    >
+  >({});
   const prospectListRef = useRef<HTMLDivElement>(null);
   const companyProspects = useMemo(
     () => prospects.filter(isOperationalCompanyProfile),
@@ -280,7 +294,56 @@ export default function OverviewPage() {
     }
     return true;
   });
-  const topProspects = [...filteredProspects].sort((a, b) => b.score - a.score);
+  const topProspects = [...filteredProspects].sort(
+    (a, b) => (officialScores[b.id]?.score ?? b.score) - (officialScores[a.id]?.score ?? a.score)
+  );
+  const visibleTopProspects = useMemo(() => topProspects.slice(0, 8), [topProspects]);
+  const visibleTopProspectIds = visibleTopProspects.map((prospect) => prospect.id).join("|");
+  const officialScoreIds = Object.keys(officialScores).sort().join("|");
+
+  useEffect(() => {
+    let isMounted = true;
+    const missingProspects = visibleTopProspects
+      .filter((prospect) => !officialScores[prospect.id] && !/^p\d+$/i.test(prospect.id))
+      .slice(0, 4);
+
+    if (!missingProspects.length) return;
+
+    async function loadOfficialScores() {
+      const results = await Promise.allSettled(
+        missingProspects.map(async (prospect) => {
+          const payload = await getJson<{ prospect: BackendProspectSummary }>(
+            `/api/prospects/${encodeURIComponent(prospect.id)}`
+          );
+          return [prospect.id, mapProspect(payload.prospect)] as const;
+        })
+      );
+
+      if (!isMounted) return;
+      setOfficialScores((current) => {
+        const next = { ...current };
+        for (const result of results) {
+          if (result.status !== "fulfilled") continue;
+          const [id, mapped] = result.value;
+          next[id] = {
+            score: mapped.score,
+            opportunityScore: mapped.opportunityScore,
+            riskScore: mapped.riskScore,
+            evidenceConfidenceScore: mapped.evidenceConfidenceScore,
+            priorityLevel: mapped.priorityLevel,
+            tier: mapped.tier,
+          };
+        }
+        return next;
+      });
+    }
+
+    loadOfficialScores();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visibleTopProspectIds, officialScoreIds, visibleTopProspects, officialScores]);
 
   const hasActiveFilters = industryFilter || regionFilter || signalTypeFilter || priorityFilter;
   const morningReviewItems = useMemo(
@@ -831,7 +894,15 @@ export default function OverviewPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {topProspects.slice(0, 8).map((prospect) => {
+                    {visibleTopProspects.map((prospect) => {
+                      const officialScore = officialScores[prospect.id];
+                      const displayScore = officialScore?.score ?? prospect.score;
+                      const displayTier = officialScore?.tier ?? prospect.tier;
+                      const displayPriorityLevel =
+                        officialScore?.priorityLevel ?? prospect.priorityLevel;
+                      const displayEvidenceConfidence =
+                        officialScore?.evidenceConfidenceScore ??
+                        prospect.evidenceConfidenceScore;
                       const preferredAngles = preferredByFilter(
                         prospect.engagementAngles || [],
                         signalTypeFilter,
@@ -900,18 +971,24 @@ export default function OverviewPage() {
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div className="flex flex-col items-start gap-1.5">
-                              <Badge className={`${priorityBandColors[prospect.tier]} w-fit`}>
-                                {priorityBandLabel(prospect)}
+                              <Badge className={`${priorityBandColors[displayTier]} w-fit`}>
+                                {priorityBandLabel({
+                                  priorityLevel: displayPriorityLevel,
+                                  tier: displayTier,
+                                })}
                               </Badge>
+                              <p className="text-sm font-semibold leading-tight text-foreground">
+                                Priority {displayScore}
+                              </p>
                               <Link
                                 href={`/prospects/${prospect.id}#score-audit`}
-                                className="block text-sm font-medium leading-tight text-primary hover:underline"
+                                className="block text-xs font-medium leading-tight text-primary hover:underline"
                               >
                                 Open Score Audit
                               </Link>
                               <p className="text-xs text-muted-foreground">
                                 {formatEvidenceConfidence(
-                                  prospect.evidenceConfidenceScore
+                                  displayEvidenceConfidence
                                 )}
                               </p>
                             </div>
