@@ -388,7 +388,7 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
   };
 }
 
-function mapSignal(item: BackendSignal, prospectById: Map<string, Prospect>): TriggerSignal {
+export function mapSignal(item: BackendSignal, prospectById: Map<string, Prospect>): TriggerSignal {
   const prospectId =
     item.prospect_id || (item.company_id ? `prospect:${item.company_id}` : undefined);
   const prospect = prospectId ? prospectById.get(prospectId) : undefined;
