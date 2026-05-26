@@ -295,7 +295,16 @@ export default function OverviewPage() {
     return true;
   });
   const topProspects = [...filteredProspects].sort(
-    (a, b) => (officialScores[b.id]?.score ?? b.score) - (officialScores[a.id]?.score ?? a.score)
+    (a, b) => {
+      const scoreA = officialScores[a.id]?.score;
+      const scoreB = officialScores[b.id]?.score;
+      if (typeof scoreA === "number" && typeof scoreB === "number") {
+        return scoreB - scoreA;
+      }
+      if (typeof scoreA === "number") return -1;
+      if (typeof scoreB === "number") return 1;
+      return 0;
+    }
   );
   const visibleTopProspects = useMemo(() => topProspects.slice(0, 8), [topProspects]);
   const visibleTopProspectIds = visibleTopProspects.map((prospect) => prospect.id).join("|");
@@ -305,7 +314,7 @@ export default function OverviewPage() {
     let isMounted = true;
     const missingProspects = visibleTopProspects
       .filter((prospect) => !officialScores[prospect.id] && !/^p\d+$/i.test(prospect.id))
-      .slice(0, 4);
+      .slice(0, 8);
 
     if (!missingProspects.length) return;
 
@@ -896,13 +905,12 @@ export default function OverviewPage() {
                   <tbody>
                     {visibleTopProspects.map((prospect) => {
                       const officialScore = officialScores[prospect.id];
-                      const displayScore = officialScore?.score ?? prospect.score;
-                      const displayTier = officialScore?.tier ?? prospect.tier;
-                      const displayPriorityLevel =
-                        officialScore?.priorityLevel ?? prospect.priorityLevel;
+                      const hasOfficialScore = Boolean(officialScore);
+                      const displayScore = officialScore?.score;
+                      const displayTier = officialScore?.tier;
+                      const displayPriorityLevel = officialScore?.priorityLevel;
                       const displayEvidenceConfidence =
-                        officialScore?.evidenceConfidenceScore ??
-                        prospect.evidenceConfidenceScore;
+                        officialScore?.evidenceConfidenceScore;
                       const preferredAngles = preferredByFilter(
                         prospect.engagementAngles || [],
                         signalTypeFilter,
@@ -971,26 +979,39 @@ export default function OverviewPage() {
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div className="flex flex-col items-start gap-1.5">
-                              <Badge className={`${priorityBandColors[displayTier]} w-fit`}>
-                                {priorityBandLabel({
-                                  priorityLevel: displayPriorityLevel,
-                                  tier: displayTier,
-                                })}
-                              </Badge>
-                              <p className="text-sm font-semibold leading-tight text-foreground">
-                                Priority {displayScore}
-                              </p>
+                              {hasOfficialScore && displayTier ? (
+                                <>
+                                  <Badge className={`${priorityBandColors[displayTier]} w-fit`}>
+                                    {priorityBandLabel({
+                                      priorityLevel: displayPriorityLevel,
+                                      tier: displayTier,
+                                    })}
+                                  </Badge>
+                                  <p className="text-sm font-semibold leading-tight text-foreground">
+                                    Priority {displayScore}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <Badge variant="outline" className="w-fit">
+                                    Reviewing
+                                  </Badge>
+                                  <p className="text-xs text-muted-foreground">
+                                    Official score loading
+                                  </p>
+                                </>
+                              )}
                               <Link
                                 href={`/prospects/${prospect.id}#score-audit`}
                                 className="block text-xs font-medium leading-tight text-primary hover:underline"
                               >
                                 Open Score Audit
                               </Link>
-                              <p className="text-xs text-muted-foreground">
-                                {formatEvidenceConfidence(
-                                  displayEvidenceConfidence
-                                )}
-                              </p>
+                              {typeof displayEvidenceConfidence === "number" && (
+                                <p className="text-xs text-muted-foreground">
+                                  {formatEvidenceConfidence(displayEvidenceConfidence)}
+                                </p>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-4 align-top">
