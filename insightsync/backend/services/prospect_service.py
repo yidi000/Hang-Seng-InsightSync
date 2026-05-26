@@ -262,6 +262,88 @@ class ProspectService:
             company_id=company["company_id"],
         )
 
+        return self._build_prospect_summary_payload(
+            detail=detail,
+            prospect_id=prospect_id,
+            opportunity_score=opportunity_score,
+            opportunity_components=opportunity_components,
+            risk_score=risk_score,
+            risk_components=risk_components,
+            evidence_confidence_score=evidence_confidence_score,
+            decision_answers=decision_answers,
+            priority_score=priority_score,
+            priority_level=priority_level,
+            priority_components=priority_components,
+            linkage_quality=linkage_quality,
+            governance_flags=governance_flags,
+            workflow_state=workflow_state,
+        )
+
+    def _build_prospect_summary_with_workflow(
+        self,
+        detail: dict[str, Any],
+        workflow_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        latest_state = detail["latest_state"]
+        prospect_id = self._prospect_id(detail["company"]["company_id"])
+        opportunity_score, opportunity_components = self._build_opportunity_score(detail)
+        risk_score, risk_components = self._build_risk_score(detail)
+        evidence_confidence_score = latest_state.get("evidence_confidence_score", 0)
+        decision_answers = latest_state.get("decision_answers", [])
+        priority_score, priority_components = self._build_priority_score(
+            opportunity_score=opportunity_score,
+            risk_score=risk_score,
+            evidence_confidence_score=evidence_confidence_score,
+            status=latest_state["status"],
+        )
+        priority_level = self._priority_level(priority_score=priority_score, status=latest_state["status"])
+        linkage_quality = self._linkage_quality(latest_state)
+        governance_flags = self._governance_flags(
+            latest_state=latest_state,
+            priority_score=priority_score,
+            priority_level=priority_level,
+            opportunity_score=opportunity_score,
+            risk_score=risk_score,
+            evidence_confidence_score=evidence_confidence_score,
+            linkage_quality=linkage_quality,
+        )
+        return self._build_prospect_summary_payload(
+            detail=detail,
+            prospect_id=prospect_id,
+            opportunity_score=opportunity_score,
+            opportunity_components=opportunity_components,
+            risk_score=risk_score,
+            risk_components=risk_components,
+            evidence_confidence_score=evidence_confidence_score,
+            decision_answers=decision_answers,
+            priority_score=priority_score,
+            priority_level=priority_level,
+            priority_components=priority_components,
+            linkage_quality=linkage_quality,
+            governance_flags=governance_flags,
+            workflow_state=workflow_state,
+        )
+
+    def _build_prospect_summary_payload(
+        self,
+        *,
+        detail: dict[str, Any],
+        prospect_id: str,
+        opportunity_score: int,
+        opportunity_components: list[dict[str, Any]],
+        risk_score: int,
+        risk_components: list[dict[str, Any]],
+        evidence_confidence_score: int,
+        decision_answers: list[dict[str, Any]],
+        priority_score: int,
+        priority_level: str,
+        priority_components: list[dict[str, Any]],
+        linkage_quality: dict[str, Any],
+        governance_flags: list[dict[str, Any]],
+        workflow_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        company = detail["company"]
+        latest_state = detail["latest_state"]
         return {
             "prospect_id": prospect_id,
             "company_id": company["company_id"],
@@ -496,6 +578,12 @@ class ProspectService:
             industry=industry,
         )
         detail_by_company = self.repo.list_company_scoring_details(companies)
+        workflow_by_prospect = self.repo.list_prospect_workflow_states(
+            [
+                (self._prospect_id(company["company_id"]), company["company_id"])
+                for company in companies
+            ]
+        )
 
         items: list[dict[str, Any]] = []
         for company in companies:
@@ -503,7 +591,17 @@ class ProspectService:
             if not detail:
                 continue
             detail["latest_state"] = self.company_service._build_latest_state(detail)
-            summary = self._build_prospect_summary(detail)
+            prospect_id = self._prospect_id(company["company_id"])
+            summary = self._build_prospect_summary_with_workflow(
+                detail,
+                workflow_by_prospect.get(
+                    prospect_id,
+                    self.repo.default_workflow_state(
+                        prospect_id=prospect_id,
+                        company_id=company["company_id"],
+                    ),
+                ),
+            )
             if status and summary["status"] != status:
                 continue
             if priority_level and summary["priority_level"] != priority_level:
@@ -580,6 +678,77 @@ class ProspectService:
             "offset": offset,
         }
 
+    def dashboard_rollup(self) -> dict[str, Any]:
+        """Return homepage counts and market breakdowns without building full prospects."""
+
+        companies = self.repo.list_company_signal_rollups()
+        lead_pool = len(companies)
+        high_priority = 0
+        cross_border = 0
+        financing_signals = 0
+        industry_counts: dict[str, int] = {}
+        region_counts: dict[str, int] = {}
+        last_updated = None
+
+        for company in companies:
+            signal_count = self.repo._int_field(company.get("signal_count"))
+            opportunity_signal_count = self.repo._int_field(company.get("opportunity_signal_count"))
+            risk_signal_count = self.repo._int_field(company.get("risk_signal_count"))
+            status = "monitor"
+            if signal_count:
+                status = "active"
+            if opportunity_signal_count >= 2 or risk_signal_count >= 2:
+                status = "actionable"
+
+            opportunity_score = min(
+                100,
+                opportunity_signal_count * 22 + signal_count * 5 + (8 if signal_count else 0),
+            )
+            risk_score = min(100, risk_signal_count * 20)
+            evidence_confidence_score = min(100, signal_count * 15 + (20 if opportunity_signal_count else 0))
+            priority_score, _ = self._build_priority_score(
+                opportunity_score=opportunity_score,
+                risk_score=risk_score,
+                evidence_confidence_score=evidence_confidence_score,
+                status=status,
+            )
+            priority_level = self._priority_level(priority_score=priority_score, status=status)
+            if priority_level == "high":
+                high_priority += 1
+            if self.repo._int_field(company.get("cross_border_signal_count")) > 0:
+                cross_border += 1
+            if self.repo._int_field(company.get("financing_signal_count")) > 0:
+                financing_signals += 1
+
+            for industry in company.get("industries", []):
+                if industry:
+                    industry_counts[industry] = industry_counts.get(industry, 0) + 1
+            region = company.get("region")
+            if region:
+                region_counts[region] = region_counts.get(region, 0) + 1
+
+            activity_at = company.get("activity_at")
+            if activity_at and (last_updated is None or str(activity_at) > str(last_updated)):
+                last_updated = activity_at
+
+        return {
+            "summary": {
+                "lead_pool": lead_pool,
+                "high_priority": high_priority,
+                "cross_border": cross_border,
+                "financing_signals": financing_signals,
+                "last_updated": last_updated,
+            },
+            "industry_breakdown": [
+                {"name": name, "count": count}
+                for name, count in sorted(industry_counts.items(), key=lambda item: (-item[1], item[0]))
+            ],
+            "region_breakdown": [
+                {"name": name, "count": count}
+                for name, count in sorted(region_counts.items(), key=lambda item: (-item[1], item[0]))
+            ],
+        }
+
     def list_prospects(
         self,
         *,
@@ -635,14 +804,12 @@ class ProspectService:
         detail = self.company_service.get_company_detail(company_id)
         if not detail:
             return None
-        brief = self.get_prospect_brief(prospect_id)
         prospect = self._build_prospect_summary(detail)
         return {
             "prospect": prospect,
             "workflow_state": prospect["workflow_state"],
             "company": detail["company"],
             "latest_state": detail["latest_state"],
-            "fusion_explanation": brief.get("fusion_explanation") if brief else None,
             "recent_signals": detail["recent_signals"],
             "recent_timeline": detail["recent_timeline"],
             "recent_insights": detail["recent_insights"],

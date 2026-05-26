@@ -3,11 +3,16 @@
 const DEFAULT_API_BASE = "http://127.0.0.1:8000";
 
 export function apiBases() {
-  const bases = [process.env.NEXT_PUBLIC_INSIGHTSYNC_API_BASE, DEFAULT_API_BASE];
+  const bases = [process.env.NEXT_PUBLIC_INSIGHTSYNC_API_BASE];
 
   if (typeof window !== "undefined") {
     const localOverride = window.localStorage.getItem("INSIGHTSYNC_API_BASE");
     if (localOverride) bases.unshift(localOverride);
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      bases.push(DEFAULT_API_BASE);
+    }
+  } else {
+    bases.push(DEFAULT_API_BASE);
   }
 
   return Array.from(

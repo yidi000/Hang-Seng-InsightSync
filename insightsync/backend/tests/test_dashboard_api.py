@@ -70,12 +70,27 @@ def test_dashboard_summary_and_market_overview_avoid_full_prospect_list() -> Non
         with patch(
             "insightsync.backend.api.dashboard.ProspectService.list_prospects",
             side_effect=AssertionError("full prospect list should not run for dashboard rollups"),
+        ), patch(
+            "insightsync.backend.api.dashboard.ProspectService.list_lightweight_prospects",
+            side_effect=AssertionError("lightweight prospect list should not run for dashboard rollups"),
         ):
             summary_response = client.get("/api/dashboard/summary")
             market_response = client.get("/api/dashboard/market-overview")
 
     assert summary_response.status_code == 200
     assert market_response.status_code == 200
+
+
+def test_dashboard_trigger_signals_avoid_per_signal_prospect_detail() -> None:
+    with _test_client() as client:
+        with patch(
+            "insightsync.backend.api.dashboard.ProspectService.get_prospect_detail",
+            side_effect=AssertionError("trigger signal cards should not load full prospect detail"),
+        ):
+            response = client.get("/api/dashboard/trigger-signals")
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) >= 3
 
 
 def test_dashboard_priority_prospects_uses_official_scores() -> None:

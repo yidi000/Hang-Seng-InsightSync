@@ -274,12 +274,11 @@ export function useProspectDetail(prospectId: string | null): ProspectDetailStat
     async function load() {
       setState((current) => ({ ...current, loading: true, error: null }));
 
-      const [detailResult, briefResult, evidenceResult, copilotResult] =
+      const [detailResult, briefResult, evidenceResult] =
         await Promise.allSettled([
           getJson<BackendProspectDetail>(`/api/prospects/${encodedId}`),
           getJson<BackendProspectBrief>(`/api/prospects/${encodedId}/brief`),
           getJson<BackendProspectEvidence>(`/api/prospects/${encodedId}/evidence`),
-          getJson<BackendProspectCopilot>(`/api/prospects/${encodedId}/copilot`),
         ]);
 
       if (!isMounted) return;
@@ -297,17 +296,12 @@ export function useProspectDetail(prospectId: string | null): ProspectDetailStat
         evidenceResult.status === "fulfilled"
           ? evidenceResult.value
           : (partialErrors.evidence = errorMessage(evidenceResult.reason), undefined);
-      const copilot =
-        copilotResult.status === "fulfilled"
-          ? copilotResult.value
-          : (partialErrors.copilot = errorMessage(copilotResult.reason), undefined);
 
       setState({
         mappedProspect: detail?.prospect ? mapProspect(detail.prospect) : undefined,
         detail,
         brief,
         evidence,
-        copilot,
         loading: false,
         error: detail ? null : partialErrors.detail || "Unable to load prospect detail",
         partialErrors,

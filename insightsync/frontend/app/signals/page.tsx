@@ -112,7 +112,12 @@ function formatSignalBadge(signal: { type: string; source?: string }) {
 }
 
 export default function SignalsPage() {
-  const { triggerSignals, prospects, backendOnline } = useInsightSyncData();
+  const { triggerSignals, prospects, backendOnline, loading } = useInsightSyncData({
+    includeSummary: false,
+    includeMarketOverview: false,
+    prospectLimit: 100,
+    signalLimit: 100,
+  });
   const metadataFilters = useMetadataFilters(prospects, triggerSignals);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotPrompt, setCopilotPrompt] = useState<string | null>(null);
@@ -271,8 +276,11 @@ export default function SignalsPage() {
             </DropdownMenu>
 
             <div className="ml-auto text-xs text-muted-foreground">
-              {filteredSignals.length} signal records -{" "}
-              {backendOnline ? "live intelligence" : "sample data"}
+              {loading && filteredSignals.length === 0
+                ? "Loading signal records..."
+                : `${filteredSignals.length} signal records - ${
+                    backendOnline ? "live intelligence" : "sample data"
+                  }`}
             </div>
           </div>
 
@@ -367,10 +375,12 @@ export default function SignalsPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Zap className="mb-4 h-12 w-12 text-muted-foreground" />
               <h3 className="mb-1 text-lg font-semibold text-foreground">
-                No signals found
+                {loading ? "Loading signal records" : "No signals found"}
               </h3>
               <p className="text-sm text-muted-foreground">
-                Try adjusting your search or filter criteria
+                {loading
+                  ? "Fetching live backend data..."
+                  : "Try adjusting your search or filter criteria"}
               </p>
             </div>
           )}

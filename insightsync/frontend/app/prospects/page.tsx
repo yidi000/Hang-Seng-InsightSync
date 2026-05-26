@@ -70,7 +70,12 @@ function signalBelongsToProspect(
 }
 
 export default function ProspectsPage() {
-  const { prospects, triggerSignals, backendOnline } = useInsightSyncData();
+  const { prospects, triggerSignals, backendOnline, loading } = useInsightSyncData({
+    includeSummary: false,
+    includeMarketOverview: false,
+    prospectLimit: 100,
+    signalLimit: 100,
+  });
   const metadataFilters = useMetadataFilters(prospects, triggerSignals);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,8 +241,11 @@ export default function ProspectsPage() {
             </DropdownMenu>
 
             <div className="ml-auto text-xs text-muted-foreground">
-              {filteredProspects.length} company profiles -{" "}
-              {backendOnline ? "live intelligence" : "sample data"}
+              {loading && filteredProspects.length === 0
+                ? "Loading company profiles..."
+                : `${filteredProspects.length} company profiles - ${
+                    backendOnline ? "live intelligence" : "sample data"
+                  }`}
             </div>
           </div>
 
@@ -399,10 +407,12 @@ export default function ProspectsPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Users className="mb-4 h-12 w-12 text-muted-foreground" />
               <h3 className="mb-1 text-lg font-semibold text-foreground">
-                No prospects found
+                {loading ? "Loading company profiles" : "No prospects found"}
               </h3>
               <p className="text-sm text-muted-foreground">
-                Try adjusting your search or filter criteria
+                {loading
+                  ? "Fetching live backend data..."
+                  : "Try adjusting your search or filter criteria"}
               </p>
             </div>
           )}

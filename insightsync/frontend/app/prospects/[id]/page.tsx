@@ -258,7 +258,12 @@ export default function ProspectDetailPage({
 }) {
   const { id } = use(params);
   const decodedId = decodeURIComponent(id);
-  const { prospects, triggerSignals, loading } = useInsightSyncData();
+  const { prospects, triggerSignals, loading } = useInsightSyncData({
+    includeSummary: false,
+    includeMarketOverview: false,
+    prospectLimit: 100,
+    signalLimit: 100,
+  });
   const detailState = useProspectDetail(decodedId);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotPrompt, setCopilotPrompt] = useState<string | null>(null);

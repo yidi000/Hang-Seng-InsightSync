@@ -5,8 +5,6 @@ import { getJson, putJson } from "@/lib/api-client";
 import {
   dashboardStats as mockDashboardStats,
   marketOverview as mockMarketOverview,
-  prospects as mockProspects,
-  triggerSignals as mockTriggerSignals,
   type Prospect,
   type TriggerSignal,
 } from "@/lib/mock-data";
@@ -143,6 +141,15 @@ interface InsightSyncData {
   error: string | null;
 }
 
+export interface UseInsightSyncDataOptions {
+  includeProspects?: boolean;
+  includeSignals?: boolean;
+  includeSummary?: boolean;
+  includeMarketOverview?: boolean;
+  prospectLimit?: number;
+  signalLimit?: number;
+}
+
 export interface WorkflowUpdateInput {
   owner?: string | null;
   stage?: string;
@@ -153,11 +160,24 @@ export interface WorkflowUpdateInput {
   notes?: string | null;
 }
 
+const emptyMarketOverview: MarketOverview = {
+  industryDistribution: [],
+  regionDistribution: [],
+  companySizeDistribution: [],
+};
+
+const emptyDashboardStats: DashboardStats = {
+  leadPoolSize: 0,
+  highPriorityProspects: 0,
+  crossBorderOpportunities: 0,
+  financingSignals: 0,
+};
+
 const defaultData: InsightSyncData = {
-  prospects: mockProspects,
-  triggerSignals: mockTriggerSignals,
-  marketOverview: mockMarketOverview,
-  dashboardStats: mockDashboardStats,
+  prospects: [],
+  triggerSignals: [],
+  marketOverview: emptyMarketOverview,
+  dashboardStats: emptyDashboardStats,
   loading: true,
   backendOnline: false,
   error: null,
@@ -369,7 +389,9 @@ export function mapProspect(item: BackendProspectSummary): Prospect {
 }
 
 function mapSignal(item: BackendSignal, prospectById: Map<string, Prospect>): TriggerSignal {
-  const prospect = item.prospect_id ? prospectById.get(item.prospect_id) : undefined;
+  const prospectId =
+    item.prospect_id || (item.company_id ? `prospect:${item.company_id}` : undefined);
+  const prospect = prospectId ? prospectById.get(prospectId) : undefined;
   const displayText = signalDisplayText(item);
   return {
     id: String(item.signal_id || item.id),
@@ -381,7 +403,7 @@ function mapSignal(item: BackendSignal, prospectById: Map<string, Prospect>): Tr
     source: item.source,
     dataset: item.dataset,
     signalLevel: item.signal_level,
-    prospectId: item.prospect_id || undefined,
+    prospectId,
     evidenceRefs: item.evidence_refs,
   };
 }
@@ -392,28 +414,28 @@ function mapMarketOverview(data: BackendMarketOverview): MarketOverview {
       data.industry_breakdown?.map((item) => ({
         name: titleCase(item.name),
         value: item.count,
-      })) || mockMarketOverview.industryDistribution,
+      })) || [],
     regionDistribution:
       data.region_breakdown?.map((item) => ({
         name: item.name,
         value: item.count,
-      })) || mockMarketOverview.regionDistribution,
+      })) || [],
     companySizeDistribution:
       data.company_size_breakdown?.map((item) => ({
         name: item.name,
         value: item.count,
-      })) || mockMarketOverview.companySizeDistribution,
+      })) || [],
   };
 }
 
 function mapDashboardStats(data: BackendDashboardSummary): DashboardStats {
   return {
-    leadPoolSize: data.lead_pool ?? mockDashboardStats.leadPoolSize,
+    leadPoolSize: data.lead_pool ?? 0,
     highPriorityProspects:
-      data.high_priority ?? mockDashboardStats.highPriorityProspects,
+      data.high_priority ?? 0,
     crossBorderOpportunities:
-      data.cross_border ?? mockDashboardStats.crossBorderOpportunities,
-    financingSignals: data.financing_signals ?? mockDashboardStats.financingSignals,
+      data.cross_border ?? 0,
+    financingSignals: data.financing_signals ?? 0,
   };
 }
 
@@ -424,60 +446,131 @@ export function updateProspectWorkflow(prospectId: string, body: WorkflowUpdateI
   );
 }
 
-export function useInsightSyncData(): InsightSyncData {
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unable to load InsightSync backend";
+}
+
+export function useInsightSyncData(
+  options: UseInsightSyncDataOptions = {}
+): InsightSyncData {
+  const includeProspects = options.includeProspects ?? true;
+  const includeSignals = options.includeSignals ?? true;
+  const includeSummary = options.includeSummary ?? false;
+  const includeMarketOverview = options.includeMarketOverview ?? false;
+  const prospectLimit = options.prospectLimit ?? 100;
+  const signalLimit = options.signalLimit ?? 100;
   const [data, setData] = useState<InsightSyncData>(defaultData);
 
   useEffect(() => {
     let isMounted = true;
+    let pending = 0;
+    let hasSuccess = false;
+    const errors: string[] = [];
 
-    async function load() {
-      try {
-        const [prospectsResponse, signalsResponse, summary, market] = await Promise.all([
-          getJson<{ items: BackendProspectSummary[] }>("/api/prospects?limit=100&view=compact"),
-          getJson<{ items: BackendSignal[] }>("/api/signals?limit=100"),
-          getJson<BackendDashboardSummary>("/api/dashboard/summary"),
-          getJson<BackendMarketOverview>("/api/dashboard/market-overview"),
-        ]);
-
-        const prospects = prospectsResponse.items
-          .map(mapProspect)
-          .filter((prospect) => isOperationalCompanyProfile(prospect.name));
-        const prospectById = new Map(prospects.map((prospect) => [prospect.id, prospect]));
-        const triggerSignals = signalsResponse.items
-          .map((signal) => mapSignal(signal, prospectById))
-          .slice(0, 100);
-
-        if (isMounted) {
-          setData({
-            prospects,
-            triggerSignals,
-            marketOverview: mapMarketOverview(market),
-            dashboardStats: mapDashboardStats(summary),
-            loading: false,
-            backendOnline: true,
-            error: null,
-          });
-        }
-      } catch (error) {
-        if (isMounted) {
-          setData({
-            ...defaultData,
-            loading: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Unable to load InsightSync backend",
-          });
-        }
-      }
+    function finishRequest() {
+      if (!isMounted || pending > 0) return;
+      setData((current) => ({
+        ...current,
+        loading: false,
+        backendOnline: hasSuccess || current.backendOnline,
+        error: hasSuccess ? null : errors[0] || "Unable to load InsightSync backend",
+      }));
     }
 
-    load();
+    function runRequest<T>(
+      request: Promise<T>,
+      applyPayload: (current: InsightSyncData, payload: T) => InsightSyncData
+    ) {
+      pending += 1;
+      request
+        .then((payload) => {
+          hasSuccess = true;
+          if (!isMounted) return;
+          setData((current) => ({
+            ...applyPayload(current, payload),
+            backendOnline: true,
+            error: null,
+          }));
+        })
+        .catch((error) => {
+          errors.push(errorMessage(error));
+        })
+        .finally(() => {
+          pending -= 1;
+          finishRequest();
+        });
+    }
+
+    if (includeProspects) {
+      runRequest(
+        getJson<{ items: BackendProspectSummary[] }>(
+          `/api/prospects?limit=${prospectLimit}&view=compact`
+        ),
+        (current, response) => {
+          const prospects = response.items
+            .map(mapProspect)
+            .filter((prospect) => isOperationalCompanyProfile(prospect.name));
+          const prospectById = new Map(prospects.map((prospect) => [prospect.id, prospect]));
+          return {
+            ...current,
+            prospects,
+            triggerSignals: current.triggerSignals.map((signal) => {
+              const prospect = signal.prospectId ? prospectById.get(signal.prospectId) : undefined;
+              return prospect ? { ...signal, company: prospect.name } : signal;
+            }),
+          };
+        }
+      );
+    }
+
+    if (includeSignals) {
+      runRequest(
+        getJson<{ items: BackendSignal[] }>(`/api/signals?limit=${signalLimit}`),
+        (current, response) => {
+          const prospectById = new Map(current.prospects.map((prospect) => [prospect.id, prospect]));
+          return {
+            ...current,
+            triggerSignals: response.items
+              .map((signal) => mapSignal(signal, prospectById))
+              .slice(0, signalLimit),
+          };
+        }
+      );
+    }
+
+    if (includeSummary) {
+      runRequest(
+        getJson<BackendDashboardSummary>("/api/dashboard/summary"),
+        (current, summary) => ({
+          ...current,
+          dashboardStats: mapDashboardStats(summary),
+        })
+      );
+    }
+
+    if (includeMarketOverview) {
+      runRequest(
+        getJson<BackendMarketOverview>("/api/dashboard/market-overview"),
+        (current, market) => ({
+          ...current,
+          marketOverview: mapMarketOverview(market),
+        })
+      );
+    }
+
+    finishRequest();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [
+    includeProspects,
+    includeSignals,
+    includeSummary,
+    includeMarketOverview,
+    prospectLimit,
+    signalLimit,
+  ]);
 
   return data;
 }
