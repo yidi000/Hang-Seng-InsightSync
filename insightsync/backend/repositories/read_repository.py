@@ -757,6 +757,102 @@ class ReadRepository:
 
         return details
 
+    def list_company_signal_rollups(self) -> list[dict[str, Any]]:
+        """Return latest companies with lightweight signal aggregates for dashboards."""
+
+        rows = self.db.execute(
+            text(
+                """
+                WITH ranked_companies AS (
+                  SELECT c.*,
+                         ROW_NUMBER() OVER (PARTITION BY c.company_id ORDER BY c.updated_at DESC, c.id DESC) AS rn
+                  FROM companies c
+                ),
+                latest_companies AS (
+                  SELECT *
+                  FROM ranked_companies
+                  WHERE rn = 1
+                ),
+                signal_rollups AS (
+                  SELECT company_id,
+                         COUNT(*) AS signal_count,
+                         MAX(event_time) AS last_signal_at,
+                         SUM(
+                           CASE
+                             WHEN LOWER(signal_type) IN (
+                               'growth', 'cross_border', 'market', 'financing',
+                               'expansion', 'acquisition', 'm&a', 'trade'
+                             )
+                             THEN 1 ELSE 0
+                           END
+                         ) AS opportunity_signal_count,
+                         SUM(
+                           CASE
+                             WHEN LOWER(signal_type) IN (
+                               'risk', 'regulatory', 'compliance', 'warning', 'litigation'
+                             )
+                             THEN 1 ELSE 0
+                           END
+                         ) AS risk_signal_count,
+                         SUM(CASE WHEN LOWER(signal_type) = 'cross_border' THEN 1 ELSE 0 END)
+                           AS cross_border_signal_count,
+                         SUM(
+                           CASE
+                             WHEN LOWER(signal_type) IN ('financing', 'funding', 'market', 'growth', 'expansion')
+                             THEN 1 ELSE 0
+                           END
+                         ) AS financing_signal_count
+                  FROM trigger_signals
+                  WHERE company_id IS NOT NULL AND TRIM(company_id) <> ''
+                  GROUP BY company_id
+                )
+                SELECT lc.source, lc.company_id, lc.canonical_name, lc.display_name,
+                       lc.country, lc.region, lc.city, lc.segments_json, lc.industries_json,
+                       lc.website_url, lc.linkedin_url, lc.facebook_url, lc.x_url,
+                       lc.instagram_url, lc.wikipedia_url, lc.profile_summary,
+                       lc.description, lc.extra_json, lc.updated_at,
+                       COALESCE(sr.signal_count, 0) AS signal_count,
+                       COALESCE(sr.opportunity_signal_count, 0) AS opportunity_signal_count,
+                       COALESCE(sr.risk_signal_count, 0) AS risk_signal_count,
+                       COALESCE(sr.cross_border_signal_count, 0) AS cross_border_signal_count,
+                       COALESCE(sr.financing_signal_count, 0) AS financing_signal_count,
+                       sr.last_signal_at,
+                       COALESCE(sr.last_signal_at, lc.updated_at) AS activity_at
+                FROM latest_companies lc
+                LEFT JOIN signal_rollups sr ON sr.company_id = lc.company_id
+                ORDER BY
+                  (COALESCE(sr.last_signal_at, lc.updated_at) IS NULL),
+                  COALESCE(sr.last_signal_at, lc.updated_at) DESC,
+                  lc.updated_at DESC,
+                  lc.company_id ASC
+                """
+            )
+        ).mappings()
+        return [self._hydrate_company_row(dict(row)) for row in rows]
+
+    def list_company_signal_types(self, company_ids: list[str]) -> dict[str, list[str]]:
+        """Return distinct signal types per company without loading company details."""
+
+        company_ids = list(dict.fromkeys(company_id for company_id in company_ids if company_id))
+        if not company_ids:
+            return {}
+
+        signal_types: dict[str, list[str]] = {company_id: [] for company_id in company_ids}
+        for row in self._execute_company_ids_query(
+            """
+            SELECT company_id, signal_type, COUNT(*) AS signal_count
+            FROM trigger_signals
+            WHERE company_id IN :company_ids
+              AND signal_type IS NOT NULL
+              AND TRIM(signal_type) <> ''
+            GROUP BY company_id, signal_type
+            ORDER BY company_id ASC, signal_count DESC, signal_type ASC
+            """,
+            company_ids,
+        ):
+            signal_types.setdefault(row["company_id"], []).append(row["signal_type"])
+        return signal_types
+
     def list_timeline(
         self,
         *,
@@ -870,6 +966,42 @@ class ReadRepository:
             return self.default_workflow_state(prospect_id=prospect_id, company_id=company_id)
         return dict(row)
 
+    def list_prospect_workflow_states(
+        self,
+        prospect_company_pairs: list[tuple[str, str]],
+    ) -> dict[str, dict[str, Any]]:
+        """Return workflow states for many prospects, filling missing rows with defaults."""
+
+        if not prospect_company_pairs:
+            return {}
+
+        prospect_to_company = dict(prospect_company_pairs)
+        results = {
+            prospect_id: self.default_workflow_state(prospect_id=prospect_id, company_id=company_id)
+            for prospect_id, company_id in prospect_company_pairs
+        }
+        try:
+            statement = text(
+                """
+                SELECT prospect_id, company_id, owner, stage, status, last_action, next_action,
+                       review_status, notes, updated_at
+                FROM prospect_workflow_states
+                WHERE prospect_id IN :prospect_ids
+                """
+            ).bindparams(bindparam("prospect_ids", expanding=True))
+            rows = self.db.execute(
+                statement,
+                {"prospect_ids": list(prospect_to_company)},
+            ).mappings()
+        except OperationalError:
+            return results
+
+        for row in rows:
+            item = dict(row)
+            if item["prospect_id"] in results:
+                results[item["prospect_id"]] = item
+        return results
+
     def upsert_prospect_workflow_state(
         self,
         *,
@@ -923,25 +1055,56 @@ class ReadRepository:
         return self.get_prospect_workflow_state(prospect_id=prospect_id, company_id=company_id)
 
     def metadata_filters(self) -> dict[str, list[dict[str, Any]]]:
-        def sorted_counts(values: list[str]) -> list[dict[str, Any]]:
+        def sorted_count_items(counts: dict[str, int]) -> list[dict[str, Any]]:
+            return [
+                {"name": name, "count": count}
+                for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+                if name
+            ]
+
+        def count_values(values: list[str]) -> list[dict[str, Any]]:
             counts: dict[str, int] = {}
             for value in values:
                 if not value:
                     continue
                 counts[value] = counts.get(value, 0) + 1
-            return [
-                {"name": name, "count": count}
-                for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
-            ]
+            return sorted_count_items(counts)
+
+        def merge_counts(*items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            counts: dict[str, int] = {}
+            for group in items:
+                for item in group:
+                    name = item.get("name")
+                    if not name:
+                        continue
+                    counts[name] = counts.get(name, 0) + int(item.get("count") or 0)
+            return sorted_count_items(counts)
 
         def count_query(sql: str) -> list[dict[str, Any]]:
             rows = self.db.execute(text(sql)).mappings()
             return [dict(row) for row in rows if row["name"]]
 
         existing_tables = set(inspect(self.db.get_bind()).get_table_names())
-        companies = self.list_companies(limit=1000, offset=0)
-        source_values: list[str] = []
-        dataset_values: list[str] = []
+        company_rows = self.db.execute(
+            text(
+                """
+                WITH ranked_companies AS (
+                  SELECT c.*,
+                         ROW_NUMBER() OVER (PARTITION BY c.company_id ORDER BY c.updated_at DESC, c.id DESC) AS rn
+                  FROM companies c
+                )
+                SELECT region, segments_json, industries_json
+                FROM ranked_companies
+                WHERE rn = 1
+                """
+            )
+        ).mappings()
+        companies = [self._hydrate_company_row(dict(row)) for row in company_rows]
+
+        signal_sources: list[dict[str, Any]] = []
+        signal_datasets: list[dict[str, Any]] = []
+        record_sources: list[dict[str, Any]] = []
+        record_datasets: list[dict[str, Any]] = []
         if "trigger_signals" in existing_tables:
             signal_sources = count_query(
                 """
@@ -959,10 +1122,6 @@ class ReadRepository:
                 GROUP BY dataset
                 """
             )
-            for item in signal_sources:
-                source_values.extend([item["name"]] * int(item["count"]))
-            for item in signal_datasets:
-                dataset_values.extend([item["name"]] * int(item["count"]))
         if "intelligence_records" in existing_tables:
             record_sources = count_query(
                 """
@@ -980,17 +1139,13 @@ class ReadRepository:
                 GROUP BY dataset
                 """
             )
-            for item in record_sources:
-                source_values.extend([item["name"]] * int(item["count"]))
-            for item in record_datasets:
-                dataset_values.extend([item["name"]] * int(item["count"]))
 
         return {
-            "regions": sorted_counts([item.get("region") for item in companies if item.get("region")]),
-            "segments": sorted_counts(
+            "regions": count_values([item.get("region") for item in companies if item.get("region")]),
+            "segments": count_values(
                 [segment for item in companies for segment in item.get("segments", []) if segment]
             ),
-            "industries": sorted_counts(
+            "industries": count_values(
                 [industry for item in companies for industry in item.get("industries", []) if industry]
             ),
             "signal_types": count_query(
@@ -1004,8 +1159,8 @@ class ReadRepository:
             )
             if "trigger_signals" in existing_tables
             else [],
-            "sources": sorted_counts(source_values),
-            "datasets": sorted_counts(dataset_values),
+            "sources": merge_counts(signal_sources, record_sources),
+            "datasets": merge_counts(signal_datasets, record_datasets),
         }
 
     def overview(self) -> dict[str, Any]:

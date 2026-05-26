@@ -193,8 +193,14 @@ export default function OverviewPage() {
     prospects,
     triggerSignals,
     marketOverview,
+    dashboardStats,
     backendOnline,
-  } = useInsightSyncData();
+  } = useInsightSyncData({
+    includeSummary: true,
+    includeMarketOverview: true,
+    prospectLimit: 100,
+    signalLimit: 100,
+  });
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [industryFilter, setIndustryFilter] = useState<string | null>(null);
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
@@ -242,18 +248,27 @@ export default function OverviewPage() {
     ).length;
 
     return {
-      companyProfiles: companyProspects.length,
-      highPriorityCompanies: companyProspects.filter(
-        (prospect) => prospect.priorityLevel === "high" || prospect.tier === "A"
-      ).length,
-      crossBorderOpportunities: companyProspects.filter((prospect) =>
-        prospect.focusTags?.some((tag) =>
-          normalizeFilterValue(tag).includes("crossborder")
-        )
-      ).length,
-      financingLinkedSignals: financingSignalCount || financingCompanyCount,
+      companyProfiles: companyProspects.length || dashboardStats.leadPoolSize,
+      highPriorityCompanies:
+        companyProspects.length > 0
+          ? companyProspects.filter(
+              (prospect) => prospect.priorityLevel === "high" || prospect.tier === "A"
+            ).length
+          : dashboardStats.highPriorityProspects,
+      crossBorderOpportunities:
+        companyProspects.length > 0
+          ? companyProspects.filter((prospect) =>
+              prospect.focusTags?.some((tag) =>
+                normalizeFilterValue(tag).includes("crossborder")
+              )
+            ).length
+          : dashboardStats.crossBorderOpportunities,
+      financingLinkedSignals:
+        financingSignalCount ||
+        financingCompanyCount ||
+        dashboardStats.financingSignals,
     };
-  }, [companyProspects, triggerSignals]);
+  }, [companyProspects, dashboardStats, triggerSignals]);
 
   const scrollToProspects = () => {
     prospectListRef.current?.scrollIntoView({ behavior: "smooth" });
