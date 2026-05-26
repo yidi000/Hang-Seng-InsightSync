@@ -297,14 +297,6 @@ export default function OverviewPage() {
       ),
     [companyProspects]
   );
-  const focusScore = morningReviewItems.length
-    ? Math.round(
-        morningReviewItems
-          .slice(0, 8)
-          .reduce((total, prospect) => total + prospect.score, 0) /
-          Math.min(morningReviewItems.length, 8)
-      )
-    : 0;
   const primaryMorningTheme =
     portfolioStats.crossBorderOpportunities >= portfolioStats.financingLinkedSignals
       ? "cross-border activity"
@@ -508,10 +500,10 @@ export default function OverviewPage() {
                   onClick={reviewMorningActions}
                   className="hidden min-w-[190px] rounded-xl bg-sidebar px-8 py-7 text-center text-sidebar-foreground transition-colors hover:bg-sidebar/90 lg:block"
                 >
-                  <p className="text-sm text-sidebar-foreground/70">Focus score</p>
-                  <p className="mt-2 text-5xl font-semibold">{focusScore}</p>
+                  <p className="text-sm text-sidebar-foreground/70">RM review queue</p>
+                  <p className="mt-2 text-5xl font-semibold">{morningReviewItems.length}</p>
                   <p className="mt-2 text-sm text-sidebar-foreground/70">
-                    {portfolioStats.highPriorityCompanies} priority clients
+                    {portfolioStats.highPriorityCompanies} high priority clients
                   </p>
                   <p className="mt-1 text-xs text-sidebar-foreground/50">
                     Click to review
@@ -915,7 +907,7 @@ export default function OverviewPage() {
                                 href={`/prospects/${prospect.id}#score-audit`}
                                 className="block text-sm font-medium leading-tight text-primary hover:underline"
                               >
-                                Score {prospect.score}
+                                Open Score Audit
                               </Link>
                               <p className="text-xs text-muted-foreground">
                                 {formatEvidenceConfidence(

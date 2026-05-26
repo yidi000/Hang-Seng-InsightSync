@@ -433,7 +433,7 @@ export function useInsightSyncData(): InsightSyncData {
     async function load() {
       try {
         const [prospectsResponse, signalsResponse, summary, market] = await Promise.all([
-          getJson<{ items: BackendProspectSummary[] }>("/api/prospects?limit=100"),
+          getJson<{ items: BackendProspectSummary[] }>("/api/prospects?limit=100&view=compact"),
           getJson<{ items: BackendSignal[] }>("/api/signals?limit=100"),
           getJson<BackendDashboardSummary>("/api/dashboard/summary"),
           getJson<BackendMarketOverview>("/api/dashboard/market-overview"),

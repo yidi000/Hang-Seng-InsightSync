@@ -258,6 +258,17 @@ export function useProspectDetail(prospectId: string | null): ProspectDetailStat
     }
 
     let isMounted = true;
+    if (/^p\d+$/i.test(prospectId)) {
+      const timer = window.setTimeout(() => {
+        setState({
+          ...initialState,
+          loading: false,
+          error: null,
+        });
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
     const encodedId = encodeURIComponent(prospectId);
 
     async function load() {
