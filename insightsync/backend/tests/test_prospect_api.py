@@ -91,6 +91,18 @@ def test_compact_prospect_list_uses_official_scorecard() -> None:
     assert alpha["workflow_state"]["stage"] == "new"
 
 
+def test_compact_prospect_list_avoids_per_company_detail_queries() -> None:
+    with _test_client() as client:
+        with patch(
+            "insightsync.backend.services.company_service.CompanyService.get_company_detail",
+            side_effect=AssertionError("compact list should use batched scoring inputs"),
+        ):
+            response = client.get("/api/prospects?view=compact&limit=100")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+
+
 def test_get_prospect_detail_returns_company_backed_detail() -> None:
     with _test_client() as client:
         response = client.get("/api/prospects/prospect:hkg-alpha-fintech")

@@ -193,7 +193,6 @@ export default function OverviewPage() {
     prospects,
     triggerSignals,
     marketOverview,
-    dashboardStats,
     backendOnline,
   } = useInsightSyncData();
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -243,22 +242,18 @@ export default function OverviewPage() {
     ).length;
 
     return {
-      companyProfiles: dashboardStats.leadPoolSize || companyProspects.length,
-      highPriorityCompanies:
-        dashboardStats.highPriorityProspects ||
-        companyProspects.filter(
-          (prospect) => prospect.priorityLevel === "high" || prospect.tier === "A"
-        ).length,
-      crossBorderOpportunities:
-        dashboardStats.crossBorderOpportunities ||
-        companyProspects.filter((prospect) =>
-          prospect.focusTags?.some((tag) =>
-            normalizeFilterValue(tag).includes("crossborder")
-          )
-        ).length,
+      companyProfiles: companyProspects.length,
+      highPriorityCompanies: companyProspects.filter(
+        (prospect) => prospect.priorityLevel === "high" || prospect.tier === "A"
+      ).length,
+      crossBorderOpportunities: companyProspects.filter((prospect) =>
+        prospect.focusTags?.some((tag) =>
+          normalizeFilterValue(tag).includes("crossborder")
+        )
+      ).length,
       financingLinkedSignals: financingSignalCount || financingCompanyCount,
     };
-  }, [companyProspects, dashboardStats, triggerSignals]);
+  }, [companyProspects, triggerSignals]);
 
   const scrollToProspects = () => {
     prospectListRef.current?.scrollIntoView({ behavior: "smooth" });

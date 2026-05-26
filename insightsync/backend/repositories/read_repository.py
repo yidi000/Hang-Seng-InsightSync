@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import bindparam
 from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -63,6 +64,18 @@ class ReadRepository:
             "evidence_refs": self._json_field(row.get("evidence_refs_json"), []),
             "extra": self._json_field(row.get("extra_json"), {}),
         }
+
+    def _execute_company_ids_query(
+        self,
+        sql: str,
+        company_ids: list[str],
+        params: dict[str, Any] | None = None,
+    ):
+        statement = text(sql).bindparams(bindparam("company_ids", expanding=True))
+        return self.db.execute(
+            statement,
+            {"company_ids": company_ids, **(params or {})},
+        ).mappings()
 
     def list_signals(
         self,
@@ -462,6 +475,287 @@ class ReadRepository:
                 for item in key_business_events
             ],
         }
+
+    def list_company_scoring_details(
+        self,
+        companies: list[dict[str, Any]],
+        *,
+        signal_limit: int = 10,
+        document_limit: int = 5,
+        metric_limit: int = 8,
+        risk_limit: int = 8,
+        business_event_limit: int = 8,
+    ) -> dict[str, dict[str, Any]]:
+        """Return detail-shaped scoring inputs for many companies with batched queries."""
+
+        company_ids = list(dict.fromkeys(company["company_id"] for company in companies))
+        if not company_ids:
+            return {}
+
+        def empty_evidence_summary() -> dict[str, Any]:
+            return {
+                "parsed_document_count": 0,
+                "parsed_document_success_count": 0,
+                "parsed_document_partial_count": 0,
+                "parsed_document_failed_count": 0,
+                "ocr_hit_count": 0,
+                "xbrl_hit_count": 0,
+                "management_discussion_count": 0,
+                "metric_count": 0,
+                "risk_factor_count": 0,
+                "business_event_count": 0,
+                "last_parsed_at": None,
+            }
+
+        details = {
+            company["company_id"]: {
+                "company": company,
+                "stats": {
+                    "signal_count": 0,
+                    "timeline_event_count": 0,
+                    "generated_insight_count": 0,
+                    "last_signal_at": None,
+                    "last_event_at": None,
+                    "last_insight_at": None,
+                    "signal_type_distribution": [],
+                },
+                "evidence_summary": empty_evidence_summary(),
+                "recent_signals": [],
+                "recent_timeline": [],
+                "recent_insights": [],
+                "recent_documents": [],
+                "key_metrics": [],
+                "key_risk_factors": [],
+                "key_business_events": [],
+            }
+            for company in companies
+        }
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT company_id, COUNT(*) AS signal_count, MAX(event_time) AS last_signal_at
+            FROM trigger_signals
+            WHERE company_id IN :company_ids
+            GROUP BY company_id
+            """,
+            company_ids,
+        ):
+            stats = details[row["company_id"]]["stats"]
+            stats["signal_count"] = self._int_field(row["signal_count"])
+            stats["last_signal_at"] = row["last_signal_at"]
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT company_id, COUNT(*) AS timeline_event_count, MAX(event_time) AS last_event_at
+            FROM client_one_view_timeline
+            WHERE company_id IN :company_ids
+            GROUP BY company_id
+            """,
+            company_ids,
+        ):
+            stats = details[row["company_id"]]["stats"]
+            stats["timeline_event_count"] = self._int_field(row["timeline_event_count"])
+            stats["last_event_at"] = row["last_event_at"]
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT company_id, COUNT(*) AS generated_insight_count, MAX(generated_at) AS last_insight_at
+            FROM generated_insights
+            WHERE company_id IN :company_ids
+            GROUP BY company_id
+            """,
+            company_ids,
+        ):
+            stats = details[row["company_id"]]["stats"]
+            stats["generated_insight_count"] = self._int_field(row["generated_insight_count"])
+            stats["last_insight_at"] = row["last_insight_at"]
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT company_id, signal_type AS name, COUNT(*) AS count
+            FROM trigger_signals
+            WHERE company_id IN :company_ids
+            GROUP BY company_id, signal_type
+            ORDER BY company_id ASC, count DESC, signal_type ASC
+            """,
+            company_ids,
+        ):
+            details[row["company_id"]]["stats"]["signal_type_distribution"].append(
+                {"name": row["name"], "count": self._int_field(row["count"])}
+            )
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT
+              company_id,
+              COUNT(*) AS parsed_document_count,
+              SUM(CASE WHEN LOWER(parse_status) = 'success' THEN 1 ELSE 0 END) AS parsed_document_success_count,
+              SUM(CASE WHEN LOWER(parse_status) = 'partial' THEN 1 ELSE 0 END) AS parsed_document_partial_count,
+              SUM(CASE WHEN LOWER(parse_status) = 'failed' THEN 1 ELSE 0 END) AS parsed_document_failed_count,
+              SUM(CASE WHEN LOWER(COALESCE(ocr_status, '')) IN ('used', 'success', 'completed', 'hit') THEN 1 ELSE 0 END) AS ocr_hit_count,
+              SUM(CASE WHEN LOWER(COALESCE(xbrl_status, '')) IN ('used', 'success', 'completed', 'hit') THEN 1 ELSE 0 END) AS xbrl_hit_count,
+              SUM(CASE WHEN management_discussion_summary IS NOT NULL AND TRIM(management_discussion_summary) <> '' THEN 1 ELSE 0 END) AS management_discussion_count,
+              COALESCE(SUM(metric_count), 0) AS metric_count,
+              COALESCE(SUM(risk_factor_count), 0) AS risk_factor_count,
+              COALESCE(SUM(business_event_count), 0) AS business_event_count,
+              MAX(parsed_at) AS last_parsed_at
+            FROM parsed_documents
+            WHERE company_id IN :company_ids
+            GROUP BY company_id
+            """,
+            company_ids,
+        ):
+            details[row["company_id"]]["evidence_summary"] = {
+                "parsed_document_count": self._int_field(row["parsed_document_count"]),
+                "parsed_document_success_count": self._int_field(row["parsed_document_success_count"]),
+                "parsed_document_partial_count": self._int_field(row["parsed_document_partial_count"]),
+                "parsed_document_failed_count": self._int_field(row["parsed_document_failed_count"]),
+                "ocr_hit_count": self._int_field(row["ocr_hit_count"]),
+                "xbrl_hit_count": self._int_field(row["xbrl_hit_count"]),
+                "management_discussion_count": self._int_field(row["management_discussion_count"]),
+                "metric_count": self._int_field(row["metric_count"]),
+                "risk_factor_count": self._int_field(row["risk_factor_count"]),
+                "business_event_count": self._int_field(row["business_event_count"]),
+                "last_parsed_at": row["last_parsed_at"],
+            }
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT *
+            FROM (
+              SELECT id, source, dataset, signal_key, signal_type, company_id, entity, event_time,
+                     indicator, value_num, value_text, unit, signal_text, signal_score, signal_level,
+                     evidence_refs_json, extra_json,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY company_id
+                       ORDER BY event_time DESC, id DESC
+                     ) AS rn
+              FROM trigger_signals
+              WHERE company_id IN :company_ids
+            ) ranked_signals
+            WHERE rn <= :limit
+            ORDER BY company_id ASC, event_time DESC, id DESC
+            """,
+            company_ids,
+            {"limit": signal_limit},
+        ):
+            item = dict(row)
+            item.pop("rn", None)
+            details[item["company_id"]]["recent_signals"].append(self._hydrate_signal_row(item))
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT *
+            FROM (
+              SELECT id, source, dataset, title, summary, media_type, lang, parser_name, backend_name,
+                     parse_status, ocr_status, xbrl_status, management_discussion_summary,
+                     section_count, table_count, metric_count, risk_factor_count, business_event_count,
+                     evidence_url, parsed_at, metadata_json, company_id,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY company_id
+                       ORDER BY parsed_at DESC, id DESC
+                     ) AS rn
+              FROM parsed_documents
+              WHERE company_id IN :company_ids
+            ) ranked_documents
+            WHERE rn <= :limit
+            ORDER BY company_id ASC, parsed_at DESC, id DESC
+            """,
+            company_ids,
+            {"limit": document_limit},
+        ):
+            item = dict(row)
+            company_id = item.pop("company_id")
+            item.pop("rn", None)
+            metadata_json = item.pop("metadata_json", None)
+            details[company_id]["recent_documents"].append(
+                {
+                    **item,
+                    "genai_extraction": build_genai_extraction_view(metadata_json),
+                }
+            )
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT *
+            FROM (
+              SELECT pd.company_id, pm.document_id, pd.title, pm.name, pm.value, pm.unit,
+                     pm.period, pm.context, pm.confidence, pd.parsed_at,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY pd.company_id
+                       ORDER BY pd.parsed_at DESC, COALESCE(pm.confidence, 0) DESC, pm.metric_index ASC
+                     ) AS rn
+              FROM parsed_metrics pm
+              JOIN parsed_documents pd ON pd.id = pm.document_id
+              WHERE pd.company_id IN :company_ids
+            ) ranked_metrics
+            WHERE rn <= :limit
+            ORDER BY company_id ASC, parsed_at DESC, COALESCE(confidence, 0) DESC
+            """,
+            company_ids,
+            {"limit": metric_limit},
+        ):
+            item = dict(row)
+            company_id = item.pop("company_id")
+            item.pop("rn", None)
+            details[company_id]["key_metrics"].append(item)
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT *
+            FROM (
+              SELECT pd.company_id, pr.document_id, pd.title, pr.category, pr.description,
+                     pr.severity, pr.confidence, pd.parsed_at,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY pd.company_id
+                       ORDER BY pd.parsed_at DESC, COALESCE(pr.confidence, 0) DESC, pr.risk_index ASC
+                     ) AS rn
+              FROM parsed_risk_factors pr
+              JOIN parsed_documents pd ON pd.id = pr.document_id
+              WHERE pd.company_id IN :company_ids
+            ) ranked_risks
+            WHERE rn <= :limit
+            ORDER BY company_id ASC, parsed_at DESC, COALESCE(confidence, 0) DESC
+            """,
+            company_ids,
+            {"limit": risk_limit},
+        ):
+            item = dict(row)
+            company_id = item.pop("company_id")
+            item.pop("rn", None)
+            details[company_id]["key_risk_factors"].append(item)
+
+        for row in self._execute_company_ids_query(
+            """
+            SELECT *
+            FROM (
+              SELECT pd.company_id, pbe.document_id, pd.title, pbe.event_type, pbe.summary,
+                     pbe.event_date, pbe.parties_json, pbe.confidence, pd.parsed_at,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY pd.company_id
+                       ORDER BY pd.parsed_at DESC, COALESCE(pbe.confidence, 0) DESC, pbe.event_index ASC
+                     ) AS rn
+              FROM parsed_business_events pbe
+              JOIN parsed_documents pd ON pd.id = pbe.document_id
+              WHERE pd.company_id IN :company_ids
+            ) ranked_events
+            WHERE rn <= :limit
+            ORDER BY company_id ASC, parsed_at DESC, COALESCE(confidence, 0) DESC
+            """,
+            company_ids,
+            {"limit": business_event_limit},
+        ):
+            item = dict(row)
+            company_id = item.pop("company_id")
+            item.pop("rn", None)
+            details[company_id]["key_business_events"].append(
+                {
+                    **item,
+                    "parties": self._json_field(item.get("parties_json"), []),
+                }
+            )
+
+        return details
 
     def list_timeline(
         self,

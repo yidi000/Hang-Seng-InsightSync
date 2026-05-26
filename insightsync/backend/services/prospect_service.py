@@ -487,16 +487,45 @@ class ProspectService:
         status: str | None = None,
         priority_level: str | None = None,
     ) -> dict[str, Any]:
-        return self.list_prospects(
-            limit=limit,
-            offset=offset,
+        companies = self.repo.list_companies(
+            limit=max(limit + offset + 200, 500),
+            offset=0,
             q=q,
             region=region,
             segment=segment,
             industry=industry,
-            status=status,
-            priority_level=priority_level,
         )
+        detail_by_company = self.repo.list_company_scoring_details(companies)
+
+        items: list[dict[str, Any]] = []
+        for company in companies:
+            detail = detail_by_company.get(company["company_id"])
+            if not detail:
+                continue
+            detail["latest_state"] = self.company_service._build_latest_state(detail)
+            summary = self._build_prospect_summary(detail)
+            if status and summary["status"] != status:
+                continue
+            if priority_level and summary["priority_level"] != priority_level:
+                continue
+            items.append(summary)
+
+        items.sort(
+            key=lambda item: (
+                item["priority_score"],
+                item["opportunity_score"],
+                item["activity_at"] or "",
+                item["company_id"],
+            ),
+            reverse=True,
+        )
+        total = len(items)
+        return {
+            "items": items[offset : offset + limit],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
     def list_lightweight_prospects(
         self,
