@@ -70,21 +70,25 @@ def test_list_prospects_supports_priority_filter() -> None:
     assert payload["items"][0]["prospect_id"] == "prospect:hkg-alpha-fintech"
 
 
-def test_compact_prospect_list_avoids_full_company_detail_build() -> None:
+def test_compact_prospect_list_uses_official_scorecard() -> None:
     with _test_client() as client:
-        with patch(
-            "insightsync.backend.services.prospect_service.CompanyService.get_company_detail",
-            side_effect=AssertionError("compact prospect list should not build full company detail"),
-        ):
-            response = client.get("/api/prospects?view=compact&limit=100")
+        compact_response = client.get("/api/prospects?view=compact&limit=100")
+        detail_response = client.get("/api/prospects/prospect:hkg-alpha-fintech")
 
-    assert response.status_code == 200
-    payload = response.json()
+    assert compact_response.status_code == 200
+    assert detail_response.status_code == 200
+    payload = compact_response.json()
+    detail_payload = detail_response.json()
     assert payload["total"] == 2
     assert len(payload["items"]) == 2
-    assert payload["items"][0]["prospect_id"] == "prospect:hkg-alpha-fintech"
-    assert payload["items"][0]["score_breakdown"]["scorecard_version"] == "prospect-scorecard-v0.2"
-    assert payload["items"][0]["workflow_state"]["stage"] == "new"
+    alpha = next(
+        item for item in payload["items"] if item["prospect_id"] == "prospect:hkg-alpha-fintech"
+    )
+    assert alpha["priority_score"] == detail_payload["prospect"]["priority_score"]
+    assert alpha["priority_level"] == detail_payload["prospect"]["priority_level"]
+    assert alpha["score_breakdown"]["score_inputs"] == detail_payload["prospect"]["score_breakdown"]["score_inputs"]
+    assert alpha["score_breakdown"]["scorecard_version"] == "prospect-scorecard-v0.2"
+    assert alpha["workflow_state"]["stage"] == "new"
 
 
 def test_get_prospect_detail_returns_company_backed_detail() -> None:

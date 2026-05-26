@@ -76,3 +76,17 @@ def test_dashboard_summary_and_market_overview_avoid_full_prospect_list() -> Non
 
     assert summary_response.status_code == 200
     assert market_response.status_code == 200
+
+
+def test_dashboard_priority_prospects_uses_official_scores() -> None:
+    with _test_client() as client:
+        priority_response = client.get("/api/dashboard/priority-prospects")
+        detail_response = client.get("/api/prospects/prospect:hkg-alpha-fintech")
+
+    assert priority_response.status_code == 200
+    assert detail_response.status_code == 200
+    top = priority_response.json()["items"][0]
+    detail = detail_response.json()["prospect"]
+    assert top["prospect_id"] == detail["prospect_id"]
+    assert top["priority_score"] == detail["priority_score"]
+    assert top["priority_level"] == detail["priority_level"]

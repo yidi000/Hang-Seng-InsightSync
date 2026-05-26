@@ -487,6 +487,29 @@ class ProspectService:
         status: str | None = None,
         priority_level: str | None = None,
     ) -> dict[str, Any]:
+        return self.list_prospects(
+            limit=limit,
+            offset=offset,
+            q=q,
+            region=region,
+            segment=segment,
+            industry=industry,
+            status=status,
+            priority_level=priority_level,
+        )
+
+    def list_lightweight_prospects(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+        region: str | None = None,
+        segment: str | None = None,
+        industry: str | None = None,
+        status: str | None = None,
+        priority_level: str | None = None,
+    ) -> dict[str, Any]:
         companies = self.repo.list_companies(
             limit=max(limit + offset + 200, 500),
             offset=0,
@@ -541,7 +564,7 @@ class ProspectService:
         priority_level: str | None = None,
     ) -> dict[str, Any]:
         companies = self.repo.list_companies(
-            limit=max(limit + offset + 20, 50),
+            limit=max(limit + offset + 20, 20),
             offset=0,
             q=q,
             region=region,
